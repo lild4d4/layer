@@ -14,7 +14,8 @@ from cocotb.types import LogicArray
 from cocotb_tools.runner import get_runner
 import random
 
-os.environ['COCOTB_ANSI_OUTPUT'] = '1'
+os.environ["COCOTB_ANSI_OUTPUT"] = "1"
+
 
 class SevenSegmentTester:
     """Helper class for seven segment testing."""
@@ -28,7 +29,7 @@ class SevenSegmentTester:
 
     async def set_digit(self, value: int, update: bool):
         """Set operand input value."""
-        await FallingEdge(self.clk)     
+        await FallingEdge(self.clk)
         self.digit.value = value
         self.update.value = update
 
@@ -45,9 +46,12 @@ class SevenSegmentTester:
             6: LogicArray("1011111", 7),
             7: LogicArray("1110000", 7),
             8: LogicArray("1111111", 7),
-            9: LogicArray("1111011", 7)
+            9: LogicArray("1111011", 7),
         }
-        assert self.seg.value == display[expected_value], f"Expected segment {display[expected_value]}, got {self.seg.value}"
+        assert (
+            self.seg.value == display[expected_value]
+        ), f"Expected segment {display[expected_value]}, got {self.seg.value}"
+
 
 @cocotb.test()
 async def test_basic_operation(dut):
@@ -66,6 +70,7 @@ async def test_basic_operation(dut):
 
     dut._log.info("✓ Basic test passed")
 
+
 @cocotb.test()
 async def test_all(dut):
     """Test: Check the basic functionality"""
@@ -81,6 +86,7 @@ async def test_all(dut):
         await tester.check_segment(i)
 
     dut._log.info("✓ Full test passed")
+
 
 def test_seven_segment_runner():
     sim = os.getenv("SIM", "icarus")
@@ -98,7 +104,10 @@ def test_seven_segment_runner():
         timescale=("1ns", "1ps"),
     )
 
-    runner.test(hdl_toplevel="seven_segment", test_module="test_seven_segment", waves=True)
+    runner.test(
+        hdl_toplevel="seven_segment", test_module="test_seven_segment", waves=True
+    )
+
 
 if __name__ == "__main__":
     test_seven_segment_runner()
