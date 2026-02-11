@@ -73,6 +73,7 @@ module axi_lite_master #(
     // Latch request on entry
     reg [AXI4_ADDRESS_WIDTH-1:0] addr_latch;
     reg [AXI4_DATA_WIDTH-1:0]    wdata_latch;
+    reg                          error_latch;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -80,6 +81,7 @@ module axi_lite_master #(
             busy           <= 1'b0;
             resp_done      <= 1'b0;
             resp_error     <= 1'b0;
+            error_latch    <= 1'b0;
             resp_rdata     <= 32'h0;
 
             m_axi_awvalid  <= 1'b0;
@@ -156,7 +158,7 @@ module axi_lite_master #(
                 S_WR_RESP: begin
                     if (m_axi_bvalid) begin
                         m_axi_bready <= 1'b0;
-                        resp_error   <= (m_axi_bresp != 2'b00);
+                        error_latch  <= (m_axi_bresp != 2'b00);
                         state        <= S_DONE;
                     end
                 end
@@ -177,7 +179,7 @@ module axi_lite_master #(
                 S_RD_DATA: begin
                     if (m_axi_rvalid) begin
                         resp_rdata   <= m_axi_rdata;
-                        resp_error   <= (m_axi_rresp != 2'b00);
+                        error_latch  <= (m_axi_rresp != 2'b00);
                         m_axi_rready <= 1'b0;
                         state        <= S_DONE;
                     end
@@ -185,9 +187,11 @@ module axi_lite_master #(
 
                 // ─────────────────────────────────────────────
                 S_DONE: begin
-                    resp_done <= 1'b1;
-                    busy      <= 1'b0;
-                    state     <= S_IDLE;
+                    resp_done  <= 1'b1;
+                    resp_error <= error_latch;
+                    error_latch <= 1'b0;
+                    busy       <= 1'b0;
+                    state      <= S_IDLE;
                 end
 
                 default: state <= S_IDLE;
