@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, Timer
+from cocotb.triggers import RisingEdge
 from cocotb_tools.runner import get_runner
 
 os.environ["COCOTB_ANSI_OUTPUT"] = "1"
@@ -89,6 +89,7 @@ async def setup(dut):
 # AXI slave behaviour coroutines
 # ─────────────────────────────────────────────────────────
 
+
 async def axi_write_slave(dut, aw_delay=0, w_delay=0, b_delay=1, bresp=0b00):
     """
     Simulate an AXI write slave.
@@ -165,6 +166,7 @@ async def axi_read_slave(dut, ar_delay=0, r_delay=1, rdata=0, rresp=0b00):
 # ─────────────────────────────────────────────────────────
 # Tests
 # ─────────────────────────────────────────────────────────
+
 
 @cocotb.test()
 async def test_idle_after_reset(dut):
@@ -283,8 +285,6 @@ async def test_busy_blocks_new_request(dut):
     dut._log.info("✓ Busy blocks new request OK")
 
 
-<<<<<<< HEAD
-=======
 @cocotb.test()
 async def test_back_to_back_write_read(dut):
     """Perform a write then a read sequentially — both should complete."""
@@ -312,7 +312,9 @@ async def test_wstrb_all_bytes_enabled(dut):
     cocotb.start_soon(axi_write_slave(dut, aw_delay=0, b_delay=0))
     await axi.write(addr=0x0000_0004, data=0xFF)
 
-    assert int(dut.m_axi_wstrb.value) == 0xF, f"wstrb should be 0xF, got {int(dut.m_axi_wstrb.value):#x}"
+    assert (
+        int(dut.m_axi_wstrb.value) == 0xF
+    ), f"wstrb should be 0xF, got {int(dut.m_axi_wstrb.value):#x}"
     assert int(dut.m_axi_wlast.value) == 1, "wlast should be 1 for single-beat"
     dut._log.info("✓ wstrb all bytes enabled OK")
 
@@ -321,7 +323,6 @@ async def test_wstrb_all_bytes_enabled(dut):
 # Runner
 # ─────────────────────────────────────────────────────────
 
->>>>>>> f8887ec (Adjust tests to changed verilog)
 def test_axi_lite_master_runner():
     sim = os.getenv("SIM", "icarus")
 
@@ -338,16 +339,11 @@ def test_axi_lite_master_runner():
         timescale=("1ns", "1ps"),
     )
 
-<<<<<<< HEAD
-    # runner.test(hdl_toplevel="axi_lite_master", test_module="test_axi_lite_master", waves=True)
-=======
     runner.test(
         hdl_toplevel="axi_lite_master",
         test_module="test_axi_master",
         waves=True,
     )
->>>>>>> f8887ec (Adjust tests to changed verilog)
-
 
 if __name__ == "__main__":
     test_axi_lite_master_runner()

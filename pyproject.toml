@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "cocotb>=2.0.1",
+    "cocotbext-spi>=0.5.0",
     "pytest>=9.0.2",
 ]
 
