@@ -32,9 +32,12 @@ From the EEPROM mock's perspective:
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, Timer, First
-from cocotb.result import TestFailure
 import os
 from pathlib import Path
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "cocotbext-spi"))
 from cocotbext.spi import SpiBus
 from AT25010B_EEPROM_mock import AT25010B_EEPROM
 from cocotb_tools.runner import get_runner
@@ -55,20 +58,17 @@ TRANSACTION_TIMEOUT_US = 500
 
 def build_spi_bus(dut) -> SpiBus:
     """
-    Build a SpiBus from the tb_top SPI port.
+    Build a SpiBus from the tb_top SPI port using custom signal names.
 
-    SpiBus.from_entity() looks for attributes directly on the entity.
-    We map:
-        sclk  → dut.spi_clk
-        cs    → dut.spi_csn0
-        mosi  → dut.spi_sdo0   (SPI master output = EEPROM input)
-        miso  → dut.spi_sdi0   (SPI master input  = EEPROM output)
+    The SpiBus.from_entity() method automatically finds signals by name,
+    so we tell it the actual signal names used in eeprom_wire_modules.sv.
     """
-    return SpiBus(
-        sclk=dut.spi_clk,
-        mosi=dut.spi_sdo0,
-        miso=dut.spi_sdi0,
-        cs=dut.spi_csn0,
+    return SpiBus.from_entity(
+        dut,
+        sclk_name="spi_clk",
+        mosi_name="spi_sdo0",
+        miso_name="spi_sdi0",
+        cs_name="spi_csn0",
     )
 
 
@@ -110,7 +110,7 @@ async def wait_done(dut, timeout_us: int = TRANSACTION_TIMEOUT_US) -> None:
 
     result = await First(done_trigger, timeout_trigger)
     if result is timeout_trigger:
-        raise TestFailure(
+        raise Exception(
             f"Timed out after {timeout_us} µs waiting for cmd_done. "
             f"FSM may be stuck. cmd_busy={int(dut.cmd_busy.value)}"
         )
@@ -435,9 +435,9 @@ def test_eeprom_spi_e2e_runner():
     and runs all tests in test_eeprom.py.
     """
     sim = os.getenv("SIM", "icarus")
-    spi_module_path = Path(__file__).resolve().parent.parent
+    spi_module_path = Path(__file__).resolve().parent.parent.parent
 
-    src_dir = spi_module_path / "spi"
+    src_dir = spi_module_path / "src"
 
     axi_spi_ip_dir = src_dir / "axi_spi_master"
 
