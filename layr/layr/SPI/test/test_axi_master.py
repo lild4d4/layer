@@ -31,7 +31,7 @@ class AXIMasterTester:
         # Wait for done pulse with timeout
         for _ in range(timeout_cycles):
             await RisingEdge(self.dut.clk)
-            if self.dut.resp_done == 1:
+            if self.dut.resp_done.value == 1:
                 if self.dut.resp_error.value == 1:
                     raise RuntimeError(f"AXI error on write {addr:#010x}")
                 return
