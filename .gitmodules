@@ -1,0 +1,6 @@
+[submodule "layr/pdk"]
+	path = layr/pdk
+	url = https://github.com/IHP-GmbH/IHP-Open-PDK.git
+[submodule "layr/librelane"]
+	path = layr/librelane
+	url = https://github.com/librelane/librelane.git

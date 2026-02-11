@@ -1,0 +1,11 @@
+DESIGN_NAME: controller
+VERILOG_FILES:
+- src/controller.sv
+
+USE_SLANG: true
+
+# 30% because the design is too small.
+FP_CORE_UTIL: 30
+
+FP_ASPECT_RATIO: 1.0
+PL_TARGET_DENSITY: 0.55
