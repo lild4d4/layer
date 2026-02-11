@@ -126,7 +126,12 @@ module axi_lite_master #(
                 // ─────────────────────────────────────────────
                 // WRITE: present address and data simultaneously
                 // AXI allows AW and W channels to be presented
-                // at the same time for single-beat transfers
+                // at the same time for single-beat transfers.
+                //
+                // Guard: only check ready after valid has been
+                // registered high (m_axi_awvalid is the current
+                // registered value; it is 0 on the first cycle
+                // we enter this state).
                 // ─────────────────────────────────────────────
                 S_WR_ADDR: begin
                     m_axi_awvalid <= 1'b1;
@@ -137,17 +142,18 @@ module axi_lite_master #(
                     m_axi_wlast   <= 1'b1;
 
                     // Both channels accepted?
-                    if (m_axi_awready && m_axi_wready) begin
+                    if (m_axi_awvalid && m_axi_wvalid &&
+                        m_axi_awready && m_axi_wready) begin
                         m_axi_awvalid <= 1'b0;
                         m_axi_wvalid  <= 1'b0;
                         m_axi_bready  <= 1'b1;  // Ready for response
                         state         <= S_WR_RESP;
                     // Address accepted but data not yet?
-                    end else if (m_axi_awready && !m_axi_wready) begin
+                    end else if (m_axi_awvalid && m_axi_awready && !m_axi_wready) begin
                         m_axi_awvalid <= 1'b0;
                         // Keep wvalid asserted until wready
                     // Data accepted but address not yet?
-                    end else if (!m_axi_awready && m_axi_wready) begin
+                    end else if (m_axi_wvalid && !m_axi_awready && m_axi_wready) begin
                         m_axi_wvalid  <= 1'b0;
                         // Keep awvalid asserted until awready
                     end
@@ -168,7 +174,7 @@ module axi_lite_master #(
                     m_axi_arvalid <= 1'b1;
                     m_axi_araddr  <= addr_latch;
 
-                    if (m_axi_arready) begin
+                    if (m_axi_arvalid && m_axi_arready) begin
                         m_axi_arvalid <= 1'b0;
                         m_axi_rready  <= 1'b1;  // Ready to receive data
                         state         <= S_RD_DATA;

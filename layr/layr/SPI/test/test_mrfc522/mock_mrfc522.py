@@ -1,19 +1,26 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from collections import deque
 from typing import Deque, List, Optional, Sequence
 
 import cocotb
 from cocotb.triggers import First, Timer
 
-from cocotbext.spi import SpiSlaveBase, SpiConfig
+# Add the cocotbext-spi submodule to the Python path
+_spi_ext_path = str(Path(__file__).resolve().parent.parent / "cocotbext-spi")
+if _spi_ext_path not in sys.path:
+    sys.path.insert(0, _spi_ext_path)
+
+from cocotbext.spi import SpiSlaveBase, SpiConfig, SpiBus
 
 
 spi_config = SpiConfig(
     word_width=8,
     sclk_freq=25e6,
     cpol=False,
-    cpha=True,
+    cpha=False,
     msb_first=True,
     data_output_idle=1,
     frame_spacing_ns=1,
@@ -296,7 +303,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         Then sets RxIRq + IdleIRq and clears StartSend.
         """
         # tiny delay to allow your DUT to finish register writes before polling IRQ
-        await Timer(50, units="ns")
+        await Timer(50, unit="ns")
 
         req = bytes(self._fifo)
         self._fifo.clear()
@@ -327,7 +334,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         Minimal CRC_A over FIFO content; sets DivIrqReg.CRCIRq and Status1Reg.CRCReady.
         CRC coprocessor indicates CRCReady and sets CRCIRq after processing FIFO data. 
         """
-        await Timer(50, units="ns")
+        await Timer(50, unit="ns")
 
         data = bytes(self._fifo)
         crc = self._crc_a(data)
@@ -357,47 +364,50 @@ class Mfrc522SpiSlave(SpiSlaveBase):
     # -------------------------
     # SPI transaction handling
     # -------------------------
+    @staticmethod
+    def _decode_addr_byte(addr_byte: int):
+        """Decode MFRC522 SPI address byte.
+        Format: bit7 = R/W (1=read, 0=write), bits[6:1] = register address, bit0 = 0.
+        Returns (is_read, addr).
+        """
+        is_read = bool(addr_byte & 0x80)
+        addr = (addr_byte >> 1) & 0x3F
+        return is_read, addr
+
+    @staticmethod
+    def _looks_like_addr_byte_for_read(byte_val: int) -> bool:
+        """Check if a byte looks like a valid MFRC522 read address byte.
+        A read address byte has bit7=1 and bit0=0.
+        """
+        return (byte_val & 0x81) == 0x80
+
     async def _shift_byte_or_end(self, frame_end, tx: int) -> Optional[int]:
         """
         Shift one byte while watching for end-of-frame (CS deassert).
         Returns received byte, or None if frame ended before/at this byte.
         """
+        from cocotb.triggers import RisingEdge, FallingEdge, First
+        # Create a fresh frame_end trigger each call — cocotb 2.x triggers
+        # may not be reusable after being cancelled by First().
+        if self._config.cs_active_low:
+            fe = RisingEdge(self._cs)
+        else:
+            fe = FallingEdge(self._cs)
+
         task = cocotb.start_soon(self._shift(8, tx_word=(tx & 0xFF)))
-        done = await First(task, frame_end)
-        if done is frame_end:
-            task.kill()
+        done = await First(task, fe)
+        if done is fe:
+            task.cancel()
             return None
-        # cocotb Task API: result() in newer versions; fall back to .result attribute if present.
-        try:
-            rx = task.result()
-        except TypeError:
-            rx = task.result
+        rx = task.result()
         return int(rx) & 0xFF
-
-    @staticmethod
-    def _decode_addr_byte(b: int) -> tuple[bool, int]:
-        """
-        Address byte: bit7=R/W, bits6..1=addr, bit0=0. :contentReference[oaicite:44]{index=44}
-        Returns (is_read, addr).
-        """
-        is_read = bool(b & 0x80)
-        addr = (b >> 1) & 0x3F
-        return is_read, addr
-
-    @staticmethod
-    def _looks_like_addr_byte_for_read(b: int) -> bool:
-        """
-        Some hosts (or the datasheet tables) may show an address-like byte during read bursts.
-        We only treat bytes with MSB=1 and bit0=0 as a 'new address' marker; dummy 0x00 stays dummy.
-        """
-        return (b & 0x80) and ((b & 0x01) == 0)
 
     async def _transaction(self, frame_start, frame_end):
         await frame_start
         self.idle.clear()
         self._last_frame = []
 
-        # First byte: address byte. MISO during this byte is "X" (don't care). :contentReference[oaicite:45]{index=45}
+        # First byte: address byte. MISO during this byte is "X" (don't care).
         addr_byte = await self._shift_byte_or_end(frame_end, tx=0x00)
         if addr_byte is None:
             self.idle.set()
@@ -407,7 +417,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         is_read, addr = self._decode_addr_byte(addr_byte)
 
         if is_read:
-            # Next byte(s): output register data while consuming dummy/address bytes. :contentReference[oaicite:46]{index=46}
+            # Next byte(s): output register data while consuming dummy/address bytes.
             tx = self._read_reg(addr)
             while True:
                 rx = await self._shift_byte_or_end(frame_end, tx=tx)
@@ -422,7 +432,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
                 tx = self._read_reg(addr)
 
         else:
-            # Write: subsequent bytes are data for that address. :contentReference[oaicite:47]{index=47}
+            # Write: subsequent bytes are data for that address.
             while True:
                 data = await self._shift_byte_or_end(frame_end, tx=0x00)
                 if data is None:
@@ -430,6 +440,8 @@ class Mfrc522SpiSlave(SpiSlaveBase):
                 self._last_frame.append(data)
                 self._write_reg(addr, data)
 
-        await frame_end
+        # CS has already deasserted when _shift_byte_or_end returned None,
+        # so do NOT await frame_end again — that would hang waiting for
+        # the *next* rising edge of CS.
         self.idle.set()
 

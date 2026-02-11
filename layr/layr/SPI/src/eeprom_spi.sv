@@ -1,3 +1,4 @@
+
 `ifndef SPI_REG_DEFINES
 `define SPI_REG_DEFINES
 `define SPI_REG_STATUS 32'h0000_0000
