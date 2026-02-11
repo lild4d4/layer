@@ -490,7 +490,7 @@ def test_eeprom_spi_e2e_runner():
 
     runner.test(
         hdl_toplevel="eeprom_wire_modules",
-        test_module="test_eeprom",
+        test_module="test_eeprom_e2e",
         waves=True,
     )
 

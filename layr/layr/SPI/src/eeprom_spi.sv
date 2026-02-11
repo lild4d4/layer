@@ -12,7 +12,7 @@
 `endif
 
 module eeprom_spi #(
-    parameter [7:0] SPI_CLK_DIV = 8'd2  // spi_clk ≈ clk / (2*(SPI_CLK_DIV+1))
+    parameter [7:0] SPI_CLK_DIV = 8'd15  // ~2.8Mhz <= 5.0Mhz
 ) (
     input wire clk,
     input wire rst_n,
