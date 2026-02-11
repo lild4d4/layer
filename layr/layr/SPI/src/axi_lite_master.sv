@@ -115,7 +115,7 @@ module axi_lite_master #(
                 // ─────────────────────────────────────────────
                 S_IDLE: begin
                     busy <= 1'b0;
-                    if (req_valid && !busy) begin
+                    if (req_valid) begin
                         addr_latch  <= req_addr;
                         wdata_latch <= req_wdata;
                         busy        <= 1'b1;

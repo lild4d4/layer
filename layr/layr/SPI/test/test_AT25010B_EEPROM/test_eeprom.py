@@ -73,7 +73,7 @@ def build_spi_bus(dut) -> SpiBus:
 
 
 async def reset_dut(dut):
-    """Assert reset for RESET_CYCLES, then release."""
+    """Assert reset for RESET_CYCLES, then release and wait for init."""
     dut.rst_n.value = 0
     dut.cmd_valid.value = 0
     dut.cmd_write.value = 0
@@ -84,7 +84,14 @@ async def reset_dut(dut):
         await RisingEdge(dut.clk)
 
     dut.rst_n.value = 1
-    await RisingEdge(dut.clk)
+
+    # Wait for the one-time SPI clock-divider init to complete.
+    # The eeprom_spi FSM starts in S_INIT_CLKDIV and transitions to S_IDLE
+    # after the AXI write finishes (~8-10 cycles).  cmd_busy is NOT asserted
+    # during init states, but we need to let the AXI transaction finish so
+    # the SPI clock divider is properly configured before any user commands.
+    for _ in range(50):
+        await RisingEdge(dut.clk)
 
 
 async def send_cmd(dut, *, write: bool, addr: int, wdata: int = 0) -> None:
@@ -110,9 +117,17 @@ async def wait_done(dut, timeout_us: int = TRANSACTION_TIMEOUT_US) -> None:
 
     result = await First(done_trigger, timeout_trigger)
     if result is timeout_trigger:
+        # Gather debug info
+        try:
+            fsm_state = int(dut.u_eeprom_spi.state.value)
+            axi_busy = int(dut.u_eeprom_spi.axi_busy.value)
+        except Exception:
+            fsm_state = "?"
+            axi_busy = "?"
         raise Exception(
             f"Timed out after {timeout_us} µs waiting for cmd_done. "
-            f"FSM may be stuck. cmd_busy={int(dut.cmd_busy.value)}"
+            f"FSM state={fsm_state}, cmd_busy={int(dut.cmd_busy.value)}, "
+            f"axi_busy={axi_busy}"
         )
     # cmd_done is a single-cycle pulse; make sure we sampled it on a rising edge
     await RisingEdge(dut.clk)
