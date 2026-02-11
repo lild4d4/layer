@@ -4,3 +4,6 @@
 [submodule "layr/librelane"]
 	path = layr/librelane
 	url = https://github.com/librelane/librelane.git
+[submodule "layr/layr/SPI/src/axi_spi_master"]
+	path = layr/layr/SPI/src/axi_spi_master
+	url = https://github.com/pulp-platform/axi_spi_master.git
