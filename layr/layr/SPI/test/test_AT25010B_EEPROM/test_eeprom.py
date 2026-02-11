@@ -68,7 +68,7 @@ def build_spi_bus(dut) -> SpiBus:
         sclk_name="spi_clk",
         mosi_name="spi_sdo0",
         miso_name="spi_sdi0",
-        cs_name="spi_csn0",
+        cs_name="spi_csn1",
     )
 
 

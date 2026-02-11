@@ -439,9 +439,3 @@ module eeprom_spi #(
   end
 
 endmodule
-
-
-
-
-
-
