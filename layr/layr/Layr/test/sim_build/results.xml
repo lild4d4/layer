@@ -1,6 +1,0 @@
-<testsuites name="results">
-  <testsuite name="all" package="all">
-    <property name="random_seed" value="1770648986" />
-    <testcase name="test_all_values" classname="test_bcd_converter" file="/home/schlafel/hwcodesign/My-First-Chip-DYC26/firstdesign/M3_BCD/test/test_bcd_converter.py" lineno="32" time="0.007843732833862305" sim_time_ns="32.0" ratio_time="4079.690203349646" />
-  </testsuite>
-</testsuites>
