@@ -36,8 +36,8 @@ module axi_lite_master #(
     parameter logic [AXI4_ADDRESS_WIDTH-1:0] AXI_BASE_ADDR = '0,
 
     // SPI core register offsets (relative to AXI_BASE_ADDR)
-    parameter logic [AXI4_ADDRESS_WIDTH-1:0] STATUS_OFFSET = 'h00,
-    parameter logic [AXI4_ADDRESS_WIDTH-1:0] CLKDIV_OFFSET = 'h04,
+    parameter logic [AXI4_ADDRESS_WIDTH-1:0] STATUS_OFFSET = 32'h00,
+    parameter logic [AXI4_ADDRESS_WIDTH-1:0] CLKDIV_OFFSET = 32'h04,
 
     // Map req_cs_i to the SPI core's one-hot `spi_csreg` field.
     // Default: 0 -> CS0 (EEPROM), 1 -> CS1 (NFC)

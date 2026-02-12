@@ -160,11 +160,18 @@ async def setup(dut):
 # ──────────────────────────────────────────────────────────────────────────────
 # Constants for axi_spi_master Register Offsets
 # ──────────────────────────────────────────────────────────────────────────────
+# REG_STATUS = 0x00  # [cite: 98]
+# REG_CLKDIV = 0x04  # [cite: 98]
+# REG_SPICMD = 0x08  # [cite: 98]
+# REG_SPIADR = 0x0C  # [cite: 98]
+# REG_SPILEN = 0x10  # [cite: 98]
+# TX_FIFO = 0x20  # Bit 3 of address high selects TX FIFO [cite: 137, 297]
+
 REG_STATUS = 0x00  # [cite: 98]
-REG_CLKDIV = 0x04  # [cite: 98]
-REG_SPICMD = 0x08  # [cite: 98]
-REG_SPIADR = 0x0C  # [cite: 98]
-REG_SPILEN = 0x10  # [cite: 98]
+REG_CLKDIV = 0x02  # [cite: 98]
+REG_SPICMD = 0x04  # [cite: 98]
+REG_SPIADR = 0x06  # [cite: 98]
+REG_SPILEN = 0x08  # [cite: 98]
 TX_FIFO = 0x20  # Bit 3 of address high selects TX FIFO [cite: 137, 297]
 
 
