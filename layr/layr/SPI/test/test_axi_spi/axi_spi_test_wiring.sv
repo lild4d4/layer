@@ -80,8 +80,8 @@ module axi_spi_test_wiring (
       .AXI4_ID_WIDTH     (16),
       .AXI4_USER_WIDTH   (4)
   ) u_axi_master (
-      .clk (clk),
-      .rst (~rst_n),
+      .clk(clk),
+      .rst(rst_n),
 
       .req_addr_i  (req_addr_i),
       .req_wdata_i (req_wdata_i),
@@ -139,7 +139,7 @@ module axi_spi_test_wiring (
       .BUFFER_DEPTH      (8)
   ) u_spi_master (
       .s_axi_aclk   (clk),
-      .s_axi_aresetn(rst_n),
+      .s_axi_aresetn(~rst_n),
 
       .s_axi_awvalid(m_axi_awvalid),
       .s_axi_awid   (m_axi_awid),
