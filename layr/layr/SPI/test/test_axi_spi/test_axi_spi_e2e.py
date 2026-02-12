@@ -167,13 +167,6 @@ REG_SPIADR = 0x0C  # [cite: 98]
 REG_SPILEN = 0x10  # [cite: 98]
 TX_FIFO = 0x20  # Bit 3 of address high selects TX FIFO [cite: 137, 297]
 
-REG_STATUS = 0x00  # [cite: 98]
-REG_CLKDIV = 0x02  # [cite: 98]
-REG_SPICMD = 0x04  # [cite: 98]
-REG_SPIADR = 0x06  # [cite: 98]
-REG_SPILEN = 0x08  # [cite: 98]
-TX_FIFO = 0x20  # Bit 3 of address high selects TX FIFO [cite: 137, 297]
-
 
 async def axi_write(dut, addr, data, cs=0):
     dut.req_addr_i.value = addr
@@ -183,22 +176,26 @@ async def axi_write(dut, addr, data, cs=0):
     dut.req_valid_i.value = 1
     await RisingEdge(dut.clk)
     dut.req_valid_i.value = 0
-    await wait_done(dut)
 
 
 async def send_byte(dut, data_byte: int):
     # 1) Set command length (0 for simple SPI)
     await axi_write(dut, REG_SPICMD, 0, cs=0)
+    await wait_done(dut)
 
     # 2) Set address length (0 for simple SPI)
     await axi_write(dut, REG_SPIADR, 0, cs=0)
+    await wait_done(dut)
 
     # 3) Set data length: 8 data bits, 0 addr, 0 cmd
     await axi_write(dut, REG_SPILEN, (8 << 16), cs=0)
+    await wait_done(dut)
     # 4) Write TX FIFO (MSB-aligned!)
     await axi_write(dut, TX_FIFO, (data_byte & 0xFF) << 24, cs=0)
-    # 5) Trigger transfer: STATUS bit1 = spi_wr
+    await wait_done(dut)
+    # # 5) Trigger transfer: STATUS bit1 = spi_wr
     await axi_write(dut, REG_STATUS, 0x2, cs=0)
+    await wait_done(dut)
 
 
 @cocotb.test(timeout_time=60, timeout_unit="sec")
