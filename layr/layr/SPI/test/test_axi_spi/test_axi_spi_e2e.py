@@ -95,18 +95,19 @@ def build_spi_bus(dut) -> SpiBus:
 
 async def reset_dut(dut):
     """Assert reset for RESET_CYCLES, then release and wait for init."""
-    dut.rst_n.value = 1
+    dut.rst_n.value = 0
 
     # TODO: set sensible defaults
     dut.req_addr_i.value = 0x0
     dut.req_wdata_i.value = 0x0
+    dut.req_cs_i.value = 0x0
     dut.req_write_i.value = 0x0
     dut.req_valid_i.value = 0x0
 
     for _ in range(RESET_CYCLES):
         await RisingEdge(dut.clk)
 
-    dut.rst_n.value = 0
+    dut.rst_n.value = 1
 
     # Wait for the one-time SPI clock-divider init to complete.
     # The eeprom_spi FSM starts in S_INIT_CLKDIV and transitions to S_IDLE
@@ -118,6 +119,7 @@ async def reset_dut(dut):
 
 
 async def send_byte(dut):
+    dut.req_cs_i.value = 0
     dut.req_addr_i.value = 0xDE
     dut.req_wdata_i.value = 0xAD
     dut.req_write_i.value = 1
@@ -131,13 +133,13 @@ async def wait_done(dut, timeout_us: int = TRANSACTION_TIMEOUT_US) -> None:
     Block until cmd_done pulses high, or raise TestFailure on timeout.
     """
     timeout_trigger = Timer(timeout_us, "us")
-    done_trigger = RisingEdge(dut.busy_o)
+    done_trigger = RisingEdge(dut.resp_done_o)
 
     result = await First(done_trigger, timeout_trigger)
     if result is timeout_trigger:
         # Gather debug info
         try:
-            axi_busy = int(dut.busy_o)
+            axi_busy = int(dut.busy_o.value)
         except Exception:
             axi_busy = "?"
         raise Exception(
@@ -158,7 +160,7 @@ async def setup(dut):
     Start the simulation clock, reset the DUT, and attach the EEPROM mock.
     Returns the mock so tests can pre-load / inspect memory.
     """
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     slave = SimpleSpiSlave(build_spi_bus(dut))
     await reset_dut(dut)
     return slave
@@ -177,6 +179,7 @@ async def test_send_byte(dut):
     await RisingEdge(dut.clk)
 
     await send_byte(dut)
+    await wait_done(dut)
     await wait_done(dut)
     content = await slave.get_content()
 

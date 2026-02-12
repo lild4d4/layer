@@ -14,10 +14,10 @@ module axi_spi_test_wiring (
     input  wire                           req_write_i,   // 1=write, 0=read
     input  wire                           req_cs_i,      // 1=nfc, 0=eeprom
     input  wire                           req_valid_i,   // pulse to start
-    output reg  [   `AXI4_DATA_WIDTH-1:0] resp_rdata_o,
-    output reg                            resp_done_o,   // pulse when complete
-    output reg                            resp_error_o,  // pulse on AXI error
-    output reg                            busy_o,
+    output wire [   `AXI4_DATA_WIDTH-1:0] resp_rdata_o,
+    output wire                           resp_done_o,   // pulse when complete
+    output wire                           resp_error_o,  // pulse on AXI error
+    output wire                           busy_o,
 
 
     // ── SPI pins (connected to AT25010B mock) ───────────────────
@@ -46,6 +46,7 @@ module axi_spi_test_wiring (
   // Write response channel
   wire [15:0] m_axi_bid;
   wire [ 1:0] m_axi_bresp;
+  wire [ 3:0] m_axi_buser;
   wire        m_axi_bvalid;
   wire        m_axi_bready;
 
@@ -58,9 +59,11 @@ module axi_spi_test_wiring (
   wire        m_axi_arready;
 
   // Read data channel
+  wire [15:0] m_axi_rid;
   wire [31:0] m_axi_rdata;
   wire [ 1:0] m_axi_rresp;
   wire        m_axi_rlast;
+  wire [ 3:0] m_axi_ruser;
   wire        m_axi_rvalid;
   wire        m_axi_rready;
 
@@ -77,17 +80,18 @@ module axi_spi_test_wiring (
       .AXI4_ID_WIDTH     (16),
       .AXI4_USER_WIDTH   (4)
   ) u_axi_master (
-      .clk  (clk),
-      .rst_n(rst_n),
+      .clk (clk),
+      .rst (~rst_n),
 
-      .req_addr_i  (req_addr),
-      .req_wdata_i (req_wdata),
-      .req_write_i (req_write),
-      .req_valid_i (req_valid),
-      .resp_rdata_o(resp_rdata),
-      .resp_done_o (resp_done),
-      .resp_error_o(),
-      .busy_o      (busy),
+      .req_addr_i  (req_addr_i),
+      .req_wdata_i (req_wdata_i),
+      .req_cs_i    (req_cs_i),
+      .req_write_i (req_write_i),
+      .req_valid_i (req_valid_i),
+      .resp_rdata_o(resp_rdata_o),
+      .resp_done_o (resp_done_o),
+      .resp_error_o(resp_error_o),
+      .busy_o      (busy_o),
 
       .m_axi_awaddr (m_axi_awaddr),
       .m_axi_awid   (m_axi_awid),
@@ -105,6 +109,7 @@ module axi_spi_test_wiring (
 
       .m_axi_bid   (m_axi_bid),
       .m_axi_bresp (m_axi_bresp),
+      .m_axi_buser (m_axi_buser),
       .m_axi_bvalid(m_axi_bvalid),
       .m_axi_bready(m_axi_bready),
 
@@ -116,8 +121,10 @@ module axi_spi_test_wiring (
       .m_axi_arready(m_axi_arready),
 
       .m_axi_rdata (m_axi_rdata),
+      .m_axi_rid   (m_axi_rid),
       .m_axi_rresp (m_axi_rresp),
       .m_axi_rlast (m_axi_rlast),
+      .m_axi_ruser (m_axi_ruser),
       .m_axi_rvalid(m_axi_rvalid),
       .m_axi_rready(m_axi_rready)
   );
@@ -151,7 +158,7 @@ module axi_spi_test_wiring (
       .s_axi_bvalid(m_axi_bvalid),
       .s_axi_bid   (m_axi_bid),
       .s_axi_bresp (m_axi_bresp),
-      .s_axi_buser (),
+      .s_axi_buser (m_axi_buser),
       .s_axi_bready(m_axi_bready),
 
       .s_axi_arvalid(m_axi_arvalid),
@@ -162,11 +169,11 @@ module axi_spi_test_wiring (
       .s_axi_arready(m_axi_arready),
 
       .s_axi_rvalid(m_axi_rvalid),
-      .s_axi_rid   (),
+      .s_axi_rid   (m_axi_rid),
       .s_axi_rdata (m_axi_rdata),
       .s_axi_rresp (m_axi_rresp),
       .s_axi_rlast (m_axi_rlast),
-      .s_axi_ruser (),
+      .s_axi_ruser (m_axi_ruser),
       .s_axi_rready(m_axi_rready),
 
       .events_o(events_o),

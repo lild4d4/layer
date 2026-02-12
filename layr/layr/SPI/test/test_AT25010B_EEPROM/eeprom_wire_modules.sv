@@ -103,17 +103,18 @@ module eeprom_wire_modules (
       .AXI4_ID_WIDTH     (16),
       .AXI4_USER_WIDTH   (4)
   ) u_axi_master (
-      .clk  (clk),
-      .rst_n(rst_n),
+      .clk (clk),
+      .rst (~rst_n),
 
-      .req_addr  (axi_req_addr),
-      .req_wdata (axi_req_wdata),
-      .req_write (axi_req_write),
-      .req_valid (axi_req_valid),
-      .resp_rdata(axi_resp_rdata),
-      .resp_done (axi_resp_done),
-      .resp_error(),                // not used by eeprom_spi FSM
-      .busy      (axi_busy),
+      .req_addr_i  (axi_req_addr),
+      .req_wdata_i (axi_req_wdata),
+      .req_cs_i    (1'b0),          // always EEPROM (CS0)
+      .req_write_i (axi_req_write),
+      .req_valid_i (axi_req_valid),
+      .resp_rdata_o(axi_resp_rdata),
+      .resp_done_o (axi_resp_done),
+      .resp_error_o(),                // not used by eeprom_spi FSM
+      .busy_o      (axi_busy),
 
       .m_axi_awaddr (m_axi_awaddr),
       .m_axi_awid   (m_axi_awid),

@@ -1,374 +1,342 @@
-// =============================================================================
-// spi_axi_lite_master.sv
+// axi_lite_master.sv
 //
-// AXI-Lite master that bridges a simple req/resp interface to the PULP
-// axi_spi_master register bank.
+// Simple AXI4 single-beat master wrapper intended to drive the `axi_spi_master`
+// IP core (AXI4 slave).
 //
-// Sequence of operations on each req_valid_i pulse:
-//   1. (once after reset)  Write CLKDIV register to set ~4 MHz SPI clock.
-//   2. Write SPILEN to configure data length.
-//   3. For WRITE: push TX data into FIFO.
-//   4. Write STATUS to select CS and trigger spi_rd or spi_wr.
-//   5. Poll STATUS until bit[0] (IDLE) goes high → transfer complete.
-//   6. For READ: read RX FIFO.
-//   7. Pulse resp_done_o.
+// Your FSM talks to a small req/resp interface. This module turns each request
+// into exactly one AXI transaction:
+//   * write -> AW + W + B (single beat, AWLEN=0)
+//   * read  -> AR + R     (single beat, ARLEN=0)
 //
-// Register map (from spi_master_axi_if.sv, 32-bit data bus):
-//   3'b000  STATUS   – [0] idle, [1] wr, ... [11:8] csreg  (read: spi_status)
-//   3'b001  CLKDIV   – [7:0] clock divider
-//   3'b010  SPICMD   – [31:0] command
-//   3'b011  SPIADR   – [31:0] SPI address
-//   3'b100  SPILEN   – [5:0] cmd_len, [13:8] addr_len, [31:16] data_len
-//   3'b101  SPIDUM   – [15:0] dummy_rd, [31:16] dummy_wr
-//   TX FIFO write address: byte addr 0x20  (wr_addr[3]=1)
-//   RX FIFO read  address: byte addr 0x40  (rd_addr[4]=1)
+// KISS goals
+// ---------
+// * One outstanding request at a time.
+// * No arbitration.
+// * Active-high reset.
+// * Small optional init sequence after reset:
+//     - program CLKDIV
+//     - optionally pulse STATUS[4]=1 (swrst)
 //
-// AXI channel suffixes:
-//   _AW = Address Write channel
-//   _W  = Write Data channel
-//   _B  = Write Response channel
-//   _AR = Address Read channel
-//   _R  = Read Data channel
-// =============================================================================
+// Chip-select handling
+// --------------------
+// AXI has no chip-select. The SPI core exposes `spi_csreg` in STATUS[11:8].
+// For convenience, this wrapper overwrites STATUS[11:8] on STATUS writes,
+// based on req_cs_i:
+//   req_cs_i=0 -> CS_EEPROM
+//   req_cs_i=1 -> CS_NFC
 
 module axi_lite_master #(
-    parameter       AXI4_ADDRESS_WIDTH = 32,
-    parameter       AXI4_DATA_WIDTH    = 32,
-    parameter       AXI4_ID_WIDTH      = 16,
-    parameter       AXI4_USER_WIDTH    = 4,
-    // SPI clock divider: spi_clk = axi_clk / (2*(CLKDIV+1))
-    // For 50 MHz AXI clock → CLKDIV=5 gives ~4.17 MHz
-    parameter [7:0] SPI_CLKDIV         = 8'd5
+    parameter int unsigned AXI4_ADDRESS_WIDTH = 32,
+    parameter int unsigned AXI4_DATA_WIDTH    = 32,
+    parameter int unsigned AXI4_ID_WIDTH      = 16,
+    parameter int unsigned AXI4_USER_WIDTH    = 4,
+
+    // If you provide offsets on req_addr_i, set AXI_BASE_ADDR to the SPI core base.
+    // If you already provide absolute addresses, leave it 0.
+    parameter logic [AXI4_ADDRESS_WIDTH-1:0] AXI_BASE_ADDR = '0,
+
+    // SPI core register offsets (relative to AXI_BASE_ADDR)
+    parameter logic [AXI4_ADDRESS_WIDTH-1:0] STATUS_OFFSET = 'h00,
+    parameter logic [AXI4_ADDRESS_WIDTH-1:0] CLKDIV_OFFSET = 'h0A,
+
+    // Map req_cs_i to the SPI core's one-hot `spi_csreg` field.
+    // Default: 0 -> CS0 (EEPROM), 1 -> CS1 (NFC)
+    parameter logic [3:0] CS_EEPROM = 4'b0001,
+    parameter logic [3:0] CS_NFC    = 4'b0010,
+
+    // Very small init sequence after reset
+    parameter bit         INIT_ENABLE   = 1'b1,
+    parameter logic [7:0] INIT_CLKDIV   = 8'd4,
+    parameter bit         INIT_DO_SWRST = 1'b1
 ) (
-    input wire clk,
-    input wire rst_n,
+    input  logic                          clk,
+    input  logic                          rst,   // active-high reset
 
-    // ---- Simple request / response interface ----
-    input  wire [AXI4_ADDRESS_WIDTH-1:0] req_addr_i,    // SPI address for cmd
-    input  wire [   AXI4_DATA_WIDTH-1:0] req_wdata_i,   // write data (32 bits)
-    input  wire                          req_cs_i,      // 1=CS1 (nfc), 0=CS0 (eeprom)
-    input  wire                          req_write_i,   // 1=write, 0=read
-    input  wire                          req_valid_i,   // pulse to start
-    output reg  [   AXI4_DATA_WIDTH-1:0] resp_rdata_o,
-    output reg                           resp_done_o,   // pulse when complete
-    output reg                           resp_error_o,  // pulse on AXI error
-    output reg                           busy_o,
+    // ── Simple interface your FSM talks to ────────────────────────────────
+    input  logic [AXI4_ADDRESS_WIDTH-1:0] req_addr_i,
+    input  logic [   AXI4_DATA_WIDTH-1:0] req_wdata_i,
+    input  logic                          req_cs_i,      // 1=nfc, 0=eeprom
+    input  logic                          req_write_i,   // 1=write, 0=read
+    input  logic                          req_valid_i,   // pulse to start
 
-    // ---- AXI4 master interface (to axi_spi_master slave) ----
-    output reg                           m_axi_awvalid,
-    output reg  [     AXI4_ID_WIDTH-1:0] m_axi_awid,
-    output reg  [                   7:0] m_axi_awlen,
-    output reg  [AXI4_ADDRESS_WIDTH-1:0] m_axi_awaddr,
-    output reg  [   AXI4_USER_WIDTH-1:0] m_axi_awuser,
-    input  wire                          m_axi_awready,
+    output logic [   AXI4_DATA_WIDTH-1:0] resp_rdata_o,
+    output logic                          resp_done_o,   // pulse when complete
+    output logic                          resp_error_o,  // pulse on AXI error
+    output logic                          busy_o,
 
-    output reg                          m_axi_wvalid,
-    output reg  [  AXI4_DATA_WIDTH-1:0] m_axi_wdata,
-    output reg  [AXI4_DATA_WIDTH/8-1:0] m_axi_wstrb,
-    output reg                          m_axi_wlast,
-    output reg  [  AXI4_USER_WIDTH-1:0] m_axi_wuser,
-    input  wire                         m_axi_wready,
+    // ── AXI4 master interface towards the SPI IP core ─────────────────────
+    output logic                          m_axi_awvalid,
+    output logic      [AXI4_ID_WIDTH-1:0] m_axi_awid,
+    output logic                    [7:0] m_axi_awlen,
+    output logic [AXI4_ADDRESS_WIDTH-1:0] m_axi_awaddr,
+    output logic    [AXI4_USER_WIDTH-1:0] m_axi_awuser,
+    input  logic                          m_axi_awready,
 
-    input  wire                       m_axi_bvalid,
-    input  wire [  AXI4_ID_WIDTH-1:0] m_axi_bid,
-    input  wire [                1:0] m_axi_bresp,
-    input  wire [AXI4_USER_WIDTH-1:0] m_axi_buser,
-    output reg                        m_axi_bready,
+    output logic                          m_axi_wvalid,
+    output logic   [AXI4_DATA_WIDTH-1:0]  m_axi_wdata,
+    output logic [AXI4_DATA_WIDTH/8-1:0]  m_axi_wstrb,
+    output logic                          m_axi_wlast,
+    output logic    [AXI4_USER_WIDTH-1:0] m_axi_wuser,
+    input  logic                          m_axi_wready,
 
-    output reg                           m_axi_arvalid,
-    output reg  [     AXI4_ID_WIDTH-1:0] m_axi_arid,
-    output reg  [                   7:0] m_axi_arlen,
-    output reg  [AXI4_ADDRESS_WIDTH-1:0] m_axi_araddr,
-    output reg  [   AXI4_USER_WIDTH-1:0] m_axi_aruser,
-    input  wire                          m_axi_arready,
+    input  logic                          m_axi_bvalid,
+    input  logic      [AXI4_ID_WIDTH-1:0] m_axi_bid,
+    input  logic                    [1:0] m_axi_bresp,
+    input  logic    [AXI4_USER_WIDTH-1:0] m_axi_buser,
+    output logic                          m_axi_bready,
 
-    input  wire                       m_axi_rvalid,
-    input  wire [  AXI4_ID_WIDTH-1:0] m_axi_rid,
-    input  wire [AXI4_DATA_WIDTH-1:0] m_axi_rdata,
-    input  wire [                1:0] m_axi_rresp,
-    input  wire                       m_axi_rlast,
-    input  wire [AXI4_USER_WIDTH-1:0] m_axi_ruser,
-    output reg                        m_axi_rready
+    output logic                          m_axi_arvalid,
+    output logic      [AXI4_ID_WIDTH-1:0] m_axi_arid,
+    output logic                    [7:0] m_axi_arlen,
+    output logic [AXI4_ADDRESS_WIDTH-1:0] m_axi_araddr,
+    output logic    [AXI4_USER_WIDTH-1:0] m_axi_aruser,
+    input  logic                          m_axi_arready,
+
+    input  logic                          m_axi_rvalid,
+    input  logic      [AXI4_ID_WIDTH-1:0] m_axi_rid,
+    input  logic   [AXI4_DATA_WIDTH-1:0]  m_axi_rdata,
+    input  logic                    [1:0] m_axi_rresp,
+    input  logic                          m_axi_rlast,
+    input  logic    [AXI4_USER_WIDTH-1:0] m_axi_ruser,
+    output logic                          m_axi_rready
 );
 
-  // =========================================================================
-  //  Register byte addresses
-  // =========================================================================
-  localparam [AXI4_ADDRESS_WIDTH-1:0] ADDR_STATUS = 'h00;
-  localparam [AXI4_ADDRESS_WIDTH-1:0] ADDR_CLKDIV = 'h04;
-  localparam [AXI4_ADDRESS_WIDTH-1:0] ADDR_SPILEN = 'h10;
-  localparam [AXI4_ADDRESS_WIDTH-1:0] ADDR_TX_FIFO = 'h20;
-  localparam [AXI4_ADDRESS_WIDTH-1:0] ADDR_RX_FIFO = 'h40;
+  // ----------------------------------------------------------------------
+  // Helpers
+  // ----------------------------------------------------------------------
+  function automatic logic [AXI4_ADDRESS_WIDTH-1:0] eff_addr(input logic [AXI4_ADDRESS_WIDTH-1:0] off);
+    eff_addr = AXI_BASE_ADDR + off;
+  endfunction
 
-  // =========================================================================
-  //  FSM states
-  // =========================================================================
-  typedef enum logic [4:0] {
-    S_IDLE,
-    // One-time CLKDIV init
-    S_INIT_CLKDIV_AW,
-    S_INIT_CLKDIV_W,
-    S_INIT_CLKDIV_B,
-    // Per-transaction
-    S_WR_SPILEN_AW,
-    S_WR_SPILEN_W,
-    S_WR_SPILEN_B,
-    S_WR_TXFIFO_AW,    // write path: push TX data
-    S_WR_TXFIFO_W,
-    S_WR_TXFIFO_B,
-    S_WR_STATUS_AW,    // trigger rd/wr + set CS
-    S_WR_STATUS_W,
-    S_WR_STATUS_B,
-    S_POLL_STATUS_AR,  // poll STATUS register
-    S_POLL_STATUS_R,   // check if bit[0] (IDLE) is set
-    S_RD_RXFIFO_AR,    // read path: fetch RX data
-    S_RD_RXFIFO_R,
-    S_DONE
+  function automatic logic [AXI4_DATA_WIDTH-1:0] inject_cs_into_status(
+      input logic [AXI4_DATA_WIDTH-1:0] wdata_in,
+      input logic                       cs_sel
+  );
+    logic [AXI4_DATA_WIDTH-1:0] tmp;
+    logic [3:0]                 csreg;
+    begin
+      tmp   = wdata_in;
+      csreg = cs_sel ? CS_NFC : CS_EEPROM;
+      if (AXI4_DATA_WIDTH >= 12) tmp[11:8] = csreg;
+      inject_cs_into_status = tmp;
+    end
+  endfunction
+
+  // ----------------------------------------------------------------------
+  // Constant AXI fields (single-beat)
+  // ----------------------------------------------------------------------
+  always_comb begin
+    m_axi_awid   = '0;
+    m_axi_awlen  = 8'd0;
+    m_axi_awuser = '0;
+
+    m_axi_wstrb  = {AXI4_DATA_WIDTH/8{1'b1}};
+    m_axi_wlast  = 1'b1;
+    m_axi_wuser  = '0;
+
+    m_axi_arid   = '0;
+    m_axi_arlen  = 8'd0;
+    m_axi_aruser = '0;
+  end
+
+  // ----------------------------------------------------------------------
+  // Init sequencing
+  // ----------------------------------------------------------------------
+  typedef enum logic [1:0] {
+    INIT_DONE,
+    INIT_SET_CLKDIV,
+    INIT_PULSE_SWRST
+  } init_state_t;
+
+  init_state_t init_state;
+
+  // ----------------------------------------------------------------------
+  // Main transaction FSM
+  // ----------------------------------------------------------------------
+  typedef enum logic [2:0] {
+    ST_IDLE,
+    ST_W_AW_W,
+    ST_W_B,
+    ST_R_AR,
+    ST_R_R
   } state_t;
 
-  state_t state_q, state_d;
+  state_t state;
 
-  // =========================================================================
-  //  Captured request & flags
-  // =========================================================================
-  reg [AXI4_ADDRESS_WIDTH-1:0] req_addr_q;
-  reg [   AXI4_DATA_WIDTH-1:0] req_wdata_q;
-  reg                          req_cs_q;
-  reg                          req_write_q;
-  reg                          clkdiv_done_q;
-  reg                          axi_error_q;
+  // Track per-channel handshakes for write
+  logic aw_done, w_done;
 
-  // =========================================================================
-  //  AXI default outputs
-  // =========================================================================
-  always_comb begin
-    m_axi_awvalid = 1'b0;
-    m_axi_awid    = '0;
-    m_axi_awlen   = 8'd0;
-    m_axi_awaddr  = '0;
-    m_axi_awuser  = '0;
-    m_axi_wvalid  = 1'b0;
-    m_axi_wdata   = '0;
-    m_axi_wstrb   = '0;
-    m_axi_wlast   = 1'b1;
-    m_axi_wuser   = '0;
-    m_axi_bready  = 1'b0;
-    m_axi_arvalid = 1'b0;
-    m_axi_arid    = '0;
-    m_axi_arlen   = 8'd0;
-    m_axi_araddr  = '0;
-    m_axi_aruser  = '0;
-    m_axi_rready  = 1'b0;
-  end
+  // Mark whether current transaction is init (suppress resp pulses)
+  logic cur_is_init_q;
 
-  // =========================================================================
-  //  FSM – next state & output logic
-  // =========================================================================
-  always_comb begin
-    state_d = state_q;
+  // ----------------------------------------------------------------------
+  // FSM
+  // ----------------------------------------------------------------------
+  always_ff @(posedge clk) begin
+    if (rst) begin
+      state         <= ST_IDLE;
+      init_state    <= (INIT_ENABLE ? INIT_SET_CLKDIV : INIT_DONE);
 
-    case (state_q)
-
-      S_IDLE: begin
-        if (req_valid_i) begin
-          if (!clkdiv_done_q) state_d = S_INIT_CLKDIV_AW;
-          else state_d = S_WR_SPILEN_AW;
-        end
-      end
-
-      // =============== CLKDIV init (once) ================================
-      S_INIT_CLKDIV_AW: begin
-        m_axi_awvalid = 1'b1;
-        m_axi_awaddr  = ADDR_CLKDIV;
-        m_axi_wvalid  = 1'b1;
-        m_axi_wdata   = {24'b0, SPI_CLKDIV};
-        m_axi_wstrb   = 4'b0001;
-        if (m_axi_awready && m_axi_wready) state_d = S_INIT_CLKDIV_B;
-        else if (m_axi_awready) state_d = S_INIT_CLKDIV_W;
-      end
-
-      S_INIT_CLKDIV_W: begin
-        m_axi_wvalid = 1'b1;
-        m_axi_wdata  = {24'b0, SPI_CLKDIV};
-        m_axi_wstrb  = 4'b0001;
-        if (m_axi_wready) state_d = S_INIT_CLKDIV_B;
-      end
-
-      S_INIT_CLKDIV_B: begin
-        m_axi_bready = 1'b1;
-        if (m_axi_bvalid) state_d = S_WR_SPILEN_AW;
-      end
-
-      // =============== Write SPILEN ======================================
-      // {data_len[15:0], 2'b0, addr_len[5:0], 2'b0, cmd_len[5:0]}
-      // 32 bits of data, no command, no address phase
-      S_WR_SPILEN_AW: begin
-        m_axi_awvalid = 1'b1;
-        m_axi_awaddr  = ADDR_SPILEN;
-        m_axi_wvalid  = 1'b1;
-        m_axi_wdata   = {16'd32, 2'b00, 6'd0, 2'b00, 6'd0};
-        m_axi_wstrb   = 4'b1111;
-        if (m_axi_awready && m_axi_wready) state_d = S_WR_SPILEN_B;
-        else if (m_axi_awready) state_d = S_WR_SPILEN_W;
-      end
-
-      S_WR_SPILEN_W: begin
-        m_axi_wvalid = 1'b1;
-        m_axi_wdata  = {16'd32, 2'b00, 6'd0, 2'b00, 6'd0};
-        m_axi_wstrb  = 4'b1111;
-        if (m_axi_wready) state_d = S_WR_SPILEN_B;
-      end
-
-      S_WR_SPILEN_B: begin
-        m_axi_bready = 1'b1;
-        if (m_axi_bvalid) begin
-          if (req_write_q) state_d = S_WR_TXFIFO_AW;
-          else state_d = S_WR_STATUS_AW;
-        end
-      end
-
-      // =============== Write TX FIFO (write path only) ===================
-      S_WR_TXFIFO_AW: begin
-        m_axi_awvalid = 1'b1;
-        m_axi_awaddr  = ADDR_TX_FIFO;
-        m_axi_wvalid  = 1'b1;
-        m_axi_wdata   = req_wdata_q;
-        m_axi_wstrb   = 4'b1111;
-        if (m_axi_awready && m_axi_wready) state_d = S_WR_TXFIFO_B;
-        else if (m_axi_awready) state_d = S_WR_TXFIFO_W;
-      end
-
-      S_WR_TXFIFO_W: begin
-        m_axi_wvalid = 1'b1;
-        m_axi_wdata  = req_wdata_q;
-        m_axi_wstrb  = 4'b1111;
-        if (m_axi_wready) state_d = S_WR_TXFIFO_B;
-      end
-
-      S_WR_TXFIFO_B: begin
-        m_axi_bready = 1'b1;
-        if (m_axi_bvalid) state_d = S_WR_STATUS_AW;
-      end
-
-      // =============== Write STATUS (CS select + rd/wr trigger) ==========
-      // STATUS[0]=rd, [1]=wr, [11:8]=csreg
-      S_WR_STATUS_AW: begin
-        m_axi_awvalid = 1'b1;
-        m_axi_awaddr = ADDR_STATUS;
-        m_axi_wvalid = 1'b1;
-        m_axi_wdata = {
-          20'b0,
-          req_cs_q ? 4'b0010 : 4'b0001,  // csreg [11:8]
-          6'b0,
-          req_write_q ? 2'b10 : 2'b01
-        };  // [1]=wr, [0]=rd
-        m_axi_wstrb = 4'b0011;
-        if (m_axi_awready && m_axi_wready) state_d = S_WR_STATUS_B;
-        else if (m_axi_awready) state_d = S_WR_STATUS_W;
-      end
-
-      S_WR_STATUS_W: begin
-        m_axi_wvalid = 1'b1;
-        m_axi_wdata  = {20'b0, req_cs_q ? 4'b0010 : 4'b0001, 6'b0, req_write_q ? 2'b10 : 2'b01};
-        m_axi_wstrb  = 4'b0011;
-        if (m_axi_wready) state_d = S_WR_STATUS_B;
-      end
-
-      S_WR_STATUS_B: begin
-        m_axi_bready = 1'b1;
-        if (m_axi_bvalid) state_d = S_POLL_STATUS_AR;
-      end
-
-      // =============== Poll STATUS until IDLE (bit[0]=1) =================
-      S_POLL_STATUS_AR: begin
-        m_axi_arvalid = 1'b1;
-        m_axi_araddr  = ADDR_STATUS;
-        if (m_axi_arready) state_d = S_POLL_STATUS_R;
-      end
-
-      S_POLL_STATUS_R: begin
-        m_axi_rready = 1'b1;
-        if (m_axi_rvalid) begin
-          if (m_axi_rdata[0]) begin  // bit[0] = controller IDLE
-            if (!req_write_q) state_d = S_RD_RXFIFO_AR;
-            else state_d = S_DONE;
-          end else begin
-            state_d = S_POLL_STATUS_AR;  // not done, poll again
-          end
-        end
-      end
-
-      // =============== Read RX FIFO (read path only) =====================
-      S_RD_RXFIFO_AR: begin
-        m_axi_arvalid = 1'b1;
-        m_axi_araddr  = ADDR_RX_FIFO;
-        if (m_axi_arready) state_d = S_RD_RXFIFO_R;
-      end
-
-      S_RD_RXFIFO_R: begin
-        m_axi_rready = 1'b1;
-        if (m_axi_rvalid) state_d = S_DONE;
-      end
-
-      // =============== Done ==============================================
-      S_DONE: begin
-        state_d = S_IDLE;
-      end
-
-      default: state_d = S_IDLE;
-    endcase
-  end
-
-  // =========================================================================
-  //  Sequential logic
-  // =========================================================================
-  always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-      state_q       <= S_IDLE;
-      clkdiv_done_q <= 1'b0;
-      req_addr_q    <= '0;
-      req_wdata_q   <= '0;
-      req_cs_q      <= 1'b0;
-      req_write_q   <= 1'b0;
-      axi_error_q   <= 1'b0;
-      resp_rdata_o  <= '0;
+      busy_o        <= (INIT_ENABLE ? 1'b1 : 1'b0);
       resp_done_o   <= 1'b0;
       resp_error_o  <= 1'b0;
-      busy_o        <= 1'b0;
+      resp_rdata_o  <= '0;
+
+      m_axi_awvalid <= 1'b0;
+      m_axi_awaddr  <= '0;
+      m_axi_wvalid  <= 1'b0;
+      m_axi_wdata   <= '0;
+      m_axi_bready  <= 1'b0;
+
+      m_axi_arvalid <= 1'b0;
+      m_axi_araddr  <= '0;
+      m_axi_rready  <= 1'b0;
+
+      aw_done       <= 1'b0;
+      w_done        <= 1'b0;
+      cur_is_init_q <= 1'b0;
+
     end else begin
-      state_q      <= state_d;
+      // default: pulses low unless set in this cycle
       resp_done_o  <= 1'b0;
       resp_error_o <= 1'b0;
 
-      // Capture request
-      if (state_q == S_IDLE && req_valid_i) begin
-        req_addr_q  <= req_addr_i;
-        req_wdata_q <= req_wdata_i;
-        req_cs_q    <= req_cs_i;
-        req_write_q <= req_write_i;
-        busy_o      <= 1'b1;
-        axi_error_q <= 1'b0;
-      end
+      case (state)
+        // ------------------------------------------------------------
+        // IDLE: run init (if pending) otherwise accept external req
+        // ------------------------------------------------------------
+        ST_IDLE: begin
+          m_axi_bready <= 1'b0;
+          m_axi_rready <= 1'b0;
+          aw_done      <= 1'b0;
+          w_done       <= 1'b0;
 
-      // Track clkdiv init
-      if (state_q == S_INIT_CLKDIV_B && m_axi_bvalid) clkdiv_done_q <= 1'b1;
+          if (init_state != INIT_DONE) begin
+            busy_o        <= 1'b1;
+            cur_is_init_q <= 1'b1;
 
-      // Capture AXI errors
-      if (m_axi_bvalid && m_axi_bready && (m_axi_bresp != 2'b00)) axi_error_q <= 1'b1;
-      if (m_axi_rvalid && m_axi_rready && (m_axi_rresp != 2'b00)) axi_error_q <= 1'b1;
+            // Init step 1: program CLKDIV
+            if (init_state == INIT_SET_CLKDIV) begin
+              m_axi_awaddr  <= eff_addr(CLKDIV_OFFSET);
+              m_axi_awvalid <= 1'b1;
+              m_axi_wdata   <= {{(AXI4_DATA_WIDTH-8){1'b0}}, INIT_CLKDIV};
+              m_axi_wvalid  <= 1'b1;
+              state         <= ST_W_AW_W;
+            end
+            // Init step 2: optional pulse STATUS[4]=1
+            else if (init_state == INIT_PULSE_SWRST) begin
+              m_axi_awaddr  <= eff_addr(STATUS_OFFSET);
+              m_axi_awvalid <= 1'b1;
+              m_axi_wdata   <= inject_cs_into_status((AXI4_DATA_WIDTH'(1) << 4), 1'b0);
+              m_axi_wvalid  <= 1'b1;
+              state         <= ST_W_AW_W;
+            end
 
-      // Capture RX read data
-      if (state_q == S_RD_RXFIFO_R && m_axi_rvalid)
-        resp_rdata_o <= m_axi_rdata[AXI4_DATA_WIDTH-1:0];
+          end else begin
+            // No init pending
+            cur_is_init_q <= 1'b0;
+            busy_o        <= 1'b0;
 
-      // Done pulse
-      if (state_q == S_DONE) begin
-        resp_done_o  <= 1'b1;
-        resp_error_o <= axi_error_q;
-        busy_o       <= 1'b0;
-      end
+            if (req_valid_i) begin
+              busy_o <= 1'b1;
+
+              if (req_write_i) begin
+                m_axi_awaddr  <= eff_addr(req_addr_i);
+                m_axi_awvalid <= 1'b1;
+
+                if (eff_addr(req_addr_i) == eff_addr(STATUS_OFFSET))
+                  m_axi_wdata <= inject_cs_into_status(req_wdata_i, req_cs_i);
+                else
+                  m_axi_wdata <= req_wdata_i;
+
+                m_axi_wvalid <= 1'b1;
+                state        <= ST_W_AW_W;
+
+              end else begin
+                m_axi_araddr  <= eff_addr(req_addr_i);
+                m_axi_arvalid <= 1'b1;
+                state         <= ST_R_AR;
+              end
+            end
+          end
+        end
+
+        // ------------------------------------------------------------
+        // WRITE: AW/W phase
+        // ------------------------------------------------------------
+        ST_W_AW_W: begin
+          if (m_axi_awvalid && m_axi_awready) begin
+            m_axi_awvalid <= 1'b0;
+            aw_done       <= 1'b1;
+          end
+          if (m_axi_wvalid && m_axi_wready) begin
+            m_axi_wvalid <= 1'b0;
+            w_done       <= 1'b1;
+          end
+
+          if ( (aw_done || (m_axi_awvalid && m_axi_awready)) &&
+               (w_done  || (m_axi_wvalid  && m_axi_wready )) ) begin
+            m_axi_bready <= 1'b1;
+            state        <= ST_W_B;
+          end
+        end
+
+        // ------------------------------------------------------------
+        // WRITE: B response
+        // ------------------------------------------------------------
+        ST_W_B: begin
+          if (m_axi_bvalid && m_axi_bready) begin
+            m_axi_bready <= 1'b0;
+
+            if (cur_is_init_q) begin
+              // Advance init sequencer
+              if (init_state == INIT_SET_CLKDIV) begin
+                init_state <= (INIT_DO_SWRST ? INIT_PULSE_SWRST : INIT_DONE);
+              end else if (init_state == INIT_PULSE_SWRST) begin
+                init_state <= INIT_DONE;
+              end
+              // keep busy until init_state becomes INIT_DONE (handled in ST_IDLE)
+
+            end else begin
+              busy_o       <= 1'b0;
+              resp_done_o  <= 1'b1;
+              resp_error_o <= (m_axi_bresp != 2'b00);
+            end
+
+            state <= ST_IDLE;
+          end
+        end
+
+        // ------------------------------------------------------------
+        // READ: AR phase
+        // ------------------------------------------------------------
+        ST_R_AR: begin
+          if (m_axi_arvalid && m_axi_arready) begin
+            m_axi_arvalid <= 1'b0;
+            m_axi_rready  <= 1'b1;
+            state         <= ST_R_R;
+          end
+        end
+
+        // ------------------------------------------------------------
+        // READ: R beat
+        // ------------------------------------------------------------
+        ST_R_R: begin
+          if (m_axi_rvalid && m_axi_rready) begin
+            m_axi_rready <= 1'b0;
+            resp_rdata_o <= m_axi_rdata;
+
+            busy_o       <= 1'b0;
+            resp_done_o  <= 1'b1;
+            resp_error_o <= (m_axi_rresp != 2'b00) || (!m_axi_rlast);
+
+            state <= ST_IDLE;
+          end
+        end
+
+        default: state <= ST_IDLE;
+      endcase
     end
   end
 
 endmodule
-
