@@ -13,6 +13,11 @@ source ./.venv/bin/activate
 # Or prefix everything with uv
 ```
 
+install pre-commit hooks:
+```sh
+uv run pre-commit install
+```
+
 ## Run Tests
 
 ```sh

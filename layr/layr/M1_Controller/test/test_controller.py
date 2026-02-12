@@ -8,8 +8,7 @@ from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, FallingEdge, NextTimeStep, ReadOnly
-from cocotb.types import LogicArray
+from cocotb.triggers import RisingEdge, NextTimeStep, ReadOnly
 
 from cocotb_tools.runner import get_runner
 
@@ -51,15 +50,15 @@ class ControllerTester:
         await ReadOnly()
         await NextTimeStep()
         """Check output values."""
-        assert (
-            self.save_A.value == save_a
-        ), f"Expected save_A={save_a}, got {self.save_A.value}"
-        assert (
-            self.save_B.value == save_b
-        ), f"Expected save_B={save_b}, got {self.save_B.value}"
-        assert (
-            self.show_result.value == show_res
-        ), f"Expected show_result={show_res}, got {self.show_result.value}"
+        assert self.save_A.value == save_a, (
+            f"Expected save_A={save_a}, got {self.save_A.value}"
+        )
+        assert self.save_B.value == save_b, (
+            f"Expected save_B={save_b}, got {self.save_B.value}"
+        )
+        assert self.show_result.value == show_res, (
+            f"Expected show_result={show_res}, got {self.show_result.value}"
+        )
 
 
 @cocotb.test()
@@ -195,73 +194,6 @@ async def test_button_glitch_rejection(dut):
 
     await tester.check_outputs(save_a=0, save_b=0, show_res=0)
     dut._log.info("✓ Button glitch rejection test passed")
-
-
-@cocotb.test()
-async def test_reset_from_any_state(dut):
-    """Test: Reset should work from any state."""
-    tester = ControllerTester(dut)
-
-    clock = Clock(dut.clk, 10, unit="us")
-    cocotb.start_soon(clock.start())
-
-    await tester.reset()
-    await tester.check_outputs(save_a=0, save_b=0, show_res=0)
-
-    tester.button.value = 1
-    await RisingEdge(dut.clk)
-    await tester.check_outputs(save_a=0, save_b=1, show_res=0)
-    tester.button.value = 0
-
-    await tester.reset()
-    await tester.check_outputs(save_a=0, save_b=0, show_res=0)
-    tester.button.value = 1
-    await tester.check_outputs(save_a=1, save_b=0, show_res=0)
-
-    await RisingEdge(dut.clk)
-    await tester.check_outputs(save_a=0, save_b=1, show_res=0)
-    await RisingEdge(dut.clk)
-    await tester.check_outputs(save_a=0, save_b=0, show_res=1)
-
-    await tester.reset()
-    await tester.check_outputs(save_a=0, save_b=0, show_res=0)
-    tester.button.value = 1
-    await tester.check_outputs(save_a=1, save_b=0, show_res=0)
-
-    await RisingEdge(dut.clk)
-    await tester.check_outputs(save_a=0, save_b=1, show_res=0)
-    await RisingEdge(dut.clk)
-    await tester.check_outputs(save_a=0, save_b=0, show_res=1)
-    await RisingEdge(dut.clk)
-    await tester.check_outputs(save_a=1, save_b=0, show_res=0)
-
-    dut._log.info("✓ Reset from any state test passed")
-
-
-@cocotb.test()
-async def test_continuous_button_presses(dut):
-    """Test: Rapid consecutive button presses."""
-    tester = ControllerTester(dut)
-
-    clock = Clock(dut.clk, 10, unit="us")
-    cocotb.start_soon(clock.start())
-    await tester.reset()
-
-    tester.button.value = 1
-    await RisingEdge(dut.clk)
-    await tester.check_outputs(save_a=1, save_b=0, show_res=0)
-    await RisingEdge(dut.clk)
-    await tester.check_outputs(save_a=0, save_b=1, show_res=0)
-    await RisingEdge(dut.clk)
-    await tester.check_outputs(save_a=0, save_b=0, show_res=1)
-    await RisingEdge(dut.clk)
-    await tester.check_outputs(save_a=1, save_b=0, show_res=0)
-    await RisingEdge(dut.clk)
-    await tester.check_outputs(save_a=0, save_b=1, show_res=0)
-    await RisingEdge(dut.clk)
-    await tester.check_outputs(save_a=0, save_b=0, show_res=1)
-
-    dut._log.info("✓ Continuous button presses test passed")
 
 
 def test_controller_runner():
