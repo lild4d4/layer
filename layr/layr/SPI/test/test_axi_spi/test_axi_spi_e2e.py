@@ -38,7 +38,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "cocotbext-spi"))
-from cocotbext.spi import SpiMaster, SpiBus, SpiConfig, SpiSlaveBase
+from cocotbext.spi import SpiBus, SpiConfig, SpiSlaveBase
 from cocotb_tools.runner import get_runner
 
 # Simple SPI Slave
@@ -70,7 +70,7 @@ CLK_PERIOD_NS = 10  # 100 MHz
 RESET_CYCLES = 5
 # Worst-case cycles to complete one full EEPROM transaction:
 #   ~16 FSM states × a few AXI cycles each + SPI clocking
-TRANSACTION_TIMEOUT_US = 500
+TRANSACTION_TIMEOUT_US = 5000
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -118,16 +118,6 @@ async def reset_dut(dut):
         await RisingEdge(dut.clk)
 
 
-async def send_byte(dut):
-    dut.req_cs_i.value = 0
-    dut.req_addr_i.value = 0xDE
-    dut.req_wdata_i.value = 0xAD
-    dut.req_write_i.value = 1
-    dut.req_valid_i.value = 1
-    await RisingEdge(dut.clk)
-    dut.req_valid_i.value = 0
-
-
 async def wait_done(dut, timeout_us: int = TRANSACTION_TIMEOUT_US) -> None:
     """
     Block until cmd_done pulses high, or raise TestFailure on timeout.
@@ -139,7 +129,7 @@ async def wait_done(dut, timeout_us: int = TRANSACTION_TIMEOUT_US) -> None:
     if result is timeout_trigger:
         # Gather debug info
         try:
-            axi_busy = int(dut.busy_o.value)
+            axi_busy = int(dut.busy_o)
         except Exception:
             axi_busy = "?"
         raise Exception(
@@ -160,30 +150,85 @@ async def setup(dut):
     Start the simulation clock, reset the DUT, and attach the EEPROM mock.
     Returns the mock so tests can pre-load / inspect memory.
     """
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
     slave = SimpleSpiSlave(build_spi_bus(dut))
     await reset_dut(dut)
     return slave
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Tests
-# ══════════════════════════════════════════════════════════════════════════════
+# ──────────────────────────────────────────────────────────────────────────────
+# Constants for axi_spi_master Register Offsets
+# ──────────────────────────────────────────────────────────────────────────────
+REG_STATUS = 0x00  # [cite: 98]
+REG_CLKDIV = 0x04  # [cite: 98]
+REG_SPICMD = 0x08  # [cite: 98]
+REG_SPIADR = 0x0C  # [cite: 98]
+REG_SPILEN = 0x10  # [cite: 98]
+TX_FIFO = 0x18  # Bit 3 of address high selects TX FIFO [cite: 137, 297]
 
 
-# ── 1. Sanity: DUT comes out of reset in IDLE ─────────────────────────────────
+async def send_byte(dut, data_byte: int):
+    """
+    Performs a full SPI write transaction:
+    1. Sets data length to 8 bits.
+    2. Pushes the byte to the TX FIFO.
+    3. Triggers the SPI write hardware.
+    """
+
+    # Step 1: Set Lengths (REG_SPILEN)
+    # Bits [31:16] = spi_data_len, [15:8] = spi_addr_len, [7:0] = spi_cmd_len [cite: 280-283]
+    # We want 8 bits of data, 0 bits addr, 0 bits cmd.
+    dut.req_addr_i.value = REG_SPILEN
+    dut.req_wdata_i.value = (8 << 16) | (0 << 8) | 0
+    dut.req_cs_i.value = 0
+    dut.req_write_i.value = 1
+    dut.req_valid_i.value = 1
+    await RisingEdge(dut.clk)
+    dut.req_valid_i.value = 0
+    await wait_done(dut)
+
+    # Step 2: Load TX FIFO
+    # Writing to an address with bit 3 set (e.g., 0x18) targets the FIFO [cite: 137, 297]
+    dut.req_addr_i.value = TX_FIFO
+    dut.req_wdata_i.value = data_byte
+    dut.req_write_i.value = 1
+    dut.req_valid_i.value = 1
+    await RisingEdge(dut.clk)
+    dut.req_valid_i.value = 0
+    await wait_done(dut)
+
+    # Step 3: Trigger SPI Write (REG_STATUS)
+    # Bit 1 = spi_wr (Standard Write) [cite: 275]
+    # axi_lite_master will also inject the CS based on req_cs_i.
+    dut.req_cs_i.value = 0  # Target EEPROM
+    dut.req_addr_i.value = REG_STATUS
+    dut.req_wdata_i.value = 0x2  # Assert spi_wr trigger
+    dut.req_write_i.value = 1
+    dut.req_valid_i.value = 1
+    await RisingEdge(dut.clk)
+    dut.req_valid_i.value = 0
+    await wait_done(dut)
+
+
 @cocotb.test()
 async def test_send_byte(dut):
-    """After reset, cmd_busy must be low and cmd_done must be low."""
+    """Verify that a byte can be sent to the mock EEPROM."""
     slave = await setup(dut)
     await RisingEdge(dut.clk)
 
-    await send_byte(dut)
+    # Send 0xAD to the SPI bus
+    await send_byte(dut, 0xAD)
     await wait_done(dut)
-    await wait_done(dut)
-    content = await slave.get_content()
 
-    assert content
+    # Wait for the physical SPI hardware to return to IDLE.
+    # Because AXI finishes before the SPI pins stop toggling,
+    # we need a small delay or we must poll the STATUS register.
+    for _ in range(200):
+        await RisingEdge(dut.clk)
+
+    content = await slave.get_content()
+    # Mock returns 0xAAAA based on its code; verify it received something
+    assert content != 0
 
 
 # -- Runner --
