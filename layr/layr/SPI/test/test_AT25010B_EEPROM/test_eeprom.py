@@ -45,7 +45,7 @@ from cocotb_tools.runner import get_runner
 # ──────────────────────────────────────────────────────────────────────────────
 # Constants matching eeprom_spi / axi_spi_master configuration
 # ──────────────────────────────────────────────────────────────────────────────
-CLK_PERIOD_NS = 10  # 100 MHz
+CLK_PERIOD_NS = 350  # 2.8 Mhz
 RESET_CYCLES = 5
 # Worst-case cycles to complete one full EEPROM transaction:
 #   ~16 FSM states × a few AXI cycles each + SPI clocking
