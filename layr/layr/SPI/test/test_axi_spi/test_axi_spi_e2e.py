@@ -160,12 +160,12 @@ async def setup(dut):
 # ──────────────────────────────────────────────────────────────────────────────
 # Constants for axi_spi_master Register Offsets
 # ──────────────────────────────────────────────────────────────────────────────
-# REG_STATUS = 0x00  # [cite: 98]
-# REG_CLKDIV = 0x04  # [cite: 98]
-# REG_SPICMD = 0x08  # [cite: 98]
-# REG_SPIADR = 0x0C  # [cite: 98]
-# REG_SPILEN = 0x10  # [cite: 98]
-# TX_FIFO = 0x20  # Bit 3 of address high selects TX FIFO [cite: 137, 297]
+REG_STATUS = 0x00  # [cite: 98]
+REG_CLKDIV = 0x04  # [cite: 98]
+REG_SPICMD = 0x08  # [cite: 98]
+REG_SPIADR = 0x0C  # [cite: 98]
+REG_SPILEN = 0x10  # [cite: 98]
+TX_FIFO = 0x20  # Bit 3 of address high selects TX FIFO [cite: 137, 297]
 
 REG_STATUS = 0x00  # [cite: 98]
 REG_CLKDIV = 0x02  # [cite: 98]
@@ -187,13 +187,17 @@ async def axi_write(dut, addr, data, cs=0):
 
 
 async def send_byte(dut, data_byte: int):
-    # 1) lengths: 8 data bits, 0 addr, 0 cmd
+    # 1) Set command length (0 for simple SPI)
+    await axi_write(dut, REG_SPICMD, 0, cs=0)
+
+    # 2) Set address length (0 for simple SPI)
+    await axi_write(dut, REG_SPIADR, 0, cs=0)
+
+    # 3) Set data length: 8 data bits, 0 addr, 0 cmd
     await axi_write(dut, REG_SPILEN, (8 << 16), cs=0)
-
-    # 2) write TX FIFO (MSB-aligned!)
+    # 4) Write TX FIFO (MSB-aligned!)
     await axi_write(dut, TX_FIFO, (data_byte & 0xFF) << 24, cs=0)
-
-    # 3) trigger transfer: STATUS bit1 = spi_wr
+    # 5) Trigger transfer: STATUS bit1 = spi_wr
     await axi_write(dut, REG_STATUS, 0x2, cs=0)
 
 
