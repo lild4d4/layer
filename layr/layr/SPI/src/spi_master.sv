@@ -2,12 +2,13 @@ module spi_master (
     input  wire       clk,      // System clock
     input  wire       reset,    // Reset signal
     input  wire [7:0] data_in,  // Data to send
-    input  wire       start,    // Start signal
+    input  wire       start,    // Start signal (pulse for 1 clk)
     input  wire       miso,     // Master In Slave Out
     output reg        mosi,     // Master Out Slave In
     output reg        sclk,     // Serial Clock
-    output reg        ss,       // Slave Select
-    output reg  [7:0] data_out  // Data received
+    output reg  [7:0] data_out, // Data received
+    output reg        done,     // Pulses high for 1 clk when byte is complete
+    output reg        busy      // High while a transfer is in progress
 );
 
   reg [2:0] bit_count;  // Bit counter
@@ -17,21 +18,24 @@ module spi_master (
   // State machine for SPI operation
   always @(posedge clk or posedge reset) begin
     if (reset) begin
-      ss        <= 1;  // Deactivate slave
       sclk      <= 0;  // Clock low
       mosi      <= 0;  // Master Out Slave In
       bit_count <= 0;  // Reset bit counter
       shift_reg <= 0;  // Shift register
       data_out  <= 0;  // Data received
+      done      <= 0;
+      busy      <= 0;
       state     <= 0;  // Idle state
     end else begin
+      done <= 0;  // default: done is a single-cycle pulse
+
       case (state)
         0: begin  // Idle state
           if (start) begin
-            ss <= 0;  // Activate slave
             shift_reg <= data_in;  // Load data to send
             bit_count <= 0;  // Reset bit counter
-            state <= 1;  // Move to setup phase
+            busy      <= 1;
+            state     <= 1;  // Move to setup phase
           end
         end
         1: begin  // Setup phase - put data on MOSI
@@ -42,22 +46,20 @@ module spi_master (
         2: begin  // Capture phase - sample MISO and shift
           sclk <= 0;  // Clock low
           // Sample MISO on falling edge and shift into data_out
-          data_out <= {data_out[6:0], miso};  
+          data_out <= {data_out[6:0], miso};
           // Shift transmit data for next bit
           shift_reg <= {shift_reg[6:0], 1'b0};
           bit_count <= bit_count + 1;
-          
+
           if (bit_count == 7) begin  // Last bit completed
-            state <= 3;  // Move to completion
+            done  <= 1;
+            busy  <= 0;
+            state <= 0;  // Return to idle
           end else begin
             state <= 1;  // Continue with next bit
           end
         end
-        3: begin  // Transaction complete
-          ss <= 1;  // Deactivate slave
-          mosi <= 0;  // Clear MOSI
-          state <= 0;  // Return to idle
-        end
+        default: state <= 0;
       endcase
     end
   end
