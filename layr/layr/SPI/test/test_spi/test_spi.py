@@ -44,14 +44,7 @@ async def test_simple_byte_write(dut):
     # 4. Wait for Transmission
     # Since the blog code doesn't have a 'busy' signal,
     # we monitor the Slave Select (ss) or count cycles.
-    if dut.ss.value == 1:
-        await with_timeout(RisingEdge(dut.ss), 10, "us")
-
-    dut._log.info("SPI Module is ACTIVE (SS Low)")
-
-    # Wait for SS to go high again, signaling end of byte
-    await RisingEdge(dut.ss)
-    dut._log.info("SPI Module finished (IDLE)")
+    await with_timeout(RisingEdge(dut.ss), 10, "us")
 
     # 5. Verification
     assert dut.ss.value == 1, "Error: SS should be high after transaction"

@@ -19,44 +19,44 @@ module spi_master (
     if (reset) begin
       ss        <= 1;  // Deactivate slave
       sclk      <= 0;  // Clock low
+      mosi      <= 0;  // Master Out Slave In
       bit_count <= 0;  // Reset bit counter
+      shift_reg <= 0;  // Shift register
+      data_out  <= 0;  // Data received
       state     <= 0;  // Idle state
     end else begin
       case (state)
         0: begin  // Idle state
           if (start) begin
             ss <= 0;  // Activate slave
-            shift_reg <= data_in;  // Load data
+            shift_reg <= data_in;  // Load data to send
             bit_count <= 0;  // Reset bit counter
-            state <= 1;  // Move to next state
+            state <= 1;  // Move to setup phase
           end
         end
-        1: begin  // Sending data
-          mosi  <= shift_reg[7];  // Send MSB first
-          sclk  <= 1;  // Clock high
-          state <= 2;  // Move to next state
+        1: begin  // Setup phase - put data on MOSI
+          mosi <= shift_reg[7];  // Output MSB
+          sclk <= 1;  // Clock high
+          state <= 2;  // Move to capture phase
         end
-        2: begin  // Clock Low: Shift data and increment
-          sclk <= 0;
+        2: begin  // Capture phase - sample MISO and shift
+          sclk <= 0;  // Clock low
+          // Sample MISO on falling edge and shift into data_out
+          data_out <= {data_out[6:0], miso};  
+          // Shift transmit data for next bit
           shift_reg <= {shift_reg[6:0], 1'b0};
-          // Increment here
-          if (bit_count == 7) begin
-            bit_count <= 0;  // Reset for the receive phase
-            state <= 3;
+          bit_count <= bit_count + 1;
+          
+          if (bit_count == 7) begin  // Last bit completed
+            state <= 3;  // Move to completion
           end else begin
-            bit_count <= bit_count + 1;
-            state <= 1;
+            state <= 1;  // Continue with next bit
           end
         end
-        3: begin  // Receiving data
-          data_out <= {data_out[6:0], miso};  // Shift in data
-          if (bit_count == 7) begin
-            ss <= 1;  // Deactivate slave
-            state <= 0;  // Go back to idle
-          end else begin
-            bit_count <= bit_count + 1;  // Increment bit counter
-            state <= 1;  // Continue sending
-          end
+        3: begin  // Transaction complete
+          ss <= 1;  // Deactivate slave
+          mosi <= 0;  // Clear MOSI
+          state <= 0;  // Return to idle
         end
       endcase
     end
