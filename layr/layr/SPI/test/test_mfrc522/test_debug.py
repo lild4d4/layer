@@ -11,7 +11,7 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, Timer
 from cocotb_tools.runner import get_runner
 from cocotbext.spi import SpiBus
-from mock_mrfc522 import Mfrc522SpiSlave
+from layr.layr.SPI.test.test_mrfc522.mock_mfrc522 import Mfrc522SpiSlave
 
 os.environ["COCOTB_ANSI_OUTPUT"] = "1"
 

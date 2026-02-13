@@ -7,6 +7,3 @@
 [submodule "layr/layr/SPI/src/axi_spi_master"]
 	path = layr/layr/SPI/src/axi_spi_master
 	url = https://github.com/pulp-platform/axi_spi_master.git
-[submodule "layr/layr/SPI/test/cocotbext-spi"]
-	path = layr/layr/SPI/test/cocotbext-spi
-	url = https://github.com/schang412/cocotbext-spi.git
