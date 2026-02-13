@@ -6,11 +6,6 @@ import sys
 from cocotb_tools.runner import get_runner
 from pathlib import Path
 
-# Make the local cocotbext-spi submodule importable
-_spi_ext_path = str(Path(__file__).resolve().parent.parent / "cocotbext-spi")
-if _spi_ext_path not in sys.path:
-    sys.path.insert(0, _spi_ext_path)
-
 from cocotbext.spi import SpiSlaveBase, SpiConfig, SpiBus
 
 

@@ -37,7 +37,6 @@ from pathlib import Path
 import sys
 import os
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "cocotbext-spi"))
 from cocotbext.spi import SpiBus
 from AT25010B_EEPROM_mock import AT25010B_EEPROM
 from cocotb_tools.runner import get_runner
