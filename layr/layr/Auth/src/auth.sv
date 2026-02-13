@@ -47,6 +47,7 @@ module auth(
     wire [127:0] reg_data_i;
 
     // auth_init connections
+    wire auth_init_done;
     wire auth_init_start_i;
     wire auth_init_aes_cs;
     wire auth_init_aes_we;
@@ -95,6 +96,7 @@ module auth(
         .start_i(auth_init_start_i),
 
         // Outputs
+        .init_done(auth_init_done),
         .aes_cs_o(auth_init_aes_cs),
         .aes_we_o(auth_init_aes_we),
         .aes_address_o(auth_init_aes_address),
@@ -144,7 +146,7 @@ module auth(
             reg_start <= 1'b0;
             reg_operation <= 1'b0;
 
-        end else if (reg_start == 0) begin
+        end else if (!auth_init_done || reg_start == 0) begin
             aes_cs <= auth_init_aes_cs;
             aes_we <= auth_init_aes_we;
             aes_address <= auth_init_aes_address;

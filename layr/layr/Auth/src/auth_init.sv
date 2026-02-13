@@ -1,8 +1,9 @@
 module auth_init(
     input logic clk,
     input logic rst,
-    input logic start_i, // manually trigger init process, has to be active during posedge of clk
+    input logic start_i, // manually triggers init process
 
+    output logic        init_done,
     output logic        aes_cs_o,
     output logic        aes_we_o,
     output logic [7:0]  aes_address_o,
@@ -22,6 +23,7 @@ module auth_init(
 
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
+            init_done       <= 1'b0;
             state           <= FETCH;
             key_index       <= 2'd0;
             key_loaded      <= 1'b0;
@@ -50,13 +52,14 @@ module auth_init(
         next_key_loaded = key_loaded;
 
         if (start_i) begin
+            init_done       = 1'b0;
             next_state      = FETCH;
             next_key_index  = 2'd0;
             next_key_loaded = 1'b0;
         end
 
         case (state)
-            IDLE: ;
+            IDLE: init_done = 1'b1;
 
             FETCH: begin
                 reg_key[key_index] = 32'd10 + key_index; //TODO: Read from EEPROM
