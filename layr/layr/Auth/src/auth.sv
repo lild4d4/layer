@@ -39,25 +39,39 @@ module auth(
     output wire valid_o
 );
     // AES core connections
-    wire aes_cs;
-    wire aes_we;
-    wire [7:0] aes_address;
-    wire [31:0] aes_write_data;
+    reg aes_cs;
+    reg aes_we;
+    reg [7:0] aes_address;
+    reg [31:0] aes_write_data;
     wire [31:0] aes_read_data;
     wire [127:0] reg_data_i;
 
     // auth_init connections
     wire auth_init_start_i;
+    wire auth_init_aes_cs;
+    wire auth_init_aes_we;
+    wire [7:0] auth_init_aes_address;
+    wire [31:0] auth_init_aes_write_data;
 
     // auth_generate_challenge
     wire generate_challenge_error;
+    wire auth_generate_challenge_aes_cs;
+    wire auth_generate_challenge_aes_we;
+    wire [7:0] auth_generate_challenge_aes_address;
+    wire [31:0] auth_generate_challenge_aes_write_data;
 
     // auth_verify_id
     wire verify_id_error;
+    wire auth_verify_id_aes_cs;
+    wire auth_verify_id_aes_we;
+    wire [7:0] auth_verify_id_aes_address;
+    wire [31:0] auth_verify_id_aes_write_data;
 
+    // misc
     reg reg_operation;
     reg generate_challenge_valid;
     reg id_valid;
+    reg reg_start;
 
     aes aes(
         .clk(clk),
@@ -81,10 +95,10 @@ module auth(
         .start_i(auth_init_start_i),
 
         // Outputs
-        .aes_cs_o(aes_cs),
-        .aes_we_o(aes_we),
-        .aes_address_o(aes_address),
-        .aes_write_data_o(aes_write_data)
+        .aes_cs_o(auth_init_aes_cs),
+        .aes_we_o(auth_init_aes_we),
+        .aes_address_o(auth_init_aes_address),
+        .aes_write_data_o(auth_init_aes_write_data)
     );
 
     auth_generate_challenge generate_challenge(
@@ -100,10 +114,10 @@ module auth(
         .error_o(generate_challenge_error),
         .challenge_valid_o(generate_challenge_valid),
         .challenge_response_o(data_o),
-        .aes_cs_o(aes_cs),
-        .aes_we_o(aes_we),
-        .aes_address_o(aes_address),
-        .aes_write_data_o(aes_write_data)
+        .aes_cs_o(auth_generate_challenge_aes_cs),
+        .aes_we_o(auth_generate_challenge_aes_we),
+        .aes_address_o(auth_generate_challenge_aes_address),
+        .aes_write_data_o(auth_generate_challenge_aes_write_data)
     );
 
     auth_verify_id verify_id(
@@ -117,27 +131,43 @@ module auth(
         // Outputs
         .error_o(verify_id_error),
         .success_o(id_valid),
-        .aes_cs_o(aes_cs),
-        .aes_we_o(aes_we),
-        .aes_address_o(aes_address),
-        .aes_write_data_o(aes_write_data)
+        .aes_cs_o(auth_verify_id_aes_cs),
+        .aes_we_o(auth_verify_id_aes_we),
+        .aes_address_o(auth_verify_id_aes_address),
+        .aes_write_data_o(auth_verify_id_aes_write_data)
     );
 
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
-            // TODO
+            aes_cs <= 1'b0;
+            aes_we <= 1'b0;
+            reg_start <= 1'b0;
+            reg_operation <= 1'b0;
+
+        end else if (reg_start == 0) begin
+            aes_cs <= auth_init_aes_cs;
+            aes_we <= auth_init_aes_we;
+            aes_address <= auth_init_aes_address;
+            aes_write_data <= auth_init_aes_write_data;
 
         end else if (reg_operation == 0) begin
-            // TODO: generate_challenge_response stuff
+            aes_cs <= auth_generate_challenge_aes_cs;
+            aes_we <= auth_generate_challenge_aes_we;
+            aes_address <= auth_generate_challenge_aes_address;
+            aes_write_data <= auth_generate_challenge_aes_write_data;
 
         end else if (reg_operation == 1) begin
-            // TODO: verify_id stuff
+            aes_cs <= auth_verify_id_aes_cs;
+            aes_we <= auth_verify_id_aes_we;
+            aes_address <= auth_verify_id_aes_address;
+            aes_write_data <= auth_verify_id_aes_write_data;
 
         end
     end
 
     always_comb begin
         reg_operation = operation_i;
+        reg_start = start_i;
     end
 
 endmodule

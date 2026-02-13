@@ -33,7 +33,7 @@ class AuthInitTester:
         self.aes_write_data_o = dut.init.aes_write_data_o
 
         # Relevant internal registers
-        self.current_state = dut.init.current_state
+        self.state = dut.init.state
         self.key_index = dut.init.key_index
         self.reg_key = dut.init.reg_key
 
@@ -73,11 +73,10 @@ async def start_clock(dut, period_ns=10):
 async def reset_dut(tester, cycles=2):
     """Apply an active‑high reset for *cycles* clock edges."""
     tester.rst.value = 1
-    for _ in range(cycles):
-        await RisingEdge(tester.clk)
-    tester.rst.value = 0
-    # Give the design one more edge to come out of reset cleanly
     await RisingEdge(tester.clk)
+    tester.rst.value = 0
+    await RisingEdge(tester.clk)
+    # Give the design one more edge to come out of reset cleanly
 
 
 @cocotb.test()
@@ -85,19 +84,19 @@ async def auth_init__write_key_to_aes_core(dut):
     """Test: Check key write to aes core"""
     tester = AuthInitTester(dut)
     await start_clock(dut)
-    await reset_dut(tester)
+    await reset_dut(dut)
 
     while True:
         await RisingEdge(tester.clk)
 
-        if int(tester.current_state.value) == 1:
+        if int(tester.state.value) == 1:
             break
 
     written_data = []
     while True:
         await RisingEdge(tester.clk)
 
-        if int(tester.current_state.value) == 0:
+        if int(tester.state.value) == 0:
             break
 
         if tester.aes_cs_o.value == 1 and tester.aes_we_o.value == 1:
@@ -109,8 +108,8 @@ async def auth_init__write_key_to_aes_core(dut):
     assert len(written_data) == 4, f"Expected 8 key‑word writes, but saw {len(written_data)}."
 
     for idx, (address, key_fragment) in enumerate(written_data):
-        expected_address = 0x10 + idx
-        expected_key_fragment = 10 + idx
+        expected_address = 0x14 + idx
+        expected_key_fragment = 0x0a + idx
 
         assert address == expected_address, (
             f"Key word {idx}: address mismatch – got {address}, "
@@ -121,6 +120,15 @@ async def auth_init__write_key_to_aes_core(dut):
             f"Key word {idx}: key fragment mismatch – got {key_fragment}, "
             f"expected {bin(expected_key_fragment)}"
         )
+
+    expected_core_key = '0' * 128 +\
+                        '0' * 24 + '00001010' +\
+                        '0' * 24 + '00001011' +\
+                        '0' * 24 + '00001100' +\
+                        '0' * 24 + '00001101'
+
+    await RisingEdge(tester.clk)
+    assert expected_core_key == str(dut.aes.core_key.value), "AES core_key is mismatch."
 
 
 @cocotb.test()
