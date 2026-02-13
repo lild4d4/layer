@@ -1,14 +1,18 @@
 module spi_master (
-    input  wire       clk,      // System clock
-    input  wire       reset,    // Reset signal
-    input  wire [7:0] data_in,  // Data to send
-    input  wire       start,    // Start signal (pulse for 1 clk)
-    input  wire       miso,     // Master In Slave Out
-    output reg        mosi,     // Master Out Slave In
-    output reg        sclk,     // Serial Clock
-    output reg  [7:0] data_out, // Data received
-    output reg        done,     // Pulses high for 1 clk when byte is complete
-    output reg        busy      // High while a transfer is in progress
+    input wire clk,   // System clock
+    input wire reset, // Reset signal
+
+    // internal interface
+    input  wire       start,     // Start signal (pulse for 1 clk)
+    input  wire [7:0] data_in,   // Data to send
+    output reg  [7:0] data_out,  // Data received
+    output reg        done,      // Pulses high for 1 clk when byte is complete
+    output reg        busy,      // High while a transfer is in progress
+
+    // physical SPI wires
+    input  wire miso,  // Master In Slave Out
+    output reg  mosi,  // Master Out Slave In
+    output reg  sclk   // Serial Clock
 );
 
   reg [2:0] bit_count;  // Bit counter
@@ -39,14 +43,14 @@ module spi_master (
           end
         end
         1: begin  // Setup phase - put data on MOSI
-          mosi <= shift_reg[7];  // Output MSB
-          sclk <= 1;  // Clock high
+          mosi  <= shift_reg[7];  // Output MSB
+          sclk  <= 1;  // Clock high
           state <= 2;  // Move to capture phase
         end
         2: begin  // Capture phase - sample MISO and shift
           sclk <= 0;  // Clock low
           // Sample MISO on falling edge and shift into data_out
-          data_out <= {data_out[6:0], miso};
+          data_out <= {miso, data_out[7:1]};
           // Shift transmit data for next bit
           shift_reg <= {shift_reg[6:0], 1'b0};
           bit_count <= bit_count + 1;

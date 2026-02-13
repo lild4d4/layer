@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "cocotb>=2.0.1",
+    "cocotbext-spi",
     "pytest>=9.0.2",
 ]
 
@@ -16,3 +17,6 @@ dev = [
 
 [tool.pytest.ini_options]
 norecursedirs = ["build", "dist", "librelane", "pdk"]
+
+[tool.uv.sources]
+cocotbext-spi = { git = "https://github.com/schang412/cocotbext-spi.git" }
