@@ -44,12 +44,18 @@ module auth(
     wire [7:0] aes_address;
     wire [31:0] aes_write_data;
     wire [31:0] aes_read_data;
+    wire [127:0] reg_data_i;
 
     // auth_init connections
     wire auth_init_start_i;
 
+    // auth_generate_challenge
+    wire generate_challenge_error;
+
+    // auth_verify_id
+    wire verify_id_error;
+
     reg reg_operation;
-    reg error;
     reg generate_challenge_valid;
     reg id_valid;
 
@@ -91,9 +97,9 @@ module auth(
         .aes_read_data_i(aes_read_data),
 
         // Outputs
-        .error_o(error),
+        .error_o(generate_challenge_error),
         .challenge_valid_o(generate_challenge_valid),
-        .data_o(reg_data_o),
+        .challenge_response_o(data_o),
         .aes_cs_o(aes_cs),
         .aes_we_o(aes_we),
         .aes_address_o(aes_address),
@@ -109,8 +115,8 @@ module auth(
         .id_cipher_i(reg_data_i),
 
         // Outputs
-        .error_o(error),
-        .success_o(id_valid)
+        .error_o(verify_id_error),
+        .success_o(id_valid),
         .aes_cs_o(aes_cs),
         .aes_we_o(aes_we),
         .aes_address_o(aes_address),
@@ -119,7 +125,7 @@ module auth(
 
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
-            reg_temp <= 128'd0;
+            // TODO
 
         end else if (reg_operation == 0) begin
             // TODO: generate_challenge_response stuff
@@ -131,7 +137,7 @@ module auth(
     end
 
     always_comb begin
-        reg_operation = operation;
+        reg_operation = operation_i;
     end
 
 endmodule

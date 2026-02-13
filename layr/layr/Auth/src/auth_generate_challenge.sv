@@ -40,12 +40,14 @@ module auth_generate_challenge(
         ENCRYPT_RUN
     } encrypt_current_state, encrypt_next_state;
 
-    reg decrypt_done;
+    reg decrypt_aes_core_done;
+    reg decrypt_read;
     reg [2:0] key_index;
     reg [2:0] data_index;
+    reg [2:0] plain_index;
     reg [127:0] reg_input_chiper;
-    reg [64:0] rc;
-    reg [64:0] rt;
+    reg [63:0] rc;
+    reg [63:0] rt;
 
     always_comb begin
         next_state = current_state;
@@ -60,18 +62,24 @@ module auth_generate_challenge(
             end
 
             DECRYPT: begin
-                // TODO
                 case (decrypt_current_state)
                     DECRYPT_SET_MODE: decrypt_next_state = DECRYPT_WRITE;
-                    DECRYPT_WRITE: ; // TODO, need to wait until writing is done
+                    DECRYPT_WRITE: begin
+                        if (data_index == 3'd7) decrypt_next_state = DECRYPT_NEXT;
+                    end
                     DECRYPT_INIT: decrypt_next_state = DECRYPT_NEXT;
                     DECRYPT_NEXT: decrypt_next_state = DECRYPT_WAIT;
                     DECRYPT_WAIT: begin
-                        if (decrypt_done) begin
+                        if (decrypt_aes_core_done) begin
                             decrypt_next_state = DECRYPT_DONE;
                         end
                     end
-                    DECRYPT_DONE: ; // TODO, need to read results
+                    DECRYPT_DONE: begin
+                        if (decrypt_read) begin
+                            decrypt_next_state = DECRYPT_SET_MODE;
+                            next_state = GET_RNG;
+                        end
+                    end
                     default: decrypt_next_state = DECRYPT_SET_MODE;
                 endcase
             end
@@ -103,6 +111,7 @@ module auth_generate_challenge(
             // READ_CHAL
             //----------------------------
             READ_CHAL: begin
+                reg_input_chiper <= input_cipher_i;
             end
 
             //----------------------------
@@ -120,7 +129,7 @@ module auth_generate_challenge(
                     DECRYPT_WRITE: begin
                         aes_cs_o <= 1'b1;
                         aes_we_o <= 1'b1;
-                        aes_address_o <= 8'h20 + data_index;
+                        aes_address_o <= 8'h24 + data_index;
                         aes_write_data_o <= reg_input_chiper[127 - data_index*32 -: 32];
                     end
 
@@ -145,6 +154,9 @@ module auth_generate_challenge(
                     end
 
                     DECRYPT_DONE: begin
+                        aes_cs_o <= 1'b1;
+                        aes_we_o <= 1'b0;
+                        aes_address_o <= 8'h30;
                     end
 
                     default: ;
@@ -173,42 +185,51 @@ module auth_generate_challenge(
 
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
-            decrypt_done <= 1'b0;
-            // TODO: Reset module
+            reg_input_chiper <= 128'd0;
+            decrypt_aes_core_done <= 1'b0;
+            decrypt_read <= 1'b0;
+            plain_index <= 1'b0;
+            data_index <= 1'b0;
+            rc <= 64'd0;
+
         end else begin
             current_state <= next_state;
             decrypt_current_state <= decrypt_next_state;
             encrypt_current_state <= encrypt_next_state;
 
             if ((current_state == DECRYPT && decrypt_current_state == DECRYPT_WRITE) ||
-                (current_state == ENCRYPT && encrypt_current_state == ENCRYPT_WRITE)) begin
-                if (data_index == 3'd3) begin
+                (current_state == ENCRYPT && encrypt_current_state == ENCRYPT_WRITE_CR) ||
+                (current_state == ENCRYPT && encrypt_current_state == ENCRYPT_WRITE_SK)) begin
+                if (data_index == 3'd7) begin
                     data_index <= 3'd0;
                 end else begin
                     data_index = data_index + 3'd1;
                 end
-            end
 
-            if (current_state == DECRYPT && decrypt_current_state == DECRYPT_WAIT) begin
-                decrypt_done <= aes_read_data_i[1];
+            end else if (current_state == DECRYPT && decrypt_current_state == DECRYPT_WAIT) begin
+                decrypt_aes_core_done <= aes_read_data_i[1];
+                data_index <= 3'd0;
+
+            end else if (current_state == DECRYPT && decrypt_current_state == DECRYPT_DONE) begin
+                case (plain_index)
+                    3'd0: rc[63:32] <= aes_read_data_i;
+                    3'd1: rc[31:0] <= aes_read_data_i;
+                    3'd2: ; // skip
+                    3'd3: decrypt_read <= 1'b1;
+                endcase
+
+                plain_index <= plain_index + 3'd1;
+
+            end else begin
+                plain_index <= 3'd0;
+                decrypt_read <= 1'b0;
             end
         end
     end
 
 
-    // TODO: set ecb 128 bit decrypt mode for aes core, key is already set
-
     // TODO: Write input challenge to aes core input
 
-    // TODO: set init bit for aes core
-    /*
-    cs          = 1'b1;
-    we          = 1'b1;
-    address     = 8'h08;
-    write_data  = 32'h1;
-    */
-    // TODO: decrypt reg_input_chiper (AES ECB)
-    // TODO: obtain rc
     // TODO: get random value rt (NFC reader apparently has RNG)
     // TODO: set ecb 128 bit encrypt mode for aes core, key is already set
     /*

@@ -11,8 +11,6 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
 from cocotb_tools.runner import get_runner
 
-from Crypto.Cipher import AES
-
 os.environ["COCOTB_ANSI_OUTPUT"] = "1"
 
 
@@ -23,46 +21,19 @@ class AuthInitTester:
         self.dut = dut
 
         # Inputs
-        self.clk = dut.init.clk
-        self.rst = dut.init.rst
+        self.clk = dut.clk
+        self.rst = dut.rst
 
         # Outputs
-        self.aes_cs_o = dut.init.aes_cs_o
-        self.aes_we_o = dut.init.aes_we_o
-        self.aes_address_o = dut.init.aes_address_o
-        self.aes_write_data_o = dut.init.aes_write_data_o
+        self.aes_cs_o = dut.aes_cs_o
+        self.aes_we_o = dut.aes_we_o
+        self.aes_address_o = dut.aes_address_o
+        self.aes_write_data_o = dut.aes_write_data_o
 
         # Relevant internal registers
-        self.current_state = dut.init.current_state
-        self.key_index = dut.init.key_index
-        self.reg_key = dut.init.reg_key
-
-class AuthGenerateChallengeTester:
-    """Helper class for auth_generate_challenge testing."""
-
-    def __init__(self, dut):
-        self.dut = dut
-
-        # Inputs
-        self.clk = dut.generate_challenge.clk
-        self.rst = dut.generate_challenge.rst
-        self.ready_i = dut.generate_challenge.ready_i
-        self.input_cipher_i = dut.generate_challenge.input_cipher_i
-        self.aes_read_data_i = dut.generate_challenge.aes_read_data_i
-
-        # Outputs
-        self.error_o = dut.generate_challenge.error_o
-        self.challenge_valid_o = dut.generate_challenge.challenge_valid_o
-        self.challenge_response_o = dut.generate_challenge.challenge_response_o
-        self.aes_cs_o = dut.generate_challenge.aes_cs_o
-        self.aes_we_o = dut.generate_challenge.aes_we_o
-        self.aes_address_o = dut.generate_challenge.aes_address_o
-        self.aes_write_data_o = dut.generate_challenge.aes_write_data_o
-
-        # Relevant internal registers
-        self.current_state = dut.generate_challenge.current_state
-        self.decrypt_current_state = dut.generate_challenge.decrypt_current_state
-        self.decrypt_aes_core_done = dut.generate_challenge.decrypt_aes_core_done
+        self.current_state = dut.current_state
+        self.key_index = dut.key_index
+        self.reg_key = dut.reg_key
 
 
 async def start_clock(dut, period_ns=10):
@@ -123,40 +94,12 @@ async def auth_init__write_key_to_aes_core(dut):
         )
 
 
-@cocotb.test()
-async def auth_generate_challenge__decrypt_input_cipher(dut):
-    tester = AuthGenerateChallengeTester(dut)
-
-    key = b'\x01' * 16
-    rc = b'\xff' * 8
-    cipher = AES.new(key, AES.MODE_ECB)
-    ciphertext = cipher.encrypt(rc + b'\x00' * 8)
-
-    await start_clock(dut)
-    await reset_dut(dut)
-
-    tester.input_cipher_i.value = int.from_bytes(ciphertext)
-    tester.ready_i.value = 1
-    await RisingEdge(tester.dut.clk)
-
-    while True:
-        await RisingEdge(tester.dut.clk)
-        dut._log.info(f"{tester.current_state.value=}")
-        dut._log.info(f"{tester.decrypt_current_state.value=}")
-
-        if tester.current_state.value == 2 and tester.decrypt_current_state.value == 4:
-            break
-
-    # TODO: Assert that decrypted rc is equal to original rc
-
-
 def test_auth():
     sim = os.getenv("SIM", "icarus")
 
     proj_path = Path(__file__).resolve().parent.parent
 
     sources = [
-        proj_path / "src" / "auth.sv",
         proj_path / "src" / "auth_init.sv",
         proj_path / "src" / "auth_generate_challenge.sv",
         proj_path / "src" / "auth_verify_id.sv",
@@ -173,14 +116,14 @@ def test_auth():
 
     auth_init_runner.build(
         sources=sources,
-        hdl_toplevel="auth",
+        hdl_toplevel="auth_init",
         always=True,
         waves=True,
         timescale=("1ns", "1ps"),
     )
 
     auth_init_runner.test(
-        hdl_toplevel="auth", test_module="test_auth", waves=True
+        hdl_toplevel="auth_init", test_module="test_auth_init", waves=True
     )
 
 
