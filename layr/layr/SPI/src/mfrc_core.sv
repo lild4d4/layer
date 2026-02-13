@@ -137,6 +137,7 @@ module mfrc_core (
     reg [3:0]   step;
     reg [31:0]  timeout_cnt;
     reg         poll_success;
+    reg         poll_outstanding;  // prevents issuing multiple ComIrqReg reads
     reg [5:0]   fifo_level;        // raw byte count from FIFOLevelReg (0..64)
 
     // Latched request
@@ -164,6 +165,7 @@ module mfrc_core (
             trx_error        <= 8'd0;
             timeout_cnt      <= 32'd0;
             poll_success     <= 1'b0;
+            poll_outstanding <= 1'b0;
             fifo_level       <= 6'd0;
             lat_tx_len       <= 5'd0;
             lat_tx_data      <= 256'd0;
@@ -185,6 +187,8 @@ module mfrc_core (
                         lat_timeout      <= trx_timeout_cycles;
                         timeout_cnt      <= 32'd0;
                         poll_success     <= 1'b0;
+                        poll_outstanding <= 1'b0;
+                        fifo_level       <= 6'd0;
                         step             <= STEP_FLUSH;
                         state            <= S_SETUP;
                     end
@@ -303,15 +307,17 @@ module mfrc_core (
                 // timeout_cnt counts the number of poll round-trips,
                 // not wall-clock cycles (see module header).
                 S_POLL: begin
-                    if (!reg_req_valid && reg_req_ready) begin
+                    if (!poll_outstanding && !reg_req_valid && reg_req_ready) begin
                         // Issue the read
-                        reg_req_valid <= 1'b1;
-                        reg_req_write <= 1'b0;
-                        reg_req_addr  <= REG_COM_IRQ;
-                        reg_req_len   <= 5'd0;
-                        reg_req_wdata <= 256'd0;
+                        reg_req_valid    <= 1'b1;
+                        reg_req_write    <= 1'b0;
+                        reg_req_addr     <= REG_COM_IRQ;
+                        reg_req_len      <= 5'd0;
+                        reg_req_wdata    <= 256'd0;
+                        poll_outstanding <= 1'b1;
                     end
                     if (reg_resp_valid) begin
+                        poll_outstanding <= 1'b0;
                         timeout_cnt <= timeout_cnt + 1;
                         if (reg_resp_rdata[255:248] & IRQ_RX) begin
                             // RxIRq — success
