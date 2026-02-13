@@ -4,9 +4,7 @@ module test_eeprom_tb (
 
     // eeprom_spi interface
     input  wire         eeprom_start,  // Pulse: start a transaction
-    input  wire         eeprom_write,  // 1 = write byte, 0 = read byte
     input  wire [  6:0] eeprom_addr,   // EEPROM byte address (7 bits -> 128 bytes)
-    input  wire [127:0] eeprom_wdata,  // Write data (ignored on read)
     output reg  [127:0] eeprom_rdata,  // Read data (valid when eeprom_done pulses)
     output reg          eeprom_done,   // Pulse: transaction complete
     output wire         eeprom_busy,   // High while a user transaction is in progress
@@ -34,9 +32,7 @@ module test_eeprom_tb (
       .rst(rst),
 
       .eeprom_start(eeprom_start),
-      .eeprom_write(eeprom_write),
       .eeprom_addr (eeprom_addr),
-      .eeprom_wdata(eeprom_wdata),
       .eeprom_rdata(eeprom_rdata),
       .eeprom_busy (eeprom_busy),
       .eeprom_done (eeprom_done),

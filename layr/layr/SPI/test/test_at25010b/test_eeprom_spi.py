@@ -33,9 +33,7 @@ async def reset_dut(dut):
     """Assert reset for RESET_CYCLES, then release and wait for init."""
     dut.rst.value = 1
     dut.eeprom_start.value = 0
-    dut.eeprom_write.value = 0
     dut.eeprom_addr.value = 0
-    dut.eeprom_wdata.value = 0
 
     for _ in range(RESET_CYCLES):
         await RisingEdge(dut.clk)
@@ -51,9 +49,7 @@ async def send_cmd(dut, *, write: bool, addr: int, wdata: int = 0) -> None:
 
     The caller must then wait for cmd_done (use wait_done()).
     """
-    dut.eeprom_write.value = int(write)
     dut.eeprom_addr.value = addr & 0x7F
-    dut.eeprom_wdata.value = wdata & 0xFF
     dut.eeprom_start.value = 1
     await RisingEdge(dut.clk)
     dut.eeprom_start.value = 0
