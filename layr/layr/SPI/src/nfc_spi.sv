@@ -25,7 +25,7 @@
 
 module nfc_spi (
     input  wire        clk,
-    input  wire        rst_n,
+    input  wire        rst,
 
     // ── Simple command interface (directly from other modules) ───
     input  wire        cmd_valid,   // Pulse: start a transaction
@@ -80,8 +80,8 @@ module nfc_spi (
 
     // ── AXI request helper task (active for one clock) ──────────
     // We set axi_req_valid=1 for one cycle, then wait for axi_resp_done.
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
             state          <= S_IDLE;
             lat_write      <= 1'b0;
             lat_addr       <= 6'h0;

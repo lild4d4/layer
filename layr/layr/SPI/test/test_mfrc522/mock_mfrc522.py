@@ -84,6 +84,19 @@ class Mfrc522SpiSlave(SpiSlaveBase):
 
         self._reset_regs()
 
+    # ------------------------------------------------------------------
+    # CPHA=0 fix: pre-drive MISO before the first SCLK rising edge
+    # ------------------------------------------------------------------
+    async def _shift(self, num_bits, tx_word=None):
+        """Override _shift to pre-drive MSB on MISO for CPHA=0."""
+        if not self._config.cpha and tx_word is not None and tx_word != 0:
+            msb = bool(tx_word & (1 << (num_bits - 1)))
+            self._miso.value = int(msb)
+            shifted_tx = (tx_word << 1) & ((1 << num_bits) - 1)
+            return await super()._shift(num_bits, tx_word=shifted_tx)
+        else:
+            return await super()._shift(num_bits, tx_word=tx_word)
+
     # -------------------------
     # Public helpers (optional)
     # -------------------------

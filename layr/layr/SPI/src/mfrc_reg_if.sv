@@ -16,14 +16,14 @@
 
 module mfrc_reg_if (
     input  wire          clk,
-    input  wire          rst_n,
+    input  wire          rst,
 
     // ── request side ──
     input  wire          req_valid,      // pulse to submit request
     output wire          req_ready,      // high when idle, can accept
     input  wire          req_write,      // 1 = write, 0 = read
     input  wire [5:0]    req_addr,       // MFRC522 register address
-    input  wire [5:0]    req_len,        // number of data bytes (1..32; 0 treated as 1)
+    input  wire [4:0]    req_len,        // number of data bytes 0 -> 1 
     input  wire [255:0]  req_wdata,      // write payload (byte0 at [255:248])
 
     // ── response side ──
@@ -56,21 +56,10 @@ module mfrc_reg_if (
     // Latched request fields
     reg        lat_write;
     reg [5:0]  lat_addr;
-    reg [5:0]  lat_len;    // clamped 1..32
+    reg [4:0]  lat_len; 
     reg [255:0] lat_wdata;
 
     assign req_ready = (state == S_IDLE);
-
-    // TODO: instead of clamping we could simply just use 0-> 1 byte etc 31-> 32...
-    // Clamp length: 0 → 1, >32 → 32
-    function [5:0] clamp_len(input [5:0] len);
-        if (len == 6'd0)
-            clamp_len = 6'd1;
-        else if (len > 6'd32)
-            clamp_len = 6'd32;
-        else
-            clamp_len = len;
-    endfunction
 
     // Build MFRC522 address byte
     // Read:  { 1, addr[5:0], 0 }
@@ -79,12 +68,12 @@ module mfrc_reg_if (
         addr_byte = {write ? 1'b0 : 1'b1, addr, 1'b0};
     endfunction
 
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
             state       <= S_IDLE;
             lat_write   <= 1'b0;
             lat_addr    <= 6'd0;
-            lat_len     <= 6'd1;
+            lat_len     <= 5'd1;
             lat_wdata   <= 256'd0;
             spi_go      <= 1'b0;
             spi_w_len   <= 6'd0;
@@ -104,7 +93,7 @@ module mfrc_reg_if (
                     if (req_valid) begin
                         lat_write <= req_write;
                         lat_addr  <= req_addr;
-                        lat_len   <= clamp_len(req_len);
+                        lat_len   <= req_len;
                         lat_wdata <= req_wdata;
                         state     <= S_ISSUE;
                     end
@@ -114,7 +103,7 @@ module mfrc_reg_if (
                 S_ISSUE: begin
                     if (lat_write) begin
                         // Write: addr_byte + lat_len data bytes
-                        spi_w_len <= 6'd1 + lat_len;
+                        spi_w_len <= 6'd2 + lat_len;
                         spi_r_len <= 6'd0;
 
                         // Byte 0 = addr_byte
@@ -125,7 +114,7 @@ module mfrc_reg_if (
                     end else begin
                         // Read: addr_byte only, then r_len dummy bytes
                         spi_w_len <= 6'd1;
-                        spi_r_len <= lat_len;
+                        spi_r_len <= lat_len + 6'd1;
 
                         spi_tx_data[255:248] <= addr_byte(1'b0, lat_addr);
                         spi_tx_data[247:0]   <= 248'd0;  // don't care

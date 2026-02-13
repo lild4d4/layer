@@ -5,14 +5,14 @@
 
 module test_mfrc_reg_if_top (
     input  wire          clk,
-    input  wire          rst_n,
+    input  wire          rst,
 
     // ── request side ──
     input  wire          req_valid,
     output wire          req_ready,
     input  wire          req_write,
     input  wire [5:0]    req_addr,
-    input  wire [5:0]    req_len,
+    input  wire [4:0]    req_len,
     input  wire [255:0]  req_wdata,
 
     // ── response side ──
@@ -40,7 +40,7 @@ module test_mfrc_reg_if_top (
 
     mfrc_reg_if u_reg_if (
         .clk         (clk),
-        .rst_n       (rst_n),
+        .rst         (rst),
 
         .req_valid   (req_valid),
         .req_ready   (req_ready),
@@ -65,7 +65,7 @@ module test_mfrc_reg_if_top (
 
     spi_ctrl u_spi_ctrl (
         .clk     (clk),
-        .rst_n   (rst_n),
+        .rst     (rst),
 
         .go      (spi_go),
         .done    (spi_done),
