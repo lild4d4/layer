@@ -1,6 +1,9 @@
-DESIGN_NAME: seven_segment
+DESIGN_NAME: auth
 VERILOG_FILES:
-- src/seven_segment.sv
+- src/auth_init.sv
+- src/auth_generate_challenge.sv
+- src/auth_verify_id.sv
+- secworks-aes/src/rtl/aes.v
 
 USE_SLANG: true
 
