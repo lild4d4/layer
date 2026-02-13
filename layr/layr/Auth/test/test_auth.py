@@ -27,6 +27,7 @@ class AuthInitTester:
         self.rst = dut.init.rst
 
         # Outputs
+        self.init_done = dut.init.init_done
         self.aes_cs_o = dut.init.aes_cs_o
         self.aes_we_o = dut.init.aes_we_o
         self.aes_address_o = dut.init.aes_address_o
@@ -60,9 +61,10 @@ class AuthGenerateChallengeTester:
         self.aes_write_data_o = dut.generate_challenge.aes_write_data_o
 
         # Relevant internal registers
-        self.current_state = dut.generate_challenge.current_state
-        self.decrypt_current_state = dut.generate_challenge.decrypt_current_state
-        self.decrypt_aes_core_done = dut.generate_challenge.decrypt_aes_core_done
+        self.cur_top_st = dut.generate_challenge.cur_top_st
+        self.nxt_top_st = dut.generate_challenge.nxt_top_st
+        self.d_cur_st = dut.generate_challenge.d_cur_st
+        self.d_nxt_st = dut.generate_challenge.d_nxt_st
 
 
 async def start_clock(dut, period_ns=10):
@@ -144,16 +146,20 @@ async def auth_generate_challenge__decrypt_input_cipher(dut):
     await reset_dut(dut)
 
     tester.input_cipher_i.value = int.from_bytes(ciphertext)
-    tester.ready_i.value = 1
+    dut.start_i.value = 1
     await RisingEdge(tester.dut.clk)
 
+    counter = 0
     while True:
         await RisingEdge(tester.dut.clk)
-        dut._log.info(f"{tester.current_state.value=}")
-        dut._log.info(f"{tester.decrypt_current_state.value=}")
 
-        if tester.current_state.value == 2 and tester.decrypt_current_state.value == 4:
+        if tester.cur_top_st.value == 3:
             break
+
+        if counter == 1000:
+            break
+        else:
+            counter += 1
 
     # TODO: Assert that decrypted rc is equal to original rc
 
