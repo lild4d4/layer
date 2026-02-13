@@ -54,7 +54,11 @@ async def _reset(dut):
 def _attach_mock(dut, version=0x92):
     """Attach the MFRC522 mock to cs0 with our spi_master-compatible config."""
     spi_bus = SpiBus.from_entity(dut, cs_name="cs0")
-    return Mfrc522SpiSlave(spi_bus) 
+    mock = Mfrc522SpiSlave(spi_bus)
+    # Keep the existing test API: allow overriding VersionReg.
+    mock._version = version
+    mock._regs[Mfrc522SpiSlave.REG_VERSION] = version
+    return mock
 
 
 async def _write_reg(dut, addr: int, data: list[int]):

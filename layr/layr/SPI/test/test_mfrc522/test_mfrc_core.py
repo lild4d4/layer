@@ -10,7 +10,7 @@ import os
 from cocotb_tools.runner import get_runner
 from pathlib import Path
 
-from cocotbext.spi import SpiConfig, SpiBus
+from cocotbext.spi import SpiBus
 from mock_mfrc522 import Mfrc522SpiSlave
 
 
@@ -245,7 +245,7 @@ async def test_error_reg_zero_on_success(dut):
 
 @cocotb.test()
 async def test_transceive_select_sak(dut):
-    """SELECT CL1 (0x93 0x70 + UID + BCC) → SAK [0x08]."""
+    """SELECT CL1 (0x93 0x70 + UID + BCC) → SAK + CRC_A (3 bytes)."""
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     await _reset(dut)
     mock = _attach_mock(dut)
@@ -258,8 +258,27 @@ async def test_transceive_select_sak(dut):
 
     dut._log.info(f"SELECT result: {result}")
     assert result["ok"], f"transceive failed: error={result['error']:#04x}"
-    assert result["rx_len"] == 1
-    assert result["rx_data"] == [0x08]
+    # Real ISO14443-A SELECT response is SAK (1 byte) + CRC_A (2 bytes)
+    assert result["rx_len"] == 3
+    assert result["rx_data"][0] == 0x08
+
+    def _crc_a(data: bytes) -> int:
+        # ISO14443A CRC_A with preset 0x6363, poly 0x8408 (LSB-first)
+        crc = 0x6363
+        for b in data:
+            crc ^= b
+            for _ in range(8):
+                if crc & 0x0001:
+                    crc = (crc >> 1) ^ 0x8408
+                else:
+                    crc >>= 1
+        return crc & 0xFFFF
+
+    crc = _crc_a(bytes([0x08]))
+    expected_crc = [crc & 0xFF, (crc >> 8) & 0xFF]
+    assert result["rx_data"][1:] == expected_crc, (
+        f"Expected CRC {expected_crc}, got {result['rx_data'][1:]}"
+    )
     dut._log.info("test_transceive_select_sak PASSED ✓")
 
 
