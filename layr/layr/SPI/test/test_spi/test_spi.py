@@ -7,33 +7,16 @@ from pathlib import Path
 
 
 async def spi_slave_manual(dut, reply_byte):
-    """
-    A manual SPI slave that works directly with the spi_master module
-    (which has no SS pin).  It watches sclk edges to track the transfer.
-
-    The master is CPOL=0: sclk idles low, data is set on rising edge,
-    sampled on falling edge.
-    """
-    # Wait for the first rising edge of sclk (transfer starts)
-    await RisingEdge(dut.sclk)
-
     rx_byte = 0
     for i in range(8):
-        if i > 0:
-            await RisingEdge(dut.sclk)
-        # Sample MOSI on rising edge
+        # Drive MISO while SCLK is low (setup before rising edge)
+        dut.miso.value = (reply_byte >> (7 - i)) & 1
+        # Wait for rising edge — master samples MISO, slave samples MOSI
+        await RisingEdge(dut.sclk)
         bit = int(dut.mosi.value)
         rx_byte = (rx_byte << 1) | bit
-
-        # Drive MISO — master samples on falling edge (state 2)
-        dut.miso.value = (reply_byte >> (7 - i)) & 1
-
-        await FallingEdge(dut.sclk)
-
-    # Let miso settle for a couple clocks then clear
     await ClockCycles(dut.clk, 2)
     dut.miso.value = 0
-
     return rx_byte
 
 
@@ -95,8 +78,10 @@ async def test_spi_slave_receives_byte(dut):
 
     test_data = 0xA5
     slave_reply = 0x3C
-    dut._log.info(f"Starting SPI transaction — TX: {hex(test_data)}, "
-                  f"expected slave reply: {hex(slave_reply)}")
+    dut._log.info(
+        f"Starting SPI transaction — TX: {hex(test_data)}, "
+        f"expected slave reply: {hex(slave_reply)}"
+    )
 
     # Start the manual slave in the background
     slave_task = cocotb.start_soon(spi_slave_manual(dut, slave_reply))
@@ -114,18 +99,18 @@ async def test_spi_slave_receives_byte(dut):
     received_by_slave = await with_timeout(slave_task.join(), 10, "us")
     dut._log.info(f"Slave received on MOSI : {hex(received_by_slave)}")
 
-    assert received_by_slave == test_data, (
-        f"Slave saw {hex(received_by_slave)} on MOSI, expected {hex(test_data)}"
-    )
+    assert (
+        received_by_slave == test_data
+    ), f"Slave saw {hex(received_by_slave)} on MOSI, expected {hex(test_data)}"
 
     # Check what the master captured on MISO (data_out register)
     await ClockCycles(dut.clk, 2)
     master_rx = int(dut.data_out.value)
     dut._log.info(f"Master data_out (MISO) : {hex(master_rx)}")
 
-    assert master_rx == slave_reply, (
-        f"Master data_out is {hex(master_rx)}, expected {hex(slave_reply)}"
-    )
+    assert (
+        master_rx == slave_reply
+    ), f"Master data_out is {hex(master_rx)}, expected {hex(slave_reply)}"
 
     await ClockCycles(dut.clk, 10)
     dut._log.info("test_spi_slave_receives_byte PASSED ✓")
@@ -169,6 +154,7 @@ def test_spi_runner():
         test_module="test_spi",
         waves=True,
     )
+
 
 if __name__ == "__main__":
     test_spi_runner()

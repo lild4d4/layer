@@ -1,74 +1,94 @@
 module spi_master (
-    input wire clk,   // System clock
-    input wire reset, // Reset signal
-
+    input  wire       clk,       // System clock
+    input  wire       reset,     // Reset signal (active high)
     // internal interface
     input  wire       start,     // Start signal (pulse for 1 clk)
     input  wire [7:0] data_in,   // Data to send
     output reg  [7:0] data_out,  // Data received
     output reg        done,      // Pulses high for 1 clk when byte is complete
     output reg        busy,      // High while a transfer is in progress
-
     // physical SPI wires
-    input  wire miso,  // Master In Slave Out
-    output reg  mosi,  // Master Out Slave In
-    output reg  sclk   // Serial Clock
+    input  wire       miso,      // Master In Slave Out
+    output reg        mosi,      // Master Out Slave In
+    output reg        sclk       // Serial Clock
 );
 
-  reg [2:0] bit_count;  // Bit counter
-  reg [7:0] shift_reg;  // Shift register for data transmission
-  reg [1:0] state;  // State variable
+  reg [2:0] bit_count;
+  reg [7:0] shift_reg;
+  reg [1:0] state;
 
-  // State machine for SPI operation
+  // SPI Mode 0: CPOL=0, CPHA=0
+  //   - SCLK idles low
+  //   - MOSI set up while SCLK is low
+  //   - MISO sampled when SCLK goes high
+  //
+  // State machine (2 system clocks per SPI bit):
+  //   State 0: Idle (SCLK=0)
+  //   State 1: Setup  — SCLK=0, drive MOSI
+  //   State 2: Capture — SCLK=1, sample MISO
+  //   State 3: Finish — SCLK=0, return to idle
+
+  localparam S_IDLE = 2'd0;
+  localparam S_SETUP = 2'd1;
+  localparam S_CAPTURE = 2'd2;
+  localparam S_FINISH = 2'd3;
+
   always @(posedge clk or posedge reset) begin
     if (reset) begin
-      sclk      <= 0;  // Clock low
-      mosi      <= 0;  // Master Out Slave In
-      bit_count <= 0;  // Reset bit counter
-      shift_reg <= 0;  // Shift register
-      data_out  <= 0;  // Data received
-      done      <= 0;
-      busy      <= 0;
-      state     <= 0;  // Idle state
+      sclk      <= 1'b0;
+      mosi      <= 1'b0;
+      bit_count <= 3'd0;
+      shift_reg <= 8'd0;
+      data_out  <= 8'd0;
+      done      <= 1'b0;
+      busy      <= 1'b0;
+      state     <= S_IDLE;
     end else begin
-      done <= 0;  // default: done is a single-cycle pulse
+      done <= 1'b0;
 
       case (state)
-        0: begin  // Idle state
+        S_IDLE: begin
+          sclk <= 1'b0;
           if (start) begin
-            shift_reg <= data_in;  // Load data to send
-            bit_count <= 0;  // Reset bit counter
-            busy      <= 1;
-            state     <= 1;  // Move to setup phase
+            shift_reg <= data_in;
+            bit_count <= 3'd0;
+            busy      <= 1'b1;
+            mosi      <= data_in[7];  // Drive first bit immediately
+            state     <= S_CAPTURE;  // MOSI is set up, go to rising edge
           end
         end
-        1: begin  // Setup phase - put data on MOSI
-          mosi  <= shift_reg[7];  // Output MSB
-          sclk  <= 1;  // Clock high
-          state <= 2;  // Move to capture phase
-        end
-        2: begin  // Capture phase - sample MISO and shift
-          sclk <= 0;  // Clock low
-          // Sample MISO on falling edge and shift into data_out
-          data_out <= {miso, data_out[7:1]};
-          // Shift transmit data for next bit
-          shift_reg <= {shift_reg[6:0], 1'b0};
-          bit_count <= bit_count + 1;
 
-          if (bit_count == 7) begin  // Last bit completed
-            done  <= 1;
-            busy  <= 0;
-            state <= 0;  // Return to idle
+        // SCLK low — drive MOSI for next bit
+        S_SETUP: begin
+          sclk  <= 1'b0;
+          mosi  <= shift_reg[7];
+          state <= S_CAPTURE;
+        end
+
+        // SCLK high — sample MISO
+        S_CAPTURE: begin
+          sclk      <= 1'b1;
+          data_out  <= {data_out[6:0], miso};
+          shift_reg <= {shift_reg[6:0], 1'b0};
+
+          if (bit_count == 3'd7) begin
+            done  <= 1'b1;
+            busy  <= 1'b0;
+            state <= S_FINISH;
           end else begin
-            state <= 1;  // Continue with next bit
+            bit_count <= bit_count + 3'd1;
+            state     <= S_SETUP;
           end
         end
-        default: state <= 0;
+
+        // Return SCLK low, back to idle
+        S_FINISH: begin
+          sclk  <= 1'b0;
+          state <= S_IDLE;
+        end
       endcase
     end
   end
+
 endmodule
-
-
-
 

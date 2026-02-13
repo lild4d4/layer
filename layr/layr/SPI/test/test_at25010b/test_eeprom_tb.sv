@@ -1,6 +1,6 @@
 module test_eeprom_tb (
     input wire clk,
-    input wire rst_n,
+    input wire rst,
 
     // eeprom_spi interface
     input  wire       eeprom_start,  // Pulse: start a transaction
@@ -28,7 +28,7 @@ module test_eeprom_tb (
 
   eeprom_spi u_eeprom_spi (
       .clk  (clk),
-      .rst_n(rst_n),
+      .rst(rst),
 
       .eeprom_start(eeprom_start),
       .eeprom_write(eeprom_write),
@@ -48,7 +48,7 @@ module test_eeprom_tb (
 
   spi_master u_spi (
       .clk  (clk),
-      .reset(rst_n), // spi_master uses active-high reset
+      .reset(rst), 
 
       .start   (spi_start),
       .data_in (spi_data_out),

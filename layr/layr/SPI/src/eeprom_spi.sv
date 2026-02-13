@@ -13,7 +13,7 @@
 
 module eeprom_spi (
     input wire clk,
-    input wire rst_n,
+    input wire rst,
 
     // internal interface
     input wire eeprom_start,
@@ -61,8 +61,8 @@ module eeprom_spi (
   localparam logic [7:0] OPWRITE = 8'h02;
 
 
-  always @(posedge clk or posedge rst_n) begin
-    if (rst_n) begin
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
       state        <= S_IDLE;
       lat_write    <= 1'b0;
       lat_addr     <= 7'h0;
@@ -127,6 +127,7 @@ module eeprom_spi (
         S_READ_3: begin
           if (spi_done) begin
             eeprom_rdata <= spi_data_in;
+            cs_1 <= 1'b0;
 
             eeprom_done <= 1'b1;
             state <= S_IDLE;

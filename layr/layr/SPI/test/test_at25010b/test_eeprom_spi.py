@@ -31,7 +31,7 @@ def build_spi_bus(dut) -> SpiBus:
 
 async def reset_dut(dut):
     """Assert reset for RESET_CYCLES, then release and wait for init."""
-    dut.rst_n.value = 1
+    dut.rst.value = 1
     dut.eeprom_start.value = 0
     dut.eeprom_write.value = 0
     dut.eeprom_addr.value = 0
@@ -40,7 +40,7 @@ async def reset_dut(dut):
     for _ in range(RESET_CYCLES):
         await RisingEdge(dut.clk)
 
-    dut.rst_n.value = 0
+    dut.rst.value = 0
 
     await RisingEdge(dut.clk)
 
