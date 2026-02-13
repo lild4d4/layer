@@ -133,26 +133,7 @@ async def test_read_128bits_from_addr_0(dut):
     """Read 128 bits (16 bytes) from EEPROM starting at address 0x00."""
     eeprom = await setup(dut)
     # Pre-load 16 bytes at addresses 0x00-0x0F
-    test_data = bytes(
-        [
-            0x00,
-            0x11,
-            0x22,
-            0x33,
-            0x44,
-            0x55,
-            0x66,
-            0x77,
-            0x88,
-            0x99,
-            0xAA,
-            0xBB,
-            0xCC,
-            0xDD,
-            0xEE,
-            0xFF,
-        ]
-    )
+    test_data = bytes.fromhex("39558d1f193656ab8b4b65e25ac48474")
     eeprom.load_memory(test_data, offset=0x00)
     # Read 128 bits starting at address 0x00
     result = await eeprom_read(dut, addr=0x00)
@@ -162,33 +143,12 @@ async def test_read_128bits_from_addr_0(dut):
 
 
 @cocotb.test()
-async def test_read_128bits_from_page3(dut):
-    """Read 128 bits (16 bytes) from EEPROM starting at page 3 (address 0x18)."""
+async def test_read_id_A(dut):
+    """Read 128 bits (16 bytes) from EEPROM starting at page 4 (address 0x18)."""
     eeprom = await setup(dut)
-    # Pre-load 16 bytes at addresses 0x18-0x27 (page 3)
-    test_data = bytes(
-        [
-            0xA0,
-            0xB1,
-            0xC2,
-            0xD3,
-            0xE4,
-            0xF5,
-            0x06,
-            0x17,
-            0x28,
-            0x39,
-            0x4A,
-            0x5B,
-            0x6C,
-            0x7D,
-            0x8E,
-            0x9F,
-        ]
-    )
-    eeprom.load_memory(test_data, offset=0x18)
-    # Read 128 bits starting at address 0x18
-    result = await eeprom_read(dut, addr=0x18)
+    test_data = bytes.fromhex("bbe8278a67f960605adafd6f63cf7ba7")
+    eeprom.load_memory(test_data, offset=0x40)
+    result = await eeprom_read(dut, addr=0x40)
     # MSB: first byte (0xA0) should be at [127:120], last byte (0x9F) at [7:0]
     expected = int.from_bytes(test_data, byteorder="big")
     assert result == expected, f"Expected {expected:#x}, got {result:#x}"
