@@ -5,7 +5,7 @@ Mfrc522SpiSlave mock attached to the SPI bus via cocotbext-spi.
 """
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, ClockCycles, with_timeout, Timer
+from cocotb.triggers import RisingEdge, ClockCycles, Timer
 import os
 from cocotb_tools.runner import get_runner
 from pathlib import Path
@@ -13,17 +13,6 @@ from pathlib import Path
 from cocotbext.spi import SpiConfig, SpiBus
 from mock_mfrc522 import Mfrc522SpiSlave
 
-
-# SPI config matching our spi_master RTL (CPOL=0, slave sees CPHA=1)
-_spi_ctrl_config = SpiConfig(
-    word_width=8,
-    cpol=False,
-    cpha=False,
-    msb_first=True,
-    cs_active_low=True,
-    frame_spacing_ns=1,
-    data_output_idle=1,
-)
 
 
 def _int_to_bytes(val: int, count: int) -> list[int]:
@@ -65,7 +54,7 @@ async def _reset(dut):
 def _attach_mock(dut, version=0x92):
     """Attach the MFRC522 mock to cs0 with our spi_master-compatible config."""
     spi_bus = SpiBus.from_entity(dut, cs_name="cs0")
-    return Mfrc522SpiSlave(spi_bus, version=version, config=_spi_ctrl_config)
+    return Mfrc522SpiSlave(spi_bus) 
 
 
 async def _write_reg(dut, addr: int, data: list[int]):

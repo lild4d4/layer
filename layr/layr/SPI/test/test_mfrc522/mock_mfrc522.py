@@ -8,19 +8,6 @@ from cocotb.triggers import Timer
 from cocotbext.spi import SpiSlaveBase, SpiConfig
 
 
-spi_config = SpiConfig(
-    word_width=8,
-    sclk_freq=25e6,
-    cpol=False,
-    cpha=False,
-    msb_first=True,
-    data_output_idle=1,
-    frame_spacing_ns=1,
-    ignore_rx_value=None,
-    cs_active_low=True,
-)
-
-
 class Mfrc522SpiSlave(SpiSlaveBase):
     """
     MFRC522 SPI mock (register + FIFO + minimal command hooks).
@@ -40,6 +27,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
     REG_FIFO_DATA    = 0x09  # FIFODataReg :contentReference[oaicite:13]{index=13}
     REG_FIFO_LEVEL   = 0x0A  # FIFOLevelReg :contentReference[oaicite:14]{index=14}
     REG_WATER_LEVEL  = 0x0B  # WaterLevelReg :contentReference[oaicite:15]{index=15}
+    REG_CONTROL      = 0x0C  # ControlReg
     REG_BIT_FRAMING  = 0x0D  # BitFramingReg :contentReference[oaicite:16]{index=16}
 
     REG_VERSION      = 0x37  # VersionReg :contentReference[oaicite:17]{index=17}
@@ -70,17 +58,29 @@ class Mfrc522SpiSlave(SpiSlaveBase):
     CMD_TRANSCEIVE= 0x0C
     CMD_SOFTRESET = 0x0F  # :contentReference[oaicite:20]{index=20}
 
-    def __init__(self, bus, *, version: int = 0x92, uid: Sequence[int] = (0xDE, 0xAD, 0xBE, 0xEF),
-                 config: Optional[SpiConfig] = None):
-        self._config = config if config is not None else spi_config
+    def __init__(self, bus):
+        self._config = SpiConfig(
+            word_width=8,
+            cpol=False,
+            cpha=False,
+            msb_first=True,
+            cs_active_low=True,
+            frame_spacing_ns=1,
+            data_output_idle=1,
+        )
         super().__init__(bus)
 
         self._regs: List[int] = [0x00] * 64
         self._fifo: Deque[int] = deque(maxlen=64)
         self._last_frame: List[int] = []
 
-        self._uid = bytes(uid)
-        self._version = version & 0xFF
+        self._uid = bytes((0xDE, 0xAD, 0xBE, 0xEF))
+        self._version = 0x92
+
+        # ── Test-injectable overrides ──
+        # If set, _do_transceive will OR this value into ErrorReg
+        # after processing the command, regardless of the response.
+        self._inject_error: int = 0x00
 
         self._reset_regs()
 
@@ -318,7 +318,13 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         Extremely simplified PICC emulation:
           - REQA (0x26) or WUPA (0x52) -> ATQA (0x04 0x00)
           - ANTICOLL CL1 (0x93 0x20) -> UID0..UID3 + BCC
+          - SELECT  CL1  (0x93 0x70 + 4-byte UID + BCC) -> SAK (1 byte)
         Then sets RxIRq + IdleIRq and clears StartSend.
+
+        ControlReg[2:0] (RxLastBits) is set to 0 for full-byte responses.
+        For SAK, the real chip would return 3 bytes (SAK + CRC_A) but
+        we simplify to 1 byte with rx_last_bits=0 for now.  Tests that
+        need partial-byte responses can set _inject_rx_last_bits.
         """
         # tiny delay to allow your DUT to finish register writes before polling IRQ
         await Timer(50, unit="ns")
@@ -327,12 +333,18 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         self._fifo.clear()
 
         resp: bytes = b""
+        rx_last_bits: int = 0   # ControlReg[2:0]
+
         if req == b"\x26" or req == b"\x52":
             resp = b"\x04\x00"
         elif req == b"\x93\x20":
             uid = self._uid[:4]
             bcc = uid[0] ^ uid[1] ^ uid[2] ^ uid[3]
             resp = uid + bytes([bcc])
+        elif len(req) == 7 and req[0] == 0x93 and req[1] == 0x70:
+            # SELECT CL1: 0x93 0x70 + UID[0..3] + BCC
+            # Respond with SAK byte (0x08 = UID complete, not compliant)
+            resp = bytes([0x08])
         else:
             # default: no response
             resp = b""
@@ -340,8 +352,25 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         for b in resp:
             self._fifo_push(b)
 
-        # Latch IRQ bits:
-        self._regs[self.REG_COM_IRQ] |= (self.COMIRQ_RX | self.COMIRQ_IDLE)
+        # Set ControlReg RxLastBits (bits 2:0)
+        self._regs[self.REG_CONTROL] = (
+            (self._regs[self.REG_CONTROL] & 0xF8) | (rx_last_bits & 0x07)
+        )
+
+        # Latch IRQ bits: only set RxIRq if we actually have a response.
+        # For unknown commands (no PICC response), only IdleIRq is set,
+        # so the controller's poll loop will hit its cycle-count timeout.
+        if resp:
+            self._regs[self.REG_COM_IRQ] |= (self.COMIRQ_RX | self.COMIRQ_IDLE)
+        else:
+            self._regs[self.REG_COM_IRQ] |= self.COMIRQ_IDLE
+
+        # If error injection requested, also set RxIRq so the controller
+        # proceeds to read ErrorReg rather than timing out.
+        if self._inject_error:
+            self._regs[self.REG_ERROR] |= self._inject_error
+            self._regs[self.REG_COM_IRQ] |= (self.COMIRQ_RX | self.COMIRQ_IDLE)
+
         # Clear StartSend (in real chip it self-clears as state machine progresses)
         self._regs[self.REG_BIT_FRAMING] &= ~0x80
 
