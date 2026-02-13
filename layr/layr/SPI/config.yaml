@@ -2,7 +2,7 @@ DESIGN_NAME: spi_top
 VERILOG_FILES:
 - src/spi_init.sv
 - src/nfc_spi.sv
-- src/eeprom_ctrl.sv
+- src/eeprom_spi.sv
 - src/axi_lite_master.sv
 - src/axi_spi_master/
 

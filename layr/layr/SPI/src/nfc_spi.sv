@@ -9,16 +9,18 @@
 // drives an axi_lite_master to program the PULP SPI master registers.
 
 // Register offsets (byte addresses) of the PULP axi_spi_master
+// The PULP AXI IF decodes register index as addr[5:1], so each
+// register is at a 2-byte offset (not 4-byte).
 `ifndef SPI_REG_DEFINES
 `define SPI_REG_DEFINES
 `define SPI_REG_STATUS 32'h0000_0000
-`define SPI_REG_CLKDIV 32'h0000_0004
-`define SPI_REG_SPICMD 32'h0000_0008
-`define SPI_REG_SPIADR 32'h0000_000C
-`define SPI_REG_SPILEN 32'h0000_0010
-`define SPI_REG_SPIDUM 32'h0000_0014
-`define SPI_REG_TXFIFO 32'h0000_0020
-`define SPI_REG_RXFIFO 32'h0000_0040
+`define SPI_REG_CLKDIV 32'h0000_0002
+`define SPI_REG_SPICMD 32'h0000_0004
+`define SPI_REG_SPIADR 32'h0000_0006
+`define SPI_REG_SPILEN 32'h0000_0008
+`define SPI_REG_SPIDUM 32'h0000_000A
+`define SPI_REG_TXFIFO 32'h0000_0010
+`define SPI_REG_RXFIFO 32'h0000_0020
 `endif
 
 module nfc_spi (
