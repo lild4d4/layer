@@ -2,15 +2,8 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, with_timeout
 import os
-import sys
 from cocotb_tools.runner import get_runner
 from pathlib import Path
-
-# Make the local cocotbext-spi submodule importable
-_spi_ext_path = str(Path(__file__).resolve().parent.parent / "cocotbext-spi")
-if _spi_ext_path not in sys.path:
-    sys.path.insert(0, _spi_ext_path)
-
 from cocotbext.spi import SpiSlaveBase, SpiConfig, SpiBus
 
 
@@ -26,12 +19,13 @@ class SpiCtrlSlave(SpiSlaveBase):
     list of bytes during the read phase.
     """
 
-    def __init__(self, bus: SpiBus, w_len: int, r_len: int,
-                 reply_bytes: list[int] | None = None):
+    def __init__(
+        self, bus: SpiBus, w_len: int, r_len: int, reply_bytes: list[int] | None = None
+    ):
         self._config = SpiConfig(
             word_width=8,
             cpol=False,
-            cpha=True,
+            cpha=False,
             msb_first=True,
             cs_active_low=True,
             frame_spacing_ns=1,
@@ -46,6 +40,40 @@ class SpiCtrlSlave(SpiSlaveBase):
     async def get_content(self):
         await self.idle.wait()
         return self.rx_bytes
+
+    # ------------------------------------------------------------------
+    # CPHA=0 fix: pre-drive MISO before the first SCLK rising edge
+    # ------------------------------------------------------------------
+    # The cocotbext-spi SpiSlaveBase._shift() for CPHA=0 drives MISO on
+    # the *falling* edge (second edge), meaning the very first rising edge
+    # samples stale MISO data. In real SPI Mode 0 the slave must set up
+    # the first data bit on MISO *before* the first SCLK rising edge
+    # (typically on the CS falling edge).
+    #
+    # We fix this by pre-driving the MSB onto MISO before calling the
+    # parent _shift(), and shifting the tx_word left by one position so
+    # the parent's falling-edge drives produce bits [6:0] correctly.
+    # The last falling-edge drive is a don't-care (next _shift will
+    # override it, or CS will deassert).
+
+    async def _shift(self, num_bits, tx_word=None):
+        """Override _shift to pre-drive MSB on MISO for CPHA=0."""
+        if not self._config.cpha and tx_word is not None and tx_word != 0:
+            # Pre-drive the MSB onto MISO now (before first rising edge)
+            msb = bool(tx_word & (1 << (num_bits - 1)))
+            self._miso.value = int(msb)
+            # Shift tx_word left by 1 so the parent's falling-edge drives
+            # produce bits [n-2 : 0]. The parent will drive bit positions
+            # (num_bits-1-k) from this shifted word:
+            #   k=0 falling edge → shifted_word bit[n-1] = original bit[n-2]  ✓
+            #   k=1 falling edge → shifted_word bit[n-2] = original bit[n-3]  ✓
+            #   ...
+            #   k=n-1 falling edge → shifted_word bit[0] = 0 (don't care)
+            shifted_tx = (tx_word << 1) & ((1 << num_bits) - 1)
+            return await super()._shift(num_bits, tx_word=shifted_tx)
+        else:
+            # tx_word is 0 or None — no data to send, use parent as-is
+            return await super()._shift(num_bits, tx_word=tx_word)
 
     async def _transaction(self, frame_start, frame_end):
         await frame_start
@@ -91,7 +119,7 @@ def _int_to_bytes(val: int, count: int) -> list[int]:
 
 async def _reset(dut):
     """Apply reset and initialise all inputs."""
-    dut.rst_n.value = 0
+    dut.rst.value = 1
     dut.go.value = 0
     dut.w_len.value = 0
     dut.r_len.value = 0
@@ -99,12 +127,13 @@ async def _reset(dut):
     dut.tx_data.value = 0
     dut.miso.value = 0
     await ClockCycles(dut.clk, 5)
-    dut.rst_n.value = 1
+    dut.rst.value = 0
     await ClockCycles(dut.clk, 5)
 
 
-async def _start_and_wait(dut, tx_bytes: list[int], w_len: int, r_len: int,
-                           cs_sel: int = 0):
+async def _start_and_wait(
+    dut, tx_bytes: list[int], w_len: int, r_len: int, cs_sel: int = 0
+):
     """Set tx_data, cs_sel, pulse go, and wait for done."""
     dut.tx_data.value = _bytes_to_int(tx_bytes) if tx_bytes else 0
     dut.w_len.value = w_len
@@ -124,6 +153,7 @@ async def _start_and_wait(dut, tx_bytes: list[int], w_len: int, r_len: int,
 # ─────────────────────────────────────────────────────────────────────
 # Tests
 # ─────────────────────────────────────────────────────────────────────
+
 
 @cocotb.test()
 async def test_write_only_cs0(dut):
@@ -309,6 +339,7 @@ async def test_cs_isolation(dut):
 # ─────────────────────────────────────────────────────────────────────
 # Runner
 # ─────────────────────────────────────────────────────────────────────
+
 
 def test_spi_ctrl_runner():
     sim = os.getenv("SIM", "icarus")
