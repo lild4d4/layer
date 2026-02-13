@@ -56,6 +56,7 @@ module mfrc_core (
     // MFRC522 constants
     // =====================================================================
     localparam [7:0] CMD_TRANSCEIVE = 8'h0C;
+    localparam [7:0] CMD_IDLE       = 8'h00;   // Idle command (cancel Transceive)
     localparam [7:0] FIFO_FLUSH     = 8'h80;   // FIFOLevelReg[7]
     localparam [7:0] START_SEND     = 8'h80;   // BitFramingReg[7]
     localparam [7:0] IRQ_RX         = 8'h20;   // ComIrqReg bit5
@@ -128,10 +129,11 @@ module mfrc_core (
         STEP_CMD        = 4'd3,
         STEP_START_SEND = 4'd4,
         STEP_POLL       = 4'd5,
-        STEP_RD_LEVEL   = 4'd6,
-        STEP_RD_FIFO    = 4'd7,
-        STEP_RD_CTRL    = 4'd8,
-        STEP_RD_ERR     = 4'd9;
+        STEP_IDLE_CMD   = 4'd6,  // write CommandReg=Idle after poll
+        STEP_RD_LEVEL   = 4'd7,
+        STEP_RD_FIFO    = 4'd8,
+        STEP_RD_CTRL    = 4'd9,
+        STEP_RD_ERR     = 4'd10;
 
     reg [3:0]   state;
     reg [3:0]   step;
@@ -227,6 +229,12 @@ module mfrc_core (
                             reg_req_len   <= 5'd0;
                             reg_req_wdata <= {{1'b1, 4'b0, lat_tx_last_bits}, 248'd0};
                         end
+                        STEP_IDLE_CMD: begin
+                            reg_req_write <= 1'b1;
+                            reg_req_addr  <= REG_COMMAND;
+                            reg_req_len   <= 5'd0;
+                            reg_req_wdata <= {CMD_IDLE, 248'd0};
+                        end
                         STEP_RD_LEVEL: begin
                             reg_req_write <= 1'b0;
                             reg_req_addr  <= REG_FIFO_LEVEL;
@@ -291,6 +299,14 @@ module mfrc_core (
                             STEP_FIFO_WR:    begin step <= STEP_CMD;        state <= S_SETUP; end
                             STEP_CMD:        begin step <= STEP_START_SEND; state <= S_SETUP; end
                             STEP_START_SEND: begin step <= STEP_POLL;       state <= S_SETUP; end
+                            STEP_IDLE_CMD: begin
+                                // After clearing CommandReg, branch based on poll result
+                                if (poll_success)
+                                    step <= STEP_RD_LEVEL;
+                                else
+                                    step <= STEP_RD_ERR;
+                                state <= S_SETUP;
+                            end
 
                             // Read steps: go to CAPTURE to latch data
                             STEP_RD_LEVEL,
@@ -320,18 +336,18 @@ module mfrc_core (
                         poll_outstanding <= 1'b0;
                         timeout_cnt <= timeout_cnt + 1;
                         if (reg_resp_rdata[255:248] & IRQ_RX) begin
-                            // RxIRq — success
+                            // RxIRq — success; clear CommandReg before reading FIFO
                             poll_success <= 1'b1;
-                            step         <= STEP_RD_LEVEL;
+                            step         <= STEP_IDLE_CMD;
                             state        <= S_SETUP;
                         end else if ((reg_resp_rdata[255:248] & IRQ_TIMER) ||
                                      (timeout_cnt >= lat_timeout)) begin
-                            // TimerIRq or SW timeout — fail
+                            // TimerIRq or SW timeout — fail; clear CommandReg before reading ErrorReg
                             poll_success     <= 1'b0;
                             trx_rx_len       <= 5'd0;
                             trx_rx_data      <= 256'd0;
                             trx_rx_last_bits <= 3'd0;
-                            step             <= STEP_RD_ERR;
+                            step             <= STEP_IDLE_CMD;
                             state            <= S_SETUP;
                         end else begin
                             // No relevant IRQ yet — poll again
