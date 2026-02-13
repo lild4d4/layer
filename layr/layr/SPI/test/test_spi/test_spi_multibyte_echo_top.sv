@@ -1,6 +1,6 @@
 module test_spi_multibyte_echo_top (
     input  wire        clk,
-    input  wire        rst_n,
+    input  wire        rst,
 
     // Control
     input  wire        go,
@@ -20,7 +20,7 @@ module test_spi_multibyte_echo_top (
 
     spi_multibyte_echo u_dut (
         .clk     (clk),
-        .rst_n   (rst_n),
+        .rst   (rst),
         .go      (go),
         .done    (done),
         .busy    (busy),

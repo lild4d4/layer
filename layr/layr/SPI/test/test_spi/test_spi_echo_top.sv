@@ -2,8 +2,8 @@
 // and attach a SPI slave model to the bus.
 
 module test_spi_echo_top (
-    input  wire       clk,
-    input  wire       rst_n,
+    input wire clk,
+    input wire rst,
 
     // Control
     input  wire       go,
@@ -13,24 +13,25 @@ module test_spi_echo_top (
     output wire       busy,
 
     // SPI bus – directly accessible by the cocotb slave
-    output wire       sclk,
-    output wire       mosi,
-    input  wire       miso,
-    output wire       ss
+    output wire sclk,
+    output wire mosi,
+    input  wire miso,
+    output wire ss
 );
 
-    spi_echo u_echo (
-        .clk     (clk),
-        .rst_n   (rst_n),
-        .go      (go),
-        .tx_byte (tx_byte),
-        .rx_byte (rx_byte),
-        .done    (done),
-        .busy    (busy),
-        .sclk    (sclk),
-        .mosi    (mosi),
-        .miso    (miso),
-        .ss      (ss)
-    );
+  spi_echo u_echo (
+      .clk    (clk),
+      .rst    (rst),
+      .go     (go),
+      .tx_byte(tx_byte),
+      .rx_byte(rx_byte),
+      .done   (done),
+      .busy   (busy),
+      .sclk   (sclk),
+      .mosi   (mosi),
+      .miso   (miso),
+      .ss     (ss)
+  );
 
 endmodule
+

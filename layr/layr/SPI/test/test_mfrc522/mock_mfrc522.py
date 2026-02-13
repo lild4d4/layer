@@ -1,19 +1,11 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from collections import deque
 from typing import Deque, List, Optional, Sequence
 
 import cocotb
-from cocotb.triggers import First, Timer
-
-# Add the cocotbext-spi submodule to the Python path
-_spi_ext_path = str(Path(__file__).resolve().parent.parent / "cocotbext-spi")
-if _spi_ext_path not in sys.path:
-    sys.path.insert(0, _spi_ext_path)
-
-from cocotbext.spi import SpiSlaveBase, SpiConfig, SpiBus
+from cocotb.triggers import Timer
+from cocotbext.spi import SpiSlaveBase, SpiConfig
 
 
 spi_config = SpiConfig(
@@ -78,8 +70,9 @@ class Mfrc522SpiSlave(SpiSlaveBase):
     CMD_TRANSCEIVE= 0x0C
     CMD_SOFTRESET = 0x0F  # :contentReference[oaicite:20]{index=20}
 
-    def __init__(self, bus, *, version: int = 0x92, uid: Sequence[int] = (0xDE, 0xAD, 0xBE, 0xEF)):
-        self._config = spi_config
+    def __init__(self, bus, *, version: int = 0x92, uid: Sequence[int] = (0xDE, 0xAD, 0xBE, 0xEF),
+                 config: Optional[SpiConfig] = None):
+        self._config = config if config is not None else spi_config
         super().__init__(bus)
 
         self._regs: List[int] = [0x00] * 64
@@ -216,6 +209,18 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             return self._regs[addr]
 
         return self._regs[addr] & 0xFF
+
+    def _unread_reg(self, addr: int, value: int) -> None:
+        """Undo a destructive _read_reg for FIFO registers.
+
+        If a byte was pre-fetched from FIFODataReg to prepare MISO but
+        the SPI frame ended before the master actually clocked it in,
+        push the byte back to the front of the FIFO so it isn't lost.
+        """
+        addr &= 0x3F
+        if addr == self.REG_FIFO_DATA:
+            self._fifo.appendleft(value & 0xFF)
+            self._update_alerts_and_irq()
 
     def _write_reg(self, addr: int, data: int) -> None:
         addr &= 0x3F
@@ -417,19 +422,33 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         is_read, addr = self._decode_addr_byte(addr_byte)
 
         if is_read:
-            # Next byte(s): output register data while consuming dummy/address bytes.
-            tx = self._read_reg(addr)
+            # Read transaction: for each byte the master clocks in,
+            # we output the current register value on MISO.
+            #
+            # We must pre-read the register value before shifting
+            # because MISO needs to be driven during the shift.
+            # For destructive-read registers (FIFODataReg) this pops
+            # a byte.  If the frame ends before the byte is actually
+            # consumed by the master, we push it back via _unread_reg —
+            # but only if the FIFO actually had content (otherwise
+            # _fifo_pop returned 0x00 without popping, and pushing
+            # back would insert a phantom byte).
             while True:
+                fifo_len_before = len(self._fifo)
+                tx = self._read_reg(addr)
                 rx = await self._shift_byte_or_end(frame_end, tx=tx)
                 if rx is None:
+                    # Frame ended — the master never clocked this byte in.
+                    # Undo the destructive read only if we actually popped.
+                    if (addr & 0x3F) == self.REG_FIFO_DATA and len(self._fifo) < fifo_len_before:
+                        self._unread_reg(addr, tx)
                     break
                 self._last_frame.append(rx)
 
-                # Optional: accept "address-like" bytes mid-read to support odd burst styles.
+                # Accept "address-like" bytes mid-read to support
+                # sequential register reads (addr changes mid-burst).
                 if self._looks_like_addr_byte_for_read(rx):
                     _, addr = self._decode_addr_byte(rx)
-
-                tx = self._read_reg(addr)
 
         else:
             # Write: subsequent bytes are data for that address.
