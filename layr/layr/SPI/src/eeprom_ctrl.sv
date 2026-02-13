@@ -77,8 +77,8 @@ module eeprom_ctrl (
         S_WAIT_EEPROM: begin
           if (eeprom_done) begin
             buffer <= eeprom_rdata;
-
             done   <= 1'b1;
+            state  <= S_IDLE;
           end
         end
 
