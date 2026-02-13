@@ -1,6 +1,6 @@
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, FallingEdge, ClockCycles, with_timeout
+from cocotb.triggers import RisingEdge, ClockCycles, with_timeout
 import os
 from cocotb_tools.runner import get_runner
 from pathlib import Path
@@ -97,11 +97,11 @@ async def test_spi_slave_receives_byte(dut):
 
     # Check what the slave captured on MOSI
     received_by_slave = await with_timeout(slave_task.join(), 10, "us")
-    dut._log.info(f"Slave received on MOSI : {hex(received_by_slave)}")
+    dut._log.info(f"Slave received on MOSI : {hex(received_by_slave)}")  # type: ignore
 
     assert (
         received_by_slave == test_data
-    ), f"Slave saw {hex(received_by_slave)} on MOSI, expected {hex(test_data)}"
+    ), f"Slave saw {hex(received_by_slave)} on MOSI, expected {hex(test_data)}"  # type: ignore
 
     # Check what the master captured on MISO (data_out register)
     await ClockCycles(dut.clk, 2)

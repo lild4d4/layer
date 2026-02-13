@@ -1,8 +1,7 @@
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, FallingEdge, ClockCycles, with_timeout
+from cocotb.triggers import RisingEdge, ClockCycles, with_timeout
 import os
-import sys
 from cocotb_tools.runner import get_runner
 from pathlib import Path
 

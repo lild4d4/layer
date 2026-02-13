@@ -107,7 +107,7 @@ async def test_spi_echo(dut):
 
     # # 2. Attach SPI slave
     spi_bus = _build_spi_bus(dut)
-    spi_slave = EchoSpiSlave(spi_bus)
+    _ = EchoSpiSlave(spi_bus)
 
     # 3. Reset (active-low)
     dut._log.info("Applying reset ...")
