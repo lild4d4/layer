@@ -79,24 +79,29 @@ module spi_top (
       .spi_cs_sel(m_spi_cs_sel)
   );
 
-
-  spi_ctrl u_spi_ctrl (
+  spi_arb u_spi_arb (
       .clk(clk),
       .rst(rst),
 
-      // spi_ctrl interface
-      .go  (spi_start),
-      .done(spi_done),
-      .busy(spi_busy),
+      // Client A (EEPROM)
+      .a_go(e_spi_start),
+      .a_wlen(e_spi_w_len),
+      .a_rlen(e_spi_r_len),
+      .a_tx_data(e_spi_tx_data),
+      .a_done(e_spi_done),
+      .a_rx_data(e_spi_rx_data),
+      .a_busy(e_spi_busy),
 
-      .cs_sel (spi_cs_sel),
-      .tx_data(spi_tx_data),
-      .rx_data(spi_rx_data),
-      .w_len  (spi_w_len),
-      .r_len  (spi_r_len),
+      // Client B (MFRC)
+      .b_go(m_spi_start),
+      .b_wlen(m_spi_w_len),
+      .b_rlen(m_spi_r_len),
+      .b_tx_data(m_spi_tx_data),
+      .b_done(m_spi_done),
+      .b_rx_data(m_spi_rx_data),
+      .b_busy(m_spi_busy),
 
-
-      // spi out
+      // spi bus out
       .sclk(spi_sclk),
       .mosi(spi_mosi),
       .miso(spi_miso),
