@@ -4,10 +4,10 @@ module eeprom_ctrl (
 
     // interface with auth
     input wire start,
-    output wire busy,
-    output wire done,
+    output reg busy,
+    output reg done,
     input wire get_key,  // get_key = 1, get_id = 0
-    output wire [127:0] buffer,
+    output reg [127:0] buffer,
 
     // spi_ctrl wiring
     output reg spi_start,
@@ -19,10 +19,9 @@ module eeprom_ctrl (
     output reg [5:0] spi_w_len,
     output reg [5:0] spi_r_len
 );
-
   // eeprom spi interface
-  wire eeprom_start;
-  wire [6:0] eeprom_addr;  // read / write address in eeprom
+  reg eeprom_start;
+  reg [6:0] eeprom_addr;  // read / write address in eeprom
   reg [127:0] eeprom_rdata;  // data read from an address
   reg eeprom_busy;
   reg eeprom_don;
@@ -44,7 +43,7 @@ module eeprom_ctrl (
       .spi_tx_data(spi_tx_data),
       .spi_cs_sel(spi_cs_sel),
       .spi_w_len(spi_w_len),
-      .spi_r_len(spi_r_len),
+      .spi_r_len(spi_r_len)
   );
 
   typedef enum logic [5:0] {
@@ -53,6 +52,8 @@ module eeprom_ctrl (
     S_GET_ID,
     S_WAIT_EEPROM
   } state_t;
+
+  reg [5:0] state;
 
   assign busy = (state != S_IDLE);
 
@@ -69,7 +70,6 @@ module eeprom_ctrl (
   always @(posedge clk or posedge rst) begin
     if (rst) begin
       state <= S_IDLE;
-      busy <= 1'b0;
       done <= 1'b0;
       buffer <= 128'b0;
       eeprom_start <= 1'b0;

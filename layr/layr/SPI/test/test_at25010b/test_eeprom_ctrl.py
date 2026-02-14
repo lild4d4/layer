@@ -32,8 +32,8 @@ def build_spi_bus(dut) -> SpiBus:
 async def reset_dut(dut):
     """Assert reset for RESET_CYCLES, then release and wait for init."""
     dut.rst.value = 1
-    dut.eeprom_start.value = 0
-    dut.eeprom_addr.value = 0
+    dut.start.value = 0
+    dut.get_key.value = 0
 
     for _ in range(RESET_CYCLES):
         await RisingEdge(dut.clk)
@@ -57,35 +57,25 @@ async def send_cmd(dut, *, write: bool, addr: int, wdata: int = 0) -> None:
 
 async def wait_done(dut, timeout_us: int = TRANSACTION_TIMEOUT_US) -> None:
     """
-    Block until eeprom_done pulses high, or raise TestFailure on timeout.
+    Block until done pulses high, or raise TestFailure on timeout.
     """
     timeout_trigger = Timer(timeout_us, "us")
-    done_trigger = RisingEdge(dut.eeprom_done)
+    done_trigger = RisingEdge(dut.done)
 
     result = await First(done_trigger, timeout_trigger)
     if result is timeout_trigger:
-        raise Exception(f"Timed out after {timeout_us} µs waiting for eeprom_done. ")
+        raise Exception(f"Timed out after {timeout_us} µs waiting for done. ")
 
     # eeprom_done is a single-cycle pulse; make sure we sampled it on a rising edge
     await RisingEdge(dut.clk)
 
 
-async def eeprom_write(dut, addr: int, data: int) -> None:
-    """Issue a write command and wait for completion."""
-    await send_cmd(dut, write=True, addr=addr, wdata=data)
-    await wait_done(dut)
-
-
-async def eeprom_read(dut, addr: int) -> int:
-    """Issue a read command, wait for completion, return eeprom_rdata."""
-    await send_cmd(dut, write=False, addr=addr)
-    await wait_done(dut)
-    return int(dut.eeprom_rdata.value)
-
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Common fixture: start clock + reset + attach EEPROM mock
 # ──────────────────────────────────────────────────────────────────────────────
+
+KEY_A = bytes.fromhex("39558d1f193656ab8b4b65e25ac48474")
+ID_A = bytes.fromhex("bbe8278a67f960605adafd6f63cf7ba7")
 
 
 async def setup(dut) -> AT25010B_EEPROM:
@@ -95,6 +85,10 @@ async def setup(dut) -> AT25010B_EEPROM:
     """
     cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     eeprom = AT25010B_EEPROM(build_spi_bus(dut))
+
+    eeprom.load_memory(KEY_A, offset=0x00)
+    eeprom.load_memory(ID_A, offset=0x40)
+
     await reset_dut(dut)
     return eeprom
 
@@ -110,33 +104,41 @@ async def test_reset_state(dut):
     await setup(dut)
     await RisingEdge(dut.clk)
 
-    assert int(dut.eeprom_busy.value) == 0, "eeprom_busy should be 0 after reset"
-    assert int(dut.eeprom_done.value) == 0, "eeprom_busy should be 0 after reset"
+    assert int(dut.busy.value) == 0, "busy should be 0 after reset"
+    assert int(dut.done.value) == 0, "done should be 0 after reset"
 
 
 @cocotb.test()
-async def test_read_128bits_from_addr_0(dut):
+async def test_get_key(dut):
     """Read 128 bits (16 bytes) from EEPROM starting at address 0x00."""
-    eeprom = await setup(dut)
-    # Pre-load 16 bytes at addresses 0x00-0x0F
-    test_data = bytes.fromhex("39558d1f193656ab8b4b65e25ac48474")
-    eeprom.load_memory(test_data, offset=0x00)
-    # Read 128 bits starting at address 0x00
-    result = await eeprom_read(dut, addr=0x00)
-    # MSB: first byte (0x00) should be at [127:120], last byte (0xFF) at [7:0]
-    expected = int.from_bytes(test_data, byteorder="big")
+    _ = await setup(dut)
+
+    dut.get_key.value = 1
+    dut.start.value = 1
+    await RisingEdge(dut.clk)
+    dut.start.value = 0
+
+    await wait_done(dut)
+
+    result = dut.buffer.value
+    expected = int.from_bytes(KEY_A, byteorder="big")
     assert result == expected, f"Expected {expected:#x}, got {result:#x}"
 
 
 @cocotb.test()
-async def test_read_id_A(dut):
-    """Read 128 bits (16 bytes) from EEPROM starting at page 4 (address 0x18)."""
-    eeprom = await setup(dut)
-    test_data = bytes.fromhex("bbe8278a67f960605adafd6f63cf7ba7")
-    eeprom.load_memory(test_data, offset=0x40)
-    result = await eeprom_read(dut, addr=0x40)
-    # MSB: first byte (0xA0) should be at [127:120], last byte (0x9F) at [7:0]
-    expected = int.from_bytes(test_data, byteorder="big")
+async def test_get_id(dut):
+    """Read 128 bits (16 bytes) from EEPROM starting at address 0x00."""
+    _ = await setup(dut)
+
+    dut.get_key.value = 0
+    dut.start.value = 1
+    await RisingEdge(dut.clk)
+    dut.start.value = 0
+
+    await wait_done(dut)
+
+    result = dut.buffer.value
+    expected = int.from_bytes(ID_A, byteorder="big")
     assert result == expected, f"Expected {expected:#x}, got {result:#x}"
 
 
@@ -145,7 +147,7 @@ async def test_read_id_A(dut):
 #
 
 
-def test_eeprom_spi_e2e_runner():
+def test_eeprom_ctrl_e2e_runner():
     """
     End-to-end test runner for eeprom_spi + axi_lite_master + axi_spi_master.
 
@@ -159,9 +161,10 @@ def test_eeprom_spi_e2e_runner():
 
     sources = [
         src_dir / "eeprom_spi.sv",
+        src_dir / "eeprom_ctrl.sv",
         src_dir / "spi_master.sv",
         src_dir / "spi_ctrl.sv",
-        this_dir / "test_eeprom_spi_tb.sv",
+        this_dir / "test_eeprom_ctrl_tb.sv",
     ]
 
     sources = [s for s in sources if s.exists()]
@@ -169,18 +172,18 @@ def test_eeprom_spi_e2e_runner():
     runner = get_runner(sim)
     runner.build(
         sources=sources,
-        hdl_toplevel="test_eeprom_spi_tb",
+        hdl_toplevel="test_eeprom_ctrl_tb",
         always=True,
         waves=True,
         timescale=("1ns", "1ps"),
     )
 
     runner.test(
-        hdl_toplevel="test_eeprom_spi_tb",
-        test_module="test_eeprom_spi",
+        hdl_toplevel="test_eeprom_ctrl_tb",
+        test_module="test_eeprom_ctrl",
         waves=True,
     )
 
 
 if __name__ == "__main__":
-    test_eeprom_spi_e2e_runner()
+    test_eeprom_ctrl_e2e_runner()

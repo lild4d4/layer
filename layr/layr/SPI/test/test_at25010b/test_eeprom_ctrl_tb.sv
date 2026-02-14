@@ -1,13 +1,13 @@
-module test_eeprom_tb (
+module test_eeprom_ctrl_tb (
     input wire clk,
     input wire rst,
 
     // eeprom_spi interface
-    input  wire         eeprom_start,  // Pulse: start a transaction
-    input  wire [  6:0] eeprom_addr,   // EEPROM byte address (7 bits -> 128 bytes)
-    output reg  [127:0] eeprom_rdata,  // Read data (valid when eeprom_done pulses)
-    output reg          eeprom_done,   // Pulse: transaction complete
-    output wire         eeprom_busy,   // High while a user transaction is in progress
+    input  wire         start,
+    output reg          done,
+    output wire         busy,
+    input  wire         get_key,
+    output reg  [127:0] buffer,
 
     // SPI bus
     output wire spi_sclk,
@@ -27,25 +27,24 @@ module test_eeprom_tb (
   wire spi_done;
   wire spi_busy;
 
-  eeprom_spi u_eeprom_spi (
+  eeprom_ctrl u_eeprom_ctrl (
       .clk(clk),
       .rst(rst),
 
-      .eeprom_start(eeprom_start),
-      .eeprom_addr (eeprom_addr),
-      .eeprom_rdata(eeprom_rdata),
-      .eeprom_busy (eeprom_busy),
-      .eeprom_done (eeprom_done),
+      .start(start),
+      .busy(busy),
+      .done(done),
+      .get_key(get_key),
+      .buffer(buffer),
 
       .spi_start(spi_start),
-      .spi_done (spi_done),
-      .spi_busy (spi_busy),
-
+      .spi_done(spi_done),
+      .spi_busy(spi_busy),
       .spi_tx_data(spi_tx_data),
       .spi_rx_data(spi_rx_data),
-      .spi_w_len  (spi_w_len),
-      .spi_r_len  (spi_r_len),
-      .spi_cs_sel (spi_cs_sel)
+      .spi_w_len(spi_w_len),
+      .spi_r_len(spi_r_len),
+      .spi_cs_sel(spi_cs_sel)
   );
 
   spi_ctrl u_spi_ctrl (
