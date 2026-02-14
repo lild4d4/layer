@@ -3,20 +3,50 @@ module eeprom_ctrl (
     input wire rst,
 
     // interface with auth
-    input  wire start,
+    input wire start,
     output wire busy,
     output wire done,
-
     input wire get_key,  // get_key = 1, get_id = 0
     output wire [127:0] buffer,
 
-    // eeprom spi interface
-    output wire eeprom_start,
-    output wire [6:0] eeprom_addr,  // read / write address in eeprom
-    input reg [127:0] eeprom_rdata,  // data read from an address
-    input reg eeprom_busy,
-    input reg eeprom_done
+    // spi_ctrl wiring
+    output reg spi_start,
+    input reg spi_done,
+    input reg spi_busy,
+    input reg [255:0] spi_rx_data,
+    output reg [255:0] spi_tx_data,
+    output reg spi_cs_sel,
+    output reg [5:0] spi_w_len,
+    output reg [5:0] spi_r_len
 );
+
+  // eeprom spi interface
+  wire eeprom_start;
+  wire [6:0] eeprom_addr;  // read / write address in eeprom
+  reg [127:0] eeprom_rdata;  // data read from an address
+  reg eeprom_busy;
+  reg eeprom_don;
+
+  eeprom_spi u_eeprom_spi (
+      .clk(clk),
+      .rst(rst),
+
+      .eeprom_start(eeprom_start),
+      .eeprom_addr (eeprom_addr),
+      .eeprom_rdata(eeprom_rdata),
+      .eeprom_busy (eeprom_busy),
+      .eeprom_done (eeprom_done),
+
+      .spi_start(spi_start),
+      .spi_done(spi_done),
+      .spi_busy(spi_busy),
+      .spi_rx_data(spi_rx_data),
+      .spi_tx_data(spi_tx_data),
+      .spi_cs_sel(spi_cs_sel),
+      .spi_w_len(spi_w_len),
+      .spi_r_len(spi_r_len),
+  );
+
   typedef enum logic [5:0] {
     S_IDLE,
     S_GET_KEY,
