@@ -10,7 +10,24 @@ module spi_top (
     output wire [127:0] eeprom_rbuffer,
 
     // mfrc interface
-    // TBD
+    input  wire         mfrc_trx_valid,
+    output wire         mfrc_trx_ready,
+    input  wire [  4:0] mfrc_trx_tx_len,
+    input  wire [255:0] mfrc_trx_tx_data,
+    input  wire [  2:0] mfrc_trx_tx_last_bits,
+    input  wire [ 31:0] mfrc_trx_timeout_cycles,
+    output wire         mfrc_trx_done,
+    output wire         mfrc_trx_ok,
+    output wire [  4:0] mfrc_trx_rx_len,
+    output wire [255:0] mfrc_trx_rx_data,
+    output wire [  2:0] mfrc_trx_rx_last_bits,
+    output wire [  7:0] mfrc_trx_error,
+
+    input  wire       mfrc_ver_valid,
+    output wire       mfrc_ver_ready,
+    output wire       mfrc_ver_done,
+    output wire       mfrc_ver_ok,
+    output wire [7:0] mfrc_ver_value,
 
     // spi bus output
     // names according to challenge spec
@@ -37,8 +54,6 @@ module spi_top (
   wire m_spi_done;
   wire m_spi_busy;
 
-  wire [127:0] eeprom_buffer;
-
   eeprom_ctrl u_eeprom_ctrl (
       .clk(clk),
       .rst(rst),
@@ -47,7 +62,7 @@ module spi_top (
       .busy(eeprom_busy),
       .done(eeprom_done),
       .get_key(eeprom_get_key),
-      .buffer(eeprom_buffer),
+      .buffer(eeprom_rbuffer),
 
       // connection to spi_arb (Client A)
       .spi_start(e_spi_go),
@@ -59,33 +74,31 @@ module spi_top (
       .spi_r_len(e_spi_r_len),
   );
 
-  assign eeprom_rbuffer = eeprom_buffer;
-
   mfrc_top u_mfrc_top (
       .clk(clk),
       .rst(rst),
 
       // mfrc_core transceive API
-      .trx_valid(),
-      .trx_ready(),
-      .trx_tx_len(),
-      .trx_tx_data(),
-      .trx_tx_last_bits(),
-      .trx_timeout_cycles(),
+      .trx_valid(mfrc_trx_valid),
+      .trx_ready(mfrc_trx_ready),
+      .trx_tx_len(mfrc_trx_tx_len),
+      .trx_tx_data(mfrc_trx_tx_data),
+      .trx_tx_last_bits(mfrc_trx_tx_last_bits),
+      .trx_timeout_cycles(mfrc_trx_timeout_cycles),
 
-      .trx_done(),
-      .trx_ok(),
-      .trx_rx_len(),
-      .trx_rx_data(),
-      .trx_rx_last_bits(),
-      .trx_error(),
+      .trx_done(mfrc_trx_done),
+      .trx_ok(mfrc_trx_ok),
+      .trx_rx_len(mfrc_trx_rx_len),
+      .trx_rx_data(mfrc_trx_rx_data),
+      .trx_rx_last_bits(mfrc_trx_rx_last_bits),
+      .trx_error(mfrc_trx_error),
 
       // util API (VersionReg read)
-      .ver_valid(),
-      .ver_ready(),
-      .ver_done(),
-      .ver_ok(),
-      .ver_value(),
+      .ver_valid(mfrc_ver_valid),
+      .ver_ready(mfrc_ver_ready),
+      .ver_done(mfrc_ver_done),
+      .ver_ok(mfrc_ver_ok),
+      .ver_value(mfrc_ver_value),
 
       // connection to spi_arb (Client B)
       .spi_go(m_spi_go),

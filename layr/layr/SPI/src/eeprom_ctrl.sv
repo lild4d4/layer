@@ -15,7 +15,6 @@ module eeprom_ctrl (
     input reg spi_busy,
     input reg [255:0] spi_rx_data,
     output reg [255:0] spi_tx_data,
-    output reg spi_cs_sel,
     output reg [5:0] spi_w_len,
     output reg [5:0] spi_r_len
 );
@@ -41,7 +40,6 @@ module eeprom_ctrl (
       .spi_busy(spi_busy),
       .spi_rx_data(spi_rx_data),
       .spi_tx_data(spi_tx_data),
-      .spi_cs_sel(spi_cs_sel),
       .spi_w_len(spi_w_len),
       .spi_r_len(spi_r_len)
   );
