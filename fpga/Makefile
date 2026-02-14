@@ -1,6 +1,9 @@
 current_dir := ${CURDIR}
-TOP := top
-SOURCES := ${current_dir}/counter.v
+TOP := spi_top
+SOURCES := \
+	${current_dir}/../layr/layr/SPI/src/*.sv \
+	${current_dir}/../layr/layr/SPI/test/test_spi/*.sv \
+
 XDC := ${current_dir}/arty.xdc
 
 TOP := $(strip ${TOP})
