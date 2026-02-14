@@ -8,19 +8,6 @@ from cocotb.triggers import Timer
 from cocotbext.spi import SpiSlaveBase, SpiConfig
 
 
-spi_config = SpiConfig(
-    word_width=8,
-    sclk_freq=25e6,
-    cpol=False,
-    cpha=False,
-    msb_first=True,
-    data_output_idle=1,
-    frame_spacing_ns=1,
-    ignore_rx_value=None,
-    cs_active_low=True,
-)
-
-
 class Mfrc522SpiSlave(SpiSlaveBase):
     """
     MFRC522 SPI mock (register + FIFO + minimal command hooks).
@@ -31,19 +18,25 @@ class Mfrc522SpiSlave(SpiSlaveBase):
     """
 
     # --- Register addresses (6-bit address space) ---
-    REG_COMMAND      = 0x01  # CommandReg :contentReference[oaicite:8]{index=8}
-    REG_COM_IRQ      = 0x04  # ComIrqReg :contentReference[oaicite:9]{index=9}
-    REG_DIV_IRQ      = 0x05  # DivIrqReg :contentReference[oaicite:10]{index=10}
-    REG_ERROR        = 0x06  # ErrorReg :contentReference[oaicite:11]{index=11}
-    REG_STATUS1      = 0x07  # Status1Reg :contentReference[oaicite:12]{index=12}
+    REG_COMMAND      = 0x01  # CommandReg
+    REG_COM_IEN      = 0x02  # ComIEnReg
+    REG_DIV_IEN      = 0x03  # DivIEnReg
+    REG_COM_IRQ      = 0x04  # ComIrqReg
+    REG_DIV_IRQ      = 0x05  # DivIrqReg
+    REG_ERROR        = 0x06  # ErrorReg
+    REG_STATUS1      = 0x07  # Status1Reg
 
-    REG_FIFO_DATA    = 0x09  # FIFODataReg :contentReference[oaicite:13]{index=13}
-    REG_FIFO_LEVEL   = 0x0A  # FIFOLevelReg :contentReference[oaicite:14]{index=14}
-    REG_WATER_LEVEL  = 0x0B  # WaterLevelReg :contentReference[oaicite:15]{index=15}
-    REG_BIT_FRAMING  = 0x0D  # BitFramingReg :contentReference[oaicite:16]{index=16}
+    REG_FIFO_DATA    = 0x09  # FIFODataReg
+    REG_FIFO_LEVEL   = 0x0A  # FIFOLevelReg
+    REG_WATER_LEVEL  = 0x0B  # WaterLevelReg
+    REG_CONTROL      = 0x0C  # ControlReg
+    REG_BIT_FRAMING  = 0x0D  # BitFramingReg
 
-    REG_VERSION      = 0x37  # VersionReg :contentReference[oaicite:17]{index=17}
+    REG_MODE         = 0x11  # ModeReg
+    REG_CRC_RESULT_MSB = 0x21  # CRCResultReg (higher bits)
+    REG_CRC_RESULT_LSB = 0x22  # CRCResultReg (lower bits)
 
+    REG_VERSION      = 0x37  # VersionReg
     # --- Bits in ComIrqReg (bit7 is Set1: set/clear selection) ---
     COMIRQ_TIMER   = 1 << 0
     COMIRQ_ERR     = 1 << 1
@@ -55,34 +48,108 @@ class Mfrc522SpiSlave(SpiSlaveBase):
     COMIRQ_SET1    = 1 << 7  # :contentReference[oaicite:18]{index=18}
 
     # --- Bits in DivIrqReg (bit7 is Set2) ---
+    DIVIRQ_MFINACT = 1 << 4
     DIVIRQ_CRCIRq  = 1 << 2
-    DIVIRQ_SET2    = 1 << 7  # :contentReference[oaicite:19]{index=19}
+    DIVIRQ_SET2    = 1 << 7
+
+    # --- Bits in ErrorReg ---
+    ERR_PROTOCOL    = 1 << 0
+    ERR_PARITY      = 1 << 1
+    ERR_CRC         = 1 << 2
+    ERR_COLLISION   = 1 << 3
+    ERR_BUFFER_OVFL = 1 << 4
+    ERR_TEMPCOL     = 1 << 5  # reserved/implementation-specific
+    ERR_TEMP_ERR    = 1 << 6
+    ERR_WR_ERR      = 1 << 7
 
     # --- Bits in Status1Reg ---
-    STATUS1_LOALERT = 1 << 0
-    STATUS1_HIALERT = 1 << 1
-    STATUS1_IRQ     = 1 << 4
-    STATUS1_CRCREADY= 1 << 5
+    STATUS1_LOALERT  = 1 << 0
+    STATUS1_HIALERT  = 1 << 1
+    STATUS1_TRUNNING = 1 << 3
+    STATUS1_IRQ      = 1 << 4
+    STATUS1_CRCREADY = 1 << 5
+    STATUS1_CRCOK    = 1 << 6
+
 
     # --- Command codes (CommandReg.Command[3:0]) ---
     CMD_IDLE      = 0x00
     CMD_CALCCRC   = 0x03
+    CMD_NO_CMD_CHANGE = 0x07
     CMD_TRANSCEIVE= 0x0C
     CMD_SOFTRESET = 0x0F  # :contentReference[oaicite:20]{index=20}
 
-    def __init__(self, bus, *, version: int = 0x92, uid: Sequence[int] = (0xDE, 0xAD, 0xBE, 0xEF),
-                 config: Optional[SpiConfig] = None):
-        self._config = config if config is not None else spi_config
+    def __init__(self, bus):
+        self._config = SpiConfig(
+            word_width=8,
+            cpol=False,
+            cpha=False,
+            msb_first=True,
+            cs_active_low=True,
+            frame_spacing_ns=1,
+            data_output_idle=1,
+        )
         super().__init__(bus)
 
         self._regs: List[int] = [0x00] * 64
         self._fifo: Deque[int] = deque(maxlen=64)
         self._last_frame: List[int] = []
 
-        self._uid = bytes(uid)
-        self._version = version & 0xFF
+        self._uid = bytes((0xDE, 0xAD, 0xBE, 0xEF))
+        self._version = 0x92
+
+        # ── Test-injectable overrides ──
+        # If set, _do_transceive will OR this value into ErrorReg
+        # after processing the command, regardless of the response.
+        self._inject_error: int = 0x00
+
+        # Track FIFO alert level transitions for edge-latched Hi/LoAlertIRq
+        self._prev_hialert: bool = False
+        self._prev_loalert: bool = False
 
         self._reset_regs()
+
+    # -------------------------
+    # SPI address helpers
+    # -------------------------
+    @staticmethod
+    def _decode_addr_byte(addr_byte: int) -> tuple[bool, int]:
+        """Decode MFRC522 SPI address byte.
+
+        Format (datasheet):
+          - bit7: R/W (1=read, 0=write)
+          - bits[6:1]: register address
+          - bit0: must be 0
+
+        Returns (is_read, addr).
+        """
+        is_read = bool(addr_byte & 0x80)
+        addr = (addr_byte >> 1) & 0x3F
+        return is_read, addr
+
+    @staticmethod
+    def _looks_like_addr_byte_for_read(byte_val: int) -> bool:
+        """Heuristic: does this byte look like a valid *read* address byte?
+
+        A read address byte has bit7=1 and bit0=0.
+        """
+        return (byte_val & 0x81) == 0x80
+    # ------------------------------------------------------------------
+    # CPHA=0 fix: pre-drive MISO before the first SCLK rising edge
+    # ------------------------------------------------------------------
+    async def _shift(self, num_bits, tx_word=None):
+        """Override _shift to pre-drive MSB on MISO for CPHA=0.
+
+        For CPHA=0 the first data bit must be valid before the first rising edge.
+        SpiSlaveBase normally drives the first bit on the first falling edge, so we
+        pre-drive it here unconditionally (even if the MSB is 0).
+        """
+        if not self._config.cpha and tx_word is not None:
+            msb = bool(tx_word & (1 << (num_bits - 1)))
+            self._miso.value = int(msb)
+            shifted_tx = (tx_word << 1) & ((1 << num_bits) - 1)
+            return await super()._shift(num_bits, tx_word=shifted_tx)
+        return await super()._shift(num_bits, tx_word=tx_word)
+
 
     # -------------------------
     # Public helpers (optional)
@@ -105,60 +172,95 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         self._regs = [0x00] * 64
         self._fifo.clear()
 
-        # CommandReg reset value is 0x20 (RcvOff=1 at reset). :contentReference[oaicite:21]{index=21}
+        # CommandReg reset value is 0x20 (RcvOff=1 at reset).
         self._regs[self.REG_COMMAND] = 0x20
 
-        # ComIrqReg reset value: 0x14. :contentReference[oaicite:22]{index=22}
-        self._regs[self.REG_COM_IRQ] = 0x14 & 0x7F
+        # Interrupt enable registers
+        self._regs[self.REG_COM_IEN] = 0x80  # IRqInv=1, all enables cleared
+        self._regs[self.REG_DIV_IEN] = 0x00
 
-        # ErrorReg reset value: 0x00. :contentReference[oaicite:23]{index=23}
+        # IRQ and status registers
+        self._regs[self.REG_COM_IRQ] = 0x14 & 0x7F  # IdleIRq + LoAlertIRq at reset
+        self._regs[self.REG_DIV_IRQ] = 0x00
         self._regs[self.REG_ERROR] = 0x00
+        self._regs[self.REG_STATUS1] = 0x21  # CRCReady=1, LoAlert=1 at reset
 
-        # Status1Reg reset value is 0x21, but we compute dynamics on read. :contentReference[oaicite:24]{index=24}
-        self._regs[self.REG_STATUS1] = 0x21
-
-        # FIFOLevel reset: 0x00; WaterLevel reset: 0x08. :contentReference[oaicite:25]{index=25}
+        # FIFO / framing
         self._regs[self.REG_WATER_LEVEL] = 0x08
-
-        # BitFramingReg reset (typical 0x00, ok for mock)
+        self._regs[self.REG_CONTROL] = 0x10
         self._regs[self.REG_BIT_FRAMING] = 0x00
 
-        # VersionReg returns 0x91/0x92. :contentReference[oaicite:26]{index=26}
+        # CRC / mode
+        self._regs[self.REG_MODE] = 0x3F
+        self._regs[self.REG_CRC_RESULT_MSB] = 0xFF
+        self._regs[self.REG_CRC_RESULT_LSB] = 0xFF
+
+        # VersionReg returns 0x91/0x92.
         self._regs[self.REG_VERSION] = self._version
 
-        # DivIrqReg: dynamic; store only bits 0..6
-        self._regs[self.REG_DIV_IRQ] = 0x00
+        # Initialize FIFO alert edge trackers to the post-reset level state.
+        hialert, loalert = self._compute_alerts()
+        self._prev_hialert = hialert
+        self._prev_loalert = loalert
 
         self._update_alerts_and_irq()
-
-    def _update_alerts_and_irq(self) -> None:
-        """
-        Update HiAlert/LoAlert bits in Status1Reg and latched IRQ flags in ComIrqReg.
-        Hi/Lo thresholds depend on WaterLevel and FIFO fill, and the FIFO is 64 bytes. 
-        """
+    def _compute_alerts(self) -> tuple[bool, bool]:
+        """Compute current HiAlert/LoAlert level bits from FIFO fill and WaterLevel."""
         water = self._regs[self.REG_WATER_LEVEL] & 0x3F
         flen = len(self._fifo)
 
-        # From datasheet examples/equations: HiAlert when (64 - FIFOlen) <= WaterLevel; LoAlert when FIFOlen <= WaterLevel. 
+        # HiAlert when (64 - FIFOlen) <= WaterLevel; LoAlert when FIFOlen <= WaterLevel.
         hialert = (64 - flen) <= water
         loalert = flen <= water
+        return hialert, loalert
 
-        # Status1Reg HiAlert/LoAlert are read-only dynamic bits. :contentReference[oaicite:29]{index=29}
-        # We'll compute them on read, but also use them to latch ComIrqReg Hi/LoAlertIRq.
+    def _update_status1_irq(self) -> None:
+        """Update Status1Reg.IRq based on *enabled* pending interrupt sources."""
+        com_en = self._regs[self.REG_COM_IEN] & 0x7F
+        div_en = self._regs[self.REG_DIV_IEN] & (self.DIVIRQ_MFINACT | self.DIVIRQ_CRCIRq)
+
+        com_pending = (self._regs[self.REG_COM_IRQ] & 0x7F) & com_en
+        div_pending = (self._regs[self.REG_DIV_IRQ] & 0x7F) & div_en
+
+        any_irq = bool(com_pending | div_pending)
+        if any_irq:
+            self._regs[self.REG_STATUS1] |= self.STATUS1_IRQ
+        else:
+            self._regs[self.REG_STATUS1] &= ~self.STATUS1_IRQ
+
+    def _update_alerts_and_irq(self) -> None:
+        """Update Status1Reg Hi/LoAlert bits and edge-latch Hi/LoAlertIRq in ComIrqReg."""
+        hialert, loalert = self._compute_alerts()
+
+        # Status1Reg HiAlert/LoAlert are read-only dynamic bits; keep them in the shadow reg.
+        s1 = self._regs[self.REG_STATUS1]
+        s1 &= ~(self.STATUS1_HIALERT | self.STATUS1_LOALERT)
         if hialert:
-            self._regs[self.REG_COM_IRQ] |= self.COMIRQ_HIALERT
+            s1 |= self.STATUS1_HIALERT
         if loalert:
-            self._regs[self.REG_COM_IRQ] |= self.COMIRQ_LOALERT
+            s1 |= self.STATUS1_LOALERT
+        self._regs[self.REG_STATUS1] = s1
 
-        # Status1Reg.IRq indicates "any enabled interrupt requests attention" (we don't model enables here),
-        # but for a simple mock it’s useful to set IRq when any ComIrq/DivIrq bit is set. 
-        any_irq = bool((self._regs[self.REG_COM_IRQ] & 0x7F) | (self._regs[self.REG_DIV_IRQ] & 0x7F))
-        self._regs[self.REG_STATUS1] = (self._regs[self.REG_STATUS1] & ~self.STATUS1_IRQ) | (self.STATUS1_IRQ if any_irq else 0)
+        # Hi/LoAlertIRq are edge-latched (store the event) and cleared only by SW via Set1.
+        if hialert and not self._prev_hialert:
+            self._regs[self.REG_COM_IRQ] |= self.COMIRQ_HIALERT
+        if loalert and not self._prev_loalert:
+            self._regs[self.REG_COM_IRQ] |= self.COMIRQ_LOALERT
+        self._prev_hialert = hialert
+        self._prev_loalert = loalert
+
+        # ErrIRq is set when any error bit in ErrorReg is set (and stays set until SW clears it).
+        if self._regs[self.REG_ERROR] != 0:
+            self._regs[self.REG_COM_IRQ] |= self.COMIRQ_ERR
+
+        self._update_status1_irq()
+
+
 
     def _fifo_push(self, b: int) -> None:
         if len(self._fifo) >= 64:
             # BufferOvfl is in ErrorReg and can only be cleared by FIFOLevelReg.FlushBuffer. 
-            self._regs[self.REG_ERROR] |= (1 << 4)  # BufferOvfl
+            self._regs[self.REG_ERROR] |= self.ERR_BUFFER_OVFL  # BufferOvfl
             self._regs[self.REG_COM_IRQ] |= self.COMIRQ_ERR
             return
         self._fifo.append(b & 0xFF)
@@ -171,7 +273,6 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         b = self._fifo.popleft()
         self._update_alerts_and_irq()
         return b
-
     def _read_reg(self, addr: int) -> int:
         addr &= 0x3F
 
@@ -179,43 +280,47 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             return self._fifo_pop()
 
         if addr == self.REG_FIFO_LEVEL:
-            # bit7 FlushBuffer reads as 0; bits6..0 indicate FIFO length. 
+            # bit7 FlushBuffer reads as 0; bits6..0 indicate FIFO length.
             return len(self._fifo) & 0x7F
 
         if addr == self.REG_STATUS1:
-            # Recompute Hi/LoAlert and IRq; CRCReady handled by stored bit. 
-            water = self._regs[self.REG_WATER_LEVEL] & 0x3F
-            flen = len(self._fifo)
-            hialert = (64 - flen) <= water
-            loalert = flen <= water
-
-            v = self._regs[self.REG_STATUS1] & 0xFF
-            v = (v & ~(self.STATUS1_HIALERT | self.STATUS1_LOALERT)) | \
-                (self.STATUS1_HIALERT if hialert else 0) | \
-                (self.STATUS1_LOALERT if loalert else 0)
-
+            # Keep Hi/LoAlert and IRq up to date before exposing the shadow value.
             self._update_alerts_and_irq()
-            return v
+            return self._regs[addr] & 0x7B  # mask reserved bits (7 and 2)
 
         if addr == self.REG_COM_IRQ:
-            # bit7 Set1 is write-only; return only 0..6. :contentReference[oaicite:34]{index=34}
+            # bit7 Set1 is write-only; return only 0..6.
             return self._regs[addr] & 0x7F
 
         if addr == self.REG_DIV_IRQ:
-            # bit7 Set2 is write-only; return only 0..6. :contentReference[oaicite:35]{index=35}
+            # bit7 Set2 is write-only; return only 0..6.
             return self._regs[addr] & 0x7F
 
+        if addr == self.REG_BIT_FRAMING:
+            # bit7 StartSend is write-only (reads as 0).
+            return self._regs[addr] & 0x7F
+
+        if addr == self.REG_CONTROL:
+            # bits7..6 are write-only (read as 0).
+            return self._regs[addr] & 0x3F
+
+        if addr == self.REG_WATER_LEVEL:
+            return self._regs[addr] & 0x3F
+
+        if addr in (self.REG_CRC_RESULT_MSB, self.REG_CRC_RESULT_LSB):
+            return self._regs[addr] & 0xFF
+
         if addr == self.REG_VERSION:
-            return self._regs[addr]
+            return self._regs[addr] & 0xFF
 
         return self._regs[addr] & 0xFF
-
+    
     def _unread_reg(self, addr: int, value: int) -> None:
         """Undo a destructive _read_reg for FIFO registers.
 
-        If a byte was pre-fetched from FIFODataReg to prepare MISO but
-        the SPI frame ended before the master actually clocked it in,
-        push the byte back to the front of the FIFO so it isn't lost.
+        If a byte was pre-fetched from FIFODataReg to prepare MISO but the SPI
+        frame ended before the master actually clocked it in, push the byte back
+        to the front of the FIFO so it isn't lost.
         """
         addr &= 0x3F
         if addr == self.REG_FIFO_DATA:
@@ -226,17 +331,57 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         addr &= 0x3F
         data &= 0xFF
 
+        # Ignore writes to read-only regs we currently shadow.
+        if addr in (self.REG_STATUS1, self.REG_ERROR, self.REG_CONTROL, self.REG_CRC_RESULT_MSB, self.REG_CRC_RESULT_LSB, self.REG_VERSION):
+            return
+
+        if addr == self.REG_COMMAND:
+            cmd = data & 0x0F
+
+            # Command execution clears all error bits except TempErr. BufferOvfl is
+            # only cleared by FlushBuffer, so preserve it as well.
+            if cmd not in (self.CMD_IDLE, getattr(self, "CMD_NO_CMD_CHANGE", 0x07)):
+                preserve = self._regs[self.REG_ERROR] & (self.ERR_TEMP_ERR | self.ERR_BUFFER_OVFL)
+                self._regs[self.REG_ERROR] = preserve
+
+            self._regs[addr] = data
+
+            if cmd == self.CMD_SOFTRESET:
+                self._reset_regs()
+                return
+            if cmd == self.CMD_CALCCRC:
+                cocotb.start_soon(self._do_calccrc())
+            if cmd == self.CMD_TRANSCEIVE:
+                self._maybe_start_transceive()
+            self._update_alerts_and_irq()
+            return
+
+        if addr == self.REG_COM_IEN:
+            self._regs[addr] = data
+            self._update_status1_irq()
+            return
+
+        if addr == self.REG_DIV_IEN:
+            self._regs[addr] = data & (0x80 | 0x10 | 0x04)  # IRQPushPull, MfinActIEn, CRCIEn
+            self._update_status1_irq()
+            return
+
+        if addr == self.REG_MODE:
+            # mask reserved bits (6,4,2)
+            self._regs[addr] = data & (0x80 | 0x20 | 0x08 | 0x03)
+            return
+
         if addr == self.REG_FIFO_DATA:
             self._fifo_push(data)
             return
 
         if addr == self.REG_FIFO_LEVEL:
-            # Only FlushBuffer (bit7) is writable; reading it returns 0. 
+            # Bit7 (FlushBuffer) is W: if set, clears FIFO and also clears BufferOvfl in ErrorReg.
             if data & 0x80:
                 self._fifo.clear()
-                # Clear BufferOvfl when flushing. 
-                self._regs[self.REG_ERROR] &= ~(1 << 4)
-                self._update_alerts_and_irq()
+                self._regs[self.REG_ERROR] &= ~self.ERR_BUFFER_OVFL
+            # Lower bits are read-only FIFO level.
+            self._update_alerts_and_irq()
             return
 
         if addr == self.REG_WATER_LEVEL:
@@ -244,119 +389,159 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             self._update_alerts_and_irq()
             return
 
+        if addr == self.REG_BIT_FRAMING:
+            # Bit7 StartSend is write-only trigger; we keep a shadow but reads mask it out.
+            self._regs[addr] = data
+            self._maybe_start_transceive()
+            return
+
         if addr == self.REG_COM_IRQ:
-            # Set1 controls set vs clear for marked bits. :contentReference[oaicite:38]{index=38}
+            # Set1 semantics: if bit7=1, set marked bits; if bit7=0, clear marked bits.
             marked = data & 0x7F
             if data & self.COMIRQ_SET1:
                 self._regs[addr] |= marked
             else:
                 self._regs[addr] &= ~marked
-            self._update_alerts_and_irq()
+            self._update_status1_irq()
             return
 
         if addr == self.REG_DIV_IRQ:
-            # Set2 controls set vs clear for marked bits. :contentReference[oaicite:39]{index=39}
             marked = data & 0x7F
             if data & self.DIVIRQ_SET2:
                 self._regs[addr] |= marked
             else:
                 self._regs[addr] &= ~marked
-            self._update_alerts_and_irq()
+            self._update_status1_irq()
             return
 
-        if addr == self.REG_COMMAND:
-            # CommandReg: writing command starts/stops; command may change dynamically. 
-            self._regs[addr] = data
-            cmd = data & 0x0F
-            if cmd == self.CMD_SOFTRESET:
-                self._reset_regs()
-                # After reset, device goes idle-ish; also latch IdleIRq for convenience.
-                self._regs[self.REG_COM_IRQ] |= self.COMIRQ_IDLE
-                self._update_alerts_and_irq()
-            elif cmd == self.CMD_CALCCRC:
-                cocotb.start_soon(self._do_calccrc())
-            # Transceive is actually kicked by BitFramingReg.StartSend; see _maybe_start_transceive().
-            return
-
-        if addr == self.REG_BIT_FRAMING:
-            self._regs[addr] = data
-            self._maybe_start_transceive()
-            return
-
-        if addr == self.REG_VERSION:
-            # read-only in practice; ignore writes
-            return
-
-        # default: store
+        # Default: store
         self._regs[addr] = data
-        self._update_alerts_and_irq()
 
-    # -------------------------
-    # Minimal command emulation
-    # -------------------------
+
     def _maybe_start_transceive(self) -> None:
         cmd = self._regs[self.REG_COMMAND] & 0x0F
         start_send = bool(self._regs[self.REG_BIT_FRAMING] & 0x80)  # StartSend in BitFramingReg :contentReference[oaicite:41]{index=41}
         if cmd == self.CMD_TRANSCEIVE and start_send:
             cocotb.start_soon(self._do_transceive())
 
+
     async def _do_transceive(self) -> None:
-        """
-        Extremely simplified PICC emulation:
-          - REQA (0x26) or WUPA (0x52) -> ATQA (0x04 0x00)
+        """Very small ISO/IEC 14443-A PICC emulation for bring-up.
+
+        Supports:
+          - REQA (0x26) / WUPA (0x52) -> ATQA (0x04 0x00)
           - ANTICOLL CL1 (0x93 0x20) -> UID0..UID3 + BCC
-        Then sets RxIRq + IdleIRq and clears StartSend.
+          - SELECT   CL1 (0x93 0x70 + UID0..UID3 + BCC + CRC_A) -> SAK + CRC_A
         """
-        # tiny delay to allow your DUT to finish register writes before polling IRQ
         await Timer(50, unit="ns")
 
         req = bytes(self._fifo)
         self._fifo.clear()
 
         resp: bytes = b""
-        if req == b"\x26" or req == b"\x52":
+        rx_last_bits: int = 0   # ControlReg[2:0]
+
+        if req in (b"\x26", b"\x52"):
             resp = b"\x04\x00"
+
         elif req == b"\x93\x20":
             uid = self._uid[:4]
             bcc = uid[0] ^ uid[1] ^ uid[2] ^ uid[3]
             resp = uid + bytes([bcc])
-        else:
-            # default: no response
-            resp = b""
 
+        elif len(req) in (7, 9) and req[0] == 0x93 and req[1] == 0x70:
+            uid = self._uid[:4]
+            uid_in = req[2:6]
+            bcc_in = req[6]
+            bcc_ok = (bcc_in == (uid_in[0] ^ uid_in[1] ^ uid_in[2] ^ uid_in[3]))
+            uid_ok = (uid_in == uid)
+
+            if uid_ok and bcc_ok:
+                sak = 0x08
+                crc = self._crc_a(bytes([sak]))
+                # CRC_A is transmitted LSB first.
+                resp = bytes([sak, crc & 0xFF, (crc >> 8) & 0xFF])
+            else:
+                # Protocol error: no response. The real chip would time out / set TimerIRq.
+                self._regs[self.REG_ERROR] |= self.ERR_PROTOCOL
+
+        # Enqueue response into FIFO
         for b in resp:
             self._fifo_push(b)
 
-        # Latch IRQ bits:
-        self._regs[self.REG_COM_IRQ] |= (self.COMIRQ_RX | self.COMIRQ_IDLE)
-        # Clear StartSend (in real chip it self-clears as state machine progresses)
+        # Update ControlReg RxLastBits (bits 2:0)
+        self._regs[self.REG_CONTROL] = (self._regs[self.REG_CONTROL] & 0xF8) | (rx_last_bits & 0x07)
+
+        # IRQs: set RxIRq only when we actually have a response.
+        if resp:
+            self._regs[self.REG_COM_IRQ] |= (self.COMIRQ_RX | self.COMIRQ_IDLE)
+        else:
+            self._regs[self.REG_COM_IRQ] |= self.COMIRQ_IDLE
+
+        # Optional error injection hook for tests.
+        if self._inject_error:
+            self._regs[self.REG_ERROR] |= self._inject_error
+            self._regs[self.REG_COM_IRQ] |= (self.COMIRQ_RX | self.COMIRQ_IDLE)
+
+        # Clear StartSend (self-clears in silicon as the state machine progresses)
         self._regs[self.REG_BIT_FRAMING] &= ~0x80
 
         self._update_alerts_and_irq()
 
     async def _do_calccrc(self) -> None:
-        """
-        Minimal CRC_A over FIFO content; sets DivIrqReg.CRCIRq and Status1Reg.CRCReady.
-        CRC coprocessor indicates CRCReady and sets CRCIRq after processing FIFO data. 
-        """
+        """Emulate MFRC522 CalcCRC command over FIFO content."""
+        # During calculation, CRCReady and CRCOk go low.
+        self._regs[self.REG_STATUS1] &= ~(self.STATUS1_CRCREADY | self.STATUS1_CRCOK)
+        self._update_status1_irq()
+
         await Timer(50, unit="ns")
 
         data = bytes(self._fifo)
-        crc = self._crc_a(data)
 
-        # We don't model the real CRCResult regs here; many drivers just wait on CRCIRq/CRCReady.
+        mode = self._regs[self.REG_MODE]
+        preset_sel = mode & 0x03
+        preset = {
+            0: 0x0000,  # 0000b
+            1: 0x6363,  # 0001b (ISO 14443-A)
+            2: 0xA671,  # 0010b
+            3: 0xFFFF,  # 0011b
+        }[preset_sel]
+
+        crc = self._crc16(data, preset)
+
+        msb = (crc >> 8) & 0xFF
+        lsb = crc & 0xFF
+
+        # If MSBFirst is set, CRCResult register values are bit-reversed.
+        if mode & 0x80:
+            msb = self._bit_reverse8(msb)
+            lsb = self._bit_reverse8(lsb)
+
+        self._regs[self.REG_CRC_RESULT_MSB] = msb
+        self._regs[self.REG_CRC_RESULT_LSB] = lsb
+
         self._regs[self.REG_DIV_IRQ] |= self.DIVIRQ_CRCIRq
         self._regs[self.REG_STATUS1] |= self.STATUS1_CRCREADY
+        if crc == 0:
+            self._regs[self.REG_STATUS1] |= self.STATUS1_CRCOK
 
-        # Also set IdleIRq to indicate completion (handy for polling loops)
+        # CalcCRC terminates and returns to Idle -> IdleIRq set.
         self._regs[self.REG_COM_IRQ] |= self.COMIRQ_IDLE
 
         self._update_alerts_and_irq()
 
     @staticmethod
-    def _crc_a(data: bytes) -> int:
-        # ISO14443A CRC_A (preset 0x6363 is commonly used). :contentReference[oaicite:43]{index=43}
-        crc = 0x6363
+    def _bit_reverse8(x: int) -> int:
+        x &= 0xFF
+        x = ((x & 0xF0) >> 4) | ((x & 0x0F) << 4)
+        x = ((x & 0xCC) >> 2) | ((x & 0x33) << 2)
+        x = ((x & 0xAA) >> 1) | ((x & 0x55) << 1)
+        return x
+
+    @staticmethod
+    def _crc16(data: bytes, preset: int) -> int:
+        """CRC coprocessor model (poly x^16 + x^12 + x^5 + 1, LSB-first)."""
+        crc = preset & 0xFFFF
         for b in data:
             crc ^= b
             for _ in range(8):
@@ -366,25 +551,9 @@ class Mfrc522SpiSlave(SpiSlaveBase):
                     crc >>= 1
         return crc & 0xFFFF
 
-    # -------------------------
-    # SPI transaction handling
-    # -------------------------
-    @staticmethod
-    def _decode_addr_byte(addr_byte: int):
-        """Decode MFRC522 SPI address byte.
-        Format: bit7 = R/W (1=read, 0=write), bits[6:1] = register address, bit0 = 0.
-        Returns (is_read, addr).
-        """
-        is_read = bool(addr_byte & 0x80)
-        addr = (addr_byte >> 1) & 0x3F
-        return is_read, addr
-
-    @staticmethod
-    def _looks_like_addr_byte_for_read(byte_val: int) -> bool:
-        """Check if a byte looks like a valid MFRC522 read address byte.
-        A read address byte has bit7=1 and bit0=0.
-        """
-        return (byte_val & 0x81) == 0x80
+    @classmethod
+    def _crc_a(cls, data: bytes) -> int:
+        return cls._crc16(data, 0x6363)
 
     async def _shift_byte_or_end(self, frame_end, tx: int) -> Optional[int]:
         """
