@@ -29,7 +29,7 @@ async def test_spi_top(dut):
 def test_spi_top_runner():
     sim = os.getenv("SIM", "icarus")
 
-    test_dir = Path(__file__).resolve().parent
+    test_dir = Path(__file__).resolve().parent.parent
     proj_dir = test_dir.parent.parent  # layr/layr/SPI
     spi_ext_dir = str(test_dir.parent / "cocotbext-spi")
 
@@ -39,7 +39,7 @@ def test_spi_top_runner():
         src / "spi_master.sv",
         src / "clock_divider.sv",
         test_dir / "spi_echo.sv",
-        test_dir / "spi_top.sv",
+        test_dir / "fpga" / "spi_top.sv",
     ]
 
     extra_paths = [str(test_dir), spi_ext_dir]

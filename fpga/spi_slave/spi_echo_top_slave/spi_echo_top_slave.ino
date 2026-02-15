@@ -40,13 +40,14 @@ void SlaveInit(void) {
 // read in short as two bytes, with high-order byte coming in first
 // ================================================================
 byte ReadByte(void) {
-    union {
-    unsigned short svar;
-    byte c[2];
-  } w;        // allow access to 2-byte word, or separate bytes
-  
+  byte w;
   while(!(SPSR & (1<<SPIF))) ; // SPIF bit set when 8 bits received
   return (SPDR); // send back unsigned short value
+}
+
+void WriteByte(byte b){
+  SPDR = b;
+  while (!(SPSR & (1<<SPIF))){};
 }
 
 volatile unsigned long count = 0;
@@ -61,6 +62,7 @@ void setup() {
   delay(10);
   Serial.println("SPI port reader v0.1");
   attachInterrupt(digitalPinToInterrupt(SCK_PIN), measurePeriod, RISING);
+  SPCR = (1<<SPE)|(0<<DORD)|(0<<MSTR)|(0<<CPOL)|(0<<CPHA)|(0<<SPR1)|(1<<SPR0); // SPI on
 }
 
 // ============================================================
@@ -77,32 +79,14 @@ void loop() {
     // Note: digitalRead() takes 4.1 microseconds
     // NOTE: SS_PIN cannot be properly read this way while SPI module is active!
 
-   /*
-    while(true){
-      Serial.println(count);
-      delay(100);
-    }
-    */
-
-    /*
-    
-    while (true) {
-      int val = digitalRead(SCK_PIN);
-      Serial.println(val);
-      Serial.println("waiting for clock to be high");
-      while(digitalRead(SCK_PIN)==0){};
-    }
-    */
-    
-    SPCR = (1<<SPE)|(0<<DORD)|(0<<MSTR)|(0<<CPOL)|(0<<CPHA)|(0<<SPR1)|(1<<SPR0); // SPI on
-    
+    while(digitalRead(SS_PIN)){}
     b = ReadByte();          // read unsigned short value
-    SPCR = (0<<SPE)|(0<<DORD)|(0<<MSTR)|(0<<CPOL)|(0<<CPHA)|(0<<SPR1)|(1<<SPR0);  // SPI off
-  
-//    float seconds = millis()/1000.0;  // time stamp takes more serial time, of course
-//    Serial.print(seconds,3);   
-//    Serial.print(",");
-    Serial.print(b);
-    Serial.println();
+
+    
+    while(!digitalRead(SS_PIN)){}
+    while(digitalRead(SS_PIN)){}
+    WriteByte(b);
+
+    Serial.println(b);
 
 }  // end loop()

@@ -31,43 +31,45 @@ module spi_master (
       done      <= 1'b0;
       busy      <= 1'b0;
       state     <= S_IDLE;
-    end else if (clk_en) begin
+    end else begin
       done <= 1'b0;
 
-      case (state)
-        S_IDLE: begin
-          sclk <= 1'b0;
-          if (start) begin
-            shift_reg <= data_in;
-            bit_count <= 3'd0;
-            busy      <= 1'b1;
-            mosi      <= data_in[7];
-            state     <= S_CAPTURE;
+      if (clk_en) begin
+        case (state)
+          S_IDLE: begin
+            sclk <= 1'b0;
+            if (start) begin
+              shift_reg <= data_in;
+              bit_count <= 3'd0;
+              busy      <= 1'b1;
+              mosi      <= data_in[7];
+              state     <= S_CAPTURE;
+            end
           end
-        end
-        S_SETUP: begin
-          sclk  <= 1'b0;
-          mosi  <= shift_reg[7];
-          state <= S_CAPTURE;
-        end
-        S_CAPTURE: begin
-          sclk      <= 1'b1;
-          data_out  <= {data_out[6:0], miso};
-          shift_reg <= {shift_reg[6:0], 1'b0};
-          if (bit_count == 3'd7) begin
-            done  <= 1'b1;
-            busy  <= 1'b0;
-            state <= S_FINISH;
-          end else begin
-            bit_count <= bit_count + 3'd1;
-            state     <= S_SETUP;
+          S_SETUP: begin
+            sclk  <= 1'b0;
+            mosi  <= shift_reg[7];
+            state <= S_CAPTURE;
           end
-        end
-        S_FINISH: begin
-          sclk  <= 1'b0;
-          state <= S_IDLE;
-        end
-      endcase
+          S_CAPTURE: begin
+            sclk      <= 1'b1;
+            data_out  <= {data_out[6:0], miso};
+            shift_reg <= {shift_reg[6:0], 1'b0};
+            if (bit_count == 3'd7) begin
+              done  <= 1'b1;
+              busy  <= 1'b0;
+              state <= S_FINISH;
+            end else begin
+              bit_count <= bit_count + 3'd1;
+              state     <= S_SETUP;
+            end
+          end
+          S_FINISH: begin
+            sclk  <= 1'b0;
+            state <= S_IDLE;
+          end
+        endcase
+      end
     end
   end
 

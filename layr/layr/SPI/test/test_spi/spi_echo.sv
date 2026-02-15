@@ -2,6 +2,7 @@
 // second transaction to read the slave's echo reply.
 module spi_echo (
     input  wire       clk,
+    input  wire       spi_clk_en, 
     input  wire       rst,      // active-high reset
     // Control interface
     input  wire       go,
@@ -17,12 +18,16 @@ module spi_echo (
 );
   reg  [7:0] spi_data_in;
   reg        spi_start;
+  reg go_rec; 
+  reg done_rec; 
+  reg busy_rec;
   wire [7:0] spi_data_out;
   wire       spi_done;
   wire       spi_busy;
 
   spi_master u_spi (
       .clk     (clk),
+      .clk_en  (spi_clk_en),
       .reset   (rst),
       .data_in (spi_data_in),
       .start   (spi_start),
@@ -49,6 +54,16 @@ module spi_echo (
   reg [3:0] state;
   reg [7:0] gap_cnt;  // widened for longer waits
 
+  always_ff @(posedge clk) begin
+    if (go)
+      go_rec <= go; 
+    if (spi_done)
+      done_rec <= spi_done;
+    if (spi_busy)
+      busy_rec <= spi_busy;
+  end
+
+
   always @(posedge clk or posedge rst) begin
     if (rst) begin
       state       <= S_IDLE;
@@ -60,95 +75,103 @@ module spi_echo (
       busy        <= 1'b0;
       gap_cnt     <= 8'd0;
     end else begin
-      spi_start <= 1'b0;
       done      <= 1'b0;
 
-      case (state)
-        S_IDLE: begin
-          if (go) begin
-            busy        <= 1'b1;
-            spi_data_in <= tx_byte;
-            ss          <= 1'b0;  // assert SS
-            gap_cnt     <= 8'd0;
-            state       <= S_TX_SETUP;
+      if (spi_clk_en) begin
+        spi_start <= 1'b0;
+        go_rec <= 1'b0;
+        done_rec <= 1'b0;
+        busy_rec <= 1'b0;
+
+        case (state)
+          S_IDLE: begin
+            if (go_rec) begin
+              busy        <= 1'b1;
+              spi_data_in <= tx_byte;
+              ss          <= 1'b0;  // assert SS
+              gap_cnt     <= 8'd0;
+              state       <= S_TX_SETUP;
+            end
           end
-        end
 
-        // ── give slave time after SS assert before first SCLK ──
-        S_TX_SETUP: begin
-          gap_cnt <= gap_cnt + 1;
-          if (gap_cnt == 8'd3) begin
-            state <= S_TX_START;
+          // ── give slave time after SS assert before first SCLK ──
+          S_TX_SETUP: begin
+            gap_cnt <= gap_cnt + 1;
+            if (gap_cnt == 8'd3) begin
+              state <= S_TX_START;
+            end
           end
-        end
 
-        S_TX_START: begin
-          spi_start <= 1'b1;
-          state     <= S_TX_WAIT;
-        end
-
-        S_TX_WAIT: begin
-          if (spi_done) begin
-            state <= S_TX_FINISH;
+          S_TX_START: begin
+            spi_start <= 1'b1;
+            if(busy_rec)
+              state     <= S_TX_WAIT;
           end
-        end
 
-        // wait for master to go fully idle
-        S_TX_FINISH: begin
-          if (!spi_busy) begin
-            ss      <= 1'b1;  // deassert SS
-            gap_cnt <= 8'd0;
-            state   <= S_GAP;
+          S_TX_WAIT: begin
+            if (done_rec) begin
+              state <= S_TX_FINISH;
+            end
           end
-        end
 
-        // ── inter-transaction gap (SS high) ──
-        S_GAP: begin
-          gap_cnt <= gap_cnt + 1;
-          if (gap_cnt == 8'd15) begin
-            spi_data_in <= 8'h00;  // dummy TX
-            ss          <= 1'b0;  // assert SS
-            gap_cnt     <= 8'd0;
-            state       <= S_RX_SETUP;
+          // wait for master to go fully idle
+          S_TX_FINISH: begin
+            if (!spi_busy) begin
+              ss      <= 1'b1;  // deassert SS
+              gap_cnt <= 8'd0;
+              state   <= S_GAP;
+            end
           end
-        end
 
-        // ── give slave time to drive MISO after SS assert ──
-        S_RX_SETUP: begin
-          gap_cnt <= gap_cnt + 1;
-          if (gap_cnt == 8'd15) begin
-            state <= S_RX_START;
+          // ── inter-transaction gap (SS high) ──
+          S_GAP: begin
+            gap_cnt <= gap_cnt + 1;
+            if (gap_cnt == 8'd15) begin
+              spi_data_in <= 8'h00;  // dummy TX
+              ss          <= 1'b0;  // assert SS
+              gap_cnt     <= 8'd0;
+              state       <= S_RX_SETUP;
+            end
           end
-        end
 
-        S_RX_START: begin
-          spi_start <= 1'b1;
-          state     <= S_RX_WAIT;
-        end
-
-        S_RX_WAIT: begin
-          if (spi_done) begin
-            rx_byte <= spi_data_out;
-            state   <= S_RX_FINISH;
+          // ── give slave time to drive MISO after SS assert ──
+          S_RX_SETUP: begin
+            gap_cnt <= gap_cnt + 1;
+            if (gap_cnt == 8'd15) begin
+              state <= S_RX_START;
+            end
           end
-        end
 
-        // wait for master to go fully idle
-        S_RX_FINISH: begin
-          if (!spi_busy) begin
-            state <= S_DONE;
+          S_RX_START: begin
+            spi_start <= 1'b1;
+            if(busy_rec)
+              state     <= S_RX_WAIT;
           end
-        end
 
-        S_DONE: begin
-          ss    <= 1'b1;
-          done  <= 1'b1;
-          busy  <= 1'b0;
-          state <= S_IDLE;
-        end
+          S_RX_WAIT: begin
+            if (done_rec) begin
+              rx_byte <= spi_data_out;
+              state   <= S_RX_FINISH;
+            end
+          end
 
-        default: state <= S_IDLE;
-      endcase
+          // wait for master to go fully idle
+          S_RX_FINISH: begin
+            if (!busy_rec) begin
+              state <= S_DONE;
+            end
+          end
+
+          S_DONE: begin
+            ss    <= 1'b1;
+            done  <= 1'b1;
+            busy  <= 1'b0;
+            state <= S_IDLE;
+          end
+
+          default: state <= S_IDLE;
+        endcase
+      end
     end
   end
 endmodule

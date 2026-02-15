@@ -128,7 +128,7 @@ async def test_spi_echo(dut):
         dut.go.value = 0
 
         # 5. Wait for done
-        for _ in range(5000):
+        for _ in range(10000):
             await RisingEdge(dut.clk)
             if dut.done.value == 1:
                 break
@@ -163,6 +163,7 @@ def test_spi_echo_runner():
 
     sources = [
         src / "spi_master.sv",
+        src / "clock_divider.sv",
         test_dir / "spi_echo.sv",
         test_dir / "test_spi_echo_top.sv",
     ]

@@ -8,7 +8,8 @@ module spi_top(
     (* MARK_DEBUG = "TRUE" *) output wire       sclk,
     (* MARK_DEBUG = "TRUE" *) output wire       mosi,
     input  wire       miso,
-    output reg        ss
+    output reg        ss,
+    (* MARK_DEBUG = "TRUE" *) output logic [7:0] last_read
 );
 
 logic go, done, busy;
@@ -53,6 +54,7 @@ always_ff @(posedge clk or posedge rst) begin
         go  <= 0;
         led <= 4'b0000;
         ss  <= 1;
+        last_read <= 0;
     end else if (spi_clk_en) begin
         go <= 0;
         if (ctr == 0) begin
