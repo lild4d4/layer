@@ -18,12 +18,14 @@ module spi_echo (
 );
   reg  [7:0] spi_data_in;
   reg        spi_start;
-  reg go_rec; 
-  reg done_rec; 
-  reg busy_rec;
   wire [7:0] spi_data_out;
   wire       spi_done;
   wire       spi_busy;
+
+  // Store results due to slower cycle
+  reg go_rec; 
+  reg done_rec; 
+  reg busy_rec;
 
   spi_master u_spi (
       .clk     (clk),
@@ -54,16 +56,6 @@ module spi_echo (
   reg [3:0] state;
   reg [7:0] gap_cnt;  // widened for longer waits
 
-  always_ff @(posedge clk) begin
-    if (go)
-      go_rec <= go; 
-    if (spi_done)
-      done_rec <= spi_done;
-    if (spi_busy)
-      busy_rec <= spi_busy;
-  end
-
-
   always @(posedge clk or posedge rst) begin
     if (rst) begin
       state       <= S_IDLE;
@@ -74,10 +66,20 @@ module spi_echo (
       done        <= 1'b0;
       busy        <= 1'b0;
       gap_cnt     <= 8'd0;
+      spi_start   <= 1'b0;
+      go_rec      <= 1'b0;
+      done_rec    <= 1'b0;
+      busy_rec    <= 1'b0;
     end else begin
-      done      <= 1'b0;
-
-      if (spi_clk_en) begin
+      if (!spi_clk_en) begin
+        done      <= 1'b0;
+        if (go)
+          go_rec <= go; 
+        if (spi_done)
+          done_rec <= spi_done;
+        if (spi_busy)
+          busy_rec <= spi_busy;
+      end else begin
         spi_start <= 1'b0;
         go_rec <= 1'b0;
         done_rec <= 1'b0;

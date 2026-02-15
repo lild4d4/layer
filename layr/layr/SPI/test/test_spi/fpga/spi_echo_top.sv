@@ -62,9 +62,9 @@ end
 
 always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
-        ctr <= 10_000;
-        go  <= 1;
-        led <= 4'b0000;
+        ctr <= 500;
+        go  <= 0;
+        led <= 4'b0001;
         send_num <= 1;
     end else if (spi_clk_en) begin
         go <= 0;

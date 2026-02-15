@@ -45,8 +45,7 @@ byte ReadByte(void) {
   return (SPDR); // send back unsigned short value
 }
 
-void WriteByte(byte b){
-  SPDR = b;
+void WriteByte(){
   while (!(SPSR & (1<<SPIF))){};
 }
 
@@ -71,22 +70,29 @@ void setup() {
 // On 16 MHz Arduino, works at > 500 words per secondf
 // ============================================================
 void loop() {
-  byte b;
-  byte flag1;
+    byte b;
+    byte flag1;
 
+    int total = 0; 
 
      // SS_PIN = Digital_10 = ATmega328 Pin 16 =  PORTB.2
     // Note: digitalRead() takes 4.1 microseconds
     // NOTE: SS_PIN cannot be properly read this way while SPI module is active!
+    while(true) {
+      while(digitalRead(SS_PIN)){}
+      SPDR = ReadByte();          // read unsigned short value
 
-    while(digitalRead(SS_PIN)){}
-    b = ReadByte();          // read unsigned short value
-
-    
-    while(!digitalRead(SS_PIN)){}
-    while(digitalRead(SS_PIN)){}
-    WriteByte(b);
-
-    Serial.println(b);
+      while(!digitalRead(SS_PIN)){}
+      while(digitalRead(SS_PIN)){}
+      WriteByte();
+      if (!SPDR) {
+        total = 0;
+        Serial.println("r");
+      }
+      total += SPDR;
+      if (total == 32640) {
+        Serial.println("st");
+      }
+    }
 
 }  // end loop()
