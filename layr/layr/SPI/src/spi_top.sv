@@ -71,7 +71,7 @@ module spi_top (
       .spi_tx_data(e_spi_tx_data),
       .spi_rx_data(e_spi_rx_data),
       .spi_w_len(e_spi_w_len),
-      .spi_r_len(e_spi_r_len),
+      .spi_r_len(e_spi_r_len)
   );
 
   mfrc_top u_mfrc_top (
@@ -107,7 +107,7 @@ module spi_top (
       .spi_tx_data(m_spi_tx_data),
       .spi_rx_data(m_spi_rx_data),
       .spi_w_len(m_spi_w_len),
-      .spi_r_len(m_spi_r_len),
+      .spi_r_len(m_spi_r_len)
   );
 
   spi_arb u_spi_arb (

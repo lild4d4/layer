@@ -1,12 +1,17 @@
+import os
+from pathlib import Path
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, Timer, First
-import os
-from pathlib import Path
-
 from cocotbext.spi import SpiBus
-from layr.layr.SPI.test.test_at25010b.at25010b_mock import AT25010B_EEPROM
-from layr.layr.SPI.test.test_mfrc522.mock_mfrc522 import Mfrc522SpiSlave
+
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from test_at25010b.at25010b_mock import AT25010B_EEPROM
+from test_mfrc522.mock_mfrc522 import Mfrc522SpiSlave
+
 from cocotb_tools.runner import get_runner
 
 CLK_PERIOD_NS = 10  # 100Mhz
@@ -36,6 +41,8 @@ async def reset_dut(dut):
     dut.rst.value = 1
 
     # TODO: add other sensible default resets
+    dut.eeprom_start.value = 0
+    dut.eeprom_get_key.value = 0
 
     for _ in range(RESET_CYCLES):
         await RisingEdge(dut.clk)
@@ -126,8 +133,8 @@ async def test_reset_state(dut):
     await setup(dut)
     await RisingEdge(dut.clk)
 
-    assert int(dut.busy.value) == 0, "busy should be 0 after reset"
-    assert int(dut.done.value) == 0, "done should be 0 after reset"
+    assert int(dut.eeprom_busy.value) == 0, "busy should be 0 after reset"
+    assert int(dut.eeprom_done.value) == 0, "done should be 0 after reset"
 
 
 @cocotb.test()
@@ -159,7 +166,10 @@ def test_spi_e2e_runner():
     sim = os.getenv("SIM", "icarus")
     spi_module_path = Path(__file__).resolve().parent.parent.parent
     src_dir = spi_module_path / "src"
+
+    exclude = ["mfrc_util.sv", "mfrc_core.sv"]
     sources = list(src_dir.glob("*.sv"))
+    sources = [src for src in sources if src.name not in exclude]
 
     runner = get_runner(sim)
     runner.build(
