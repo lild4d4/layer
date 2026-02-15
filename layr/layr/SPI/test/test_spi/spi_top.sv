@@ -49,7 +49,7 @@ spi_master u_spi (
 
 always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
-        ctr <= 99_999;
+        ctr <= 10_000;
         go  <= 0;
         led <= 4'b0000;
         ss  <= 1;
@@ -57,7 +57,7 @@ always_ff @(posedge clk or posedge rst) begin
         go <= 0;
         if (ctr == 0) begin
             if (~busy) begin
-                ctr    <= 99_999;
+                ctr    <= 10_000;
                 go     <= 1;
                 ss     <= 0;
                 led[0] <= ~led[0];

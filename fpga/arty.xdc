@@ -38,6 +38,8 @@ create_clock -period 10.000 [get_ports clk]
 connect_debug_port u_ila_0/probe1 [get_nets [list miso]]
 connect_debug_port u_ila_0/probe5 [get_nets [list ss_OBUF]]
 
+connect_debug_port u_ila_0/probe1 [get_nets [list {u_spi/p_1_in[0]} {u_spi/p_1_in[1]} {u_spi/p_1_in[2]} {u_spi/p_1_in[3]} {u_spi/p_1_in[4]} {u_spi/p_1_in[5]} {u_spi/p_1_in[6]} {u_spi/p_1_in[7]}]]
+
 create_debug_core u_ila_0 ila
 set_property ALL_PROBE_SAME_MU true [get_debug_cores u_ila_0]
 set_property ALL_PROBE_SAME_MU_CNT 1 [get_debug_cores u_ila_0]
@@ -54,20 +56,16 @@ set_property port_width 4 [get_debug_ports u_ila_0/probe0]
 connect_debug_port u_ila_0/probe0 [get_nets [list {led_OBUF[0]} {led_OBUF[1]} {led_OBUF[2]} {led_OBUF[3]}]]
 create_debug_port u_ila_0 probe
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe1]
-set_property port_width 8 [get_debug_ports u_ila_0/probe1]
-connect_debug_port u_ila_0/probe1 [get_nets [list {u_spi/p_1_in[0]} {u_spi/p_1_in[1]} {u_spi/p_1_in[2]} {u_spi/p_1_in[3]} {u_spi/p_1_in[4]} {u_spi/p_1_in[5]} {u_spi/p_1_in[6]} {u_spi/p_1_in[7]}]]
+set_property port_width 1 [get_debug_ports u_ila_0/probe1]
+connect_debug_port u_ila_0/probe1 [get_nets [list mosi_OBUF]]
 create_debug_port u_ila_0 probe
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe2]
 set_property port_width 1 [get_debug_ports u_ila_0/probe2]
-connect_debug_port u_ila_0/probe2 [get_nets [list mosi_OBUF]]
+connect_debug_port u_ila_0/probe2 [get_nets [list rst_IBUF]]
 create_debug_port u_ila_0 probe
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe3]
 set_property port_width 1 [get_debug_ports u_ila_0/probe3]
-connect_debug_port u_ila_0/probe3 [get_nets [list rst_IBUF]]
-create_debug_port u_ila_0 probe
-set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe4]
-set_property port_width 1 [get_debug_ports u_ila_0/probe4]
-connect_debug_port u_ila_0/probe4 [get_nets [list sclk_OBUF]]
+connect_debug_port u_ila_0/probe3 [get_nets [list sclk_OBUF]]
 set_property C_CLK_INPUT_FREQ_HZ 300000000 [get_debug_cores dbg_hub]
 set_property C_ENABLE_CLK_DIVIDER false [get_debug_cores dbg_hub]
 set_property C_USER_SCAN_CHAIN 1 [get_debug_cores dbg_hub]
