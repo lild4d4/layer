@@ -18,7 +18,7 @@ async def reset(dut):
 async def test_spi_top(dut):
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     await reset(dut)
-    for _ in range(500):
+    for _ in range(1000):
         await RisingEdge(dut.clk)
 
 # ─────────────────────────────────────────────────────────────────────
