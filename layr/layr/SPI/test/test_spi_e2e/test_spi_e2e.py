@@ -44,6 +44,13 @@ async def reset_dut(dut):
     dut.eeprom_start.value = 0
     dut.eeprom_get_key.value = 0
 
+    dut.mfrc_trx_valid.value = 0
+    dut.mfrc_trx_tx_len.value = 0
+    dut.mfrc_trx_tx_data.value = 0
+    dut.mfrc_trx_tx_last_bits.value = 0
+    dut.mfrc_trx_timeout_cycles.value = 0
+    dut.mfrc_ver_valid.value = 0
+
     for _ in range(RESET_CYCLES):
         await RisingEdge(dut.clk)
 
@@ -72,6 +79,8 @@ async def setup(dut):
     eeprom = await eeprom_setup(dut)
     mfrc = await mfrc_setup(dut)
 
+    await reset_dut(dut)
+
     return (eeprom, mfrc)
 
 
@@ -93,7 +102,6 @@ async def eeprom_setup(dut) -> AT25010B_EEPROM:
     eeprom.load_memory(KEY_A, offset=0x00)
     eeprom.load_memory(ID_A, offset=0x40)
 
-    await reset_dut(dut)
     return eeprom
 
 
@@ -119,7 +127,88 @@ async def eeprom_send_cmd(dut, get_key: int) -> None:
 
 
 async def mfrc_setup(dut):
-    return None
+    mfrc = Mfrc522SpiSlave(build_spi_bus(dut, 0))
+
+    return mfrc
+
+
+def _bytes_to_int(byte_list: list[int]) -> int:
+    """Pack bytes into 256-bit integer (byte 0 = MSB)."""
+    val = 0
+    for b in byte_list:
+        val = (val << 8) | b
+    val <<= (32 - len(byte_list)) * 8
+    return val
+
+
+def _int_to_bytes(val: int, count: int) -> list[int]:
+    """Extract count bytes from a 256-bit integer (byte 0 = MSB)."""
+    result = []
+    for i in range(count):
+        shift = 255 - i * 8
+        result.append((val >> (shift - 7)) & 0xFF)
+    return result
+
+
+async def mfrc_transceive(
+    dut, tx_bytes: list[int], tx_last_bits: int = 0, timeout_cycles: int = 500_000
+) -> dict:
+    """Execute transceive, return {ok, rx_len, rx_data, rx_last_bits, error}."""
+    for _ in range(10):
+        if dut.mfrc_trx_ready.value == 1:
+            break
+        await RisingEdge(dut.clk)
+
+    dut.mfrc_trx_tx_len.value = len(tx_bytes) - 1
+    dut.mfrc_trx_tx_data.value = _bytes_to_int(tx_bytes)
+    dut.mfrc_trx_tx_last_bits.value = tx_last_bits
+    dut.mfrc_trx_timeout_cycles.value = timeout_cycles
+    dut.mfrc_trx_valid.value = 1
+    await RisingEdge(dut.clk)
+    dut.mfrc_trx_valid.value = 0
+
+    clk_budget = timeout_cycles * 60 + 200_000
+    for _ in range(clk_budget):
+        await RisingEdge(dut.clk)
+        if dut.mfrc_trx_done.value == 1:
+            break
+    else:
+        raise Exception("Timed out waiting for mfrc_trx_done")
+
+    rx_len_enc = int(dut.mfrc_trx_rx_len.value)
+    rx_count = rx_len_enc + 1
+    rx_data_int = int(dut.mfrc_trx_rx_data.value)
+    rx_bytes = _int_to_bytes(rx_data_int, rx_count)
+
+    return {
+        "ok": bool(dut.mfrc_trx_ok.value),
+        "rx_len": rx_count,
+        "rx_data": rx_bytes,
+        "rx_last_bits": int(dut.mfrc_trx_rx_last_bits.value),
+        "error": int(dut.mfrc_trx_error.value),
+    }
+
+
+async def mfrc_reqa(dut) -> dict:
+    """Send REQA (0x26), check for card. Returns transceive result."""
+    return await mfrc_transceive(dut, tx_bytes=[0x26], tx_last_bits=7)
+
+
+async def mfrc_wupa(dut) -> dict:
+    """Send WUPA (0x52), wake up card. Returns transceive result."""
+    return await mfrc_transceive(dut, tx_bytes=[0x52], tx_last_bits=7)
+
+
+async def mfrc_anticoll(dut) -> dict:
+    """Send ANTICOLL CL1 (0x93 0x20), get UID. Returns transceive result."""
+    return await mfrc_transceive(dut, tx_bytes=[0x93, 0x20])
+
+
+async def mfrc_select(dut, uid: list[int]) -> dict:
+    """Send SELECT CL1 with UID, select card. Returns transceive result."""
+    bcc = uid[0] ^ uid[1] ^ uid[2] ^ uid[3]
+    select_cmd = [0x93, 0x70] + uid + [bcc]
+    return await mfrc_transceive(dut, tx_bytes=select_cmd)
 
 
 #
@@ -155,6 +244,89 @@ async def test_eeprom_get_id(dut):
     result = await eeprom_send_cmd(dut, 0)
     expected = int.from_bytes(ID_A, byteorder="big")
     assert result == expected, f"Expected {expected:#x}, got {result:#x}"
+
+
+#
+# MFRC Tests
+#
+
+
+MOCK_UID = [0xDE, 0xAD, 0xBE, 0xEF]
+
+
+@cocotb.test()
+async def test_mfrc_reqa(dut):
+    """Send REQA (0x26) → expect ATQA [0x04, 0x00]."""
+    _ = await setup(dut)
+
+    result = await mfrc_reqa(dut)
+
+    assert result["ok"], f"REQA failed: error={result['error']:#04x}"
+    assert result["rx_len"] == 2, f"Expected 2 bytes, got {result['rx_len']}"
+    assert result["rx_data"] == [0x04, 0x00], f"Expected ATQA, got {result['rx_data']}"
+    assert result["rx_last_bits"] == 0, "Expected full bytes in response"
+
+
+@cocotb.test()
+async def test_mfrc_wupa(dut):
+    """Send WUPA (0x52) → expect ATQA [0x04, 0x00]."""
+    _ = await setup(dut)
+
+    result = await mfrc_wupa(dut)
+
+    assert result["ok"], f"WUPA failed: error={result['error']:#04x}"
+    assert result["rx_len"] == 2, f"Expected 2 bytes, got {result['rx_len']}"
+    assert result["rx_data"] == [0x04, 0x00], f"Expected ATQA, got {result['rx_data']}"
+
+
+@cocotb.test()
+async def test_mfrc_anticoll(dut):
+    """Send ANTICOLL CL1 (0x93 0x20) → expect UID + BCC (5 bytes)."""
+    _ = await setup(dut)
+
+    result = await mfrc_anticoll(dut)
+
+    bcc = MOCK_UID[0] ^ MOCK_UID[1] ^ MOCK_UID[2] ^ MOCK_UID[3]
+    expected = MOCK_UID + [bcc]
+
+    assert result["ok"], f"ANTICOLL failed: error={result['error']:#04x}"
+    assert result["rx_len"] == 5, f"Expected 5 bytes, got {result['rx_len']}"
+    assert (
+        result["rx_data"] == expected
+    ), f"Expected UID {expected}, got {result['rx_data']}"
+
+
+@cocotb.test()
+async def test_mfrc_select(dut):
+    """Send SELECT with UID → expect SAK + CRC_A (3 bytes)."""
+    _ = await setup(dut)
+
+    result = await mfrc_select(dut, MOCK_UID)
+
+    assert result["ok"], f"SELECT failed: error={result['error']:#04x}"
+    assert result["rx_len"] == 3, f"Expected 3 bytes, got {result['rx_len']}"
+    assert (
+        result["rx_data"][0] == 0x08
+    ), f"Expected SAK=0x08, got {result['rx_data'][0]:#04x}"
+
+
+@cocotb.test()
+async def test_mfrc_card_activate_sequence(dut):
+    """Full card activation: REQA → ANTICOLL → SELECT."""
+    _ = await setup(dut)
+
+    result = await mfrc_reqa(dut)
+    assert result["ok"]
+    assert result["rx_data"] == [0x04, 0x00]
+
+    result = await mfrc_anticoll(dut)
+    assert result["ok"]
+    uid = result["rx_data"][:4]
+    assert uid == MOCK_UID
+
+    result = await mfrc_select(dut, uid)
+    assert result["ok"]
+    assert result["rx_data"][0] == 0x08
 
 
 #
