@@ -2,7 +2,7 @@ module spi_top(
     input         clk,
     (* MARK_DEBUG = "TRUE" *) input         rst,
 
-    output logic [3:0] led,
+    (* MARK_DEBUG = "TRUE" *) output logic [3:0] led,
 
     // SPI bus
     (* MARK_DEBUG = "TRUE" *) output wire       sclk,
@@ -24,7 +24,7 @@ clock_divider divider(
 spi_master u_spi (
     .clk     (spi_clk),
     .reset   (rst),
-    .data_in (8'hbe),
+    .data_in (8'b10101010),
     .start   (go),
     .miso    (miso),
     .mosi    (mosi),
@@ -42,7 +42,7 @@ always_ff @(posedge spi_clk or posedge rst) begin
     end else begin
         if (ctr == 0) begin
             if(~busy)begin
-                ctr <= 9_999_999;       // reset counter every 1 second
+                ctr <= 99_999;       // reset counter every 1 second
                 go <= 1;        // pulse `go` for 1 clock cycle
                 led[0] <= ~led[0]; // toggle only led[0]
             end

@@ -3,7 +3,7 @@ module spi_master (
     input  wire       reset,     // Reset signal (active high)
     // internal interface
     input  wire       start,     // Start signal (pulse for 1 clk)
-    input  wire [7:0] data_in,   // Data to send
+    (* MARK_DEBUG = "TRUE" *) input  wire [7:0] data_in,   // Data to send
     output reg  [7:0] data_out,  // Data received
     output reg        done,      // Pulses high for 1 clk when byte is complete
     output reg        busy,      // High while a transfer is in progress
