@@ -13,7 +13,9 @@ module spi_top(
 
 logic go, done, busy;
 logic spi_clk;
-reg [23:0] ctr; // 24 bits to count up to 10,000,000
+logic spi_clk_d;  // delayed version for edge detection
+logic spi_clk_en; // one-cycle pulse on rising edge of spi_clk
+reg [23:0] ctr;
 
 clock_divider divider(
     .clk(clk),
@@ -21,40 +23,49 @@ clock_divider divider(
     .clk_out(spi_clk)
 );
 
+// Detect rising edge of spi_clk in the clk domain
+always_ff @(posedge clk or posedge rst) begin
+    if (rst)
+        spi_clk_d <= 0;
+    else
+        spi_clk_d <= spi_clk;
+end
+assign spi_clk_en = spi_clk & ~spi_clk_d;
+
+// SPI master now runs on clk with a clock enable
 spi_master u_spi (
-    .clk     (spi_clk),
+    .clk     (clk),
+    .clk_en  (spi_clk_en),
     .reset   (rst),
     .data_in (8'b10101010),
     .start   (go),
     .miso    (miso),
     .mosi    (mosi),
     .sclk    (sclk),
-
-    .busy(busy)
+    .data_out(),
+    .done    (done),
+    .busy    (busy)
 );
 
-always_ff @(posedge spi_clk or posedge rst) begin
+always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
-        ctr <= 1;
-        go <= 0;
+        ctr <= 99_999;
+        go  <= 0;
         led <= 4'b0000;
-        ss <= 0;
-    end else begin
+        ss  <= 1;
+    end else if (spi_clk_en) begin
+        go <= 0;
         if (ctr == 0) begin
-            if(~busy)begin
-                ctr <= 99_999;       // reset counter every 1 second
-                go <= 1;        // pulse `go` for 1 clock cycle
-                led[0] <= ~led[0]; // toggle only led[0]
+            if (~busy) begin
+                ctr    <= 99_999;
+                go     <= 1;
+                ss     <= 0;
+                led[0] <= ~led[0];
             end
         end else begin
             ctr <= ctr - 1;
-            go <= 0;
         end
     end
 end
 
 endmodule
-
-
-
-
