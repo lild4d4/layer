@@ -38,33 +38,30 @@ class AuthInitTester:
         self.key_index = dut.init.key_index
         self.reg_key = dut.init.reg_key
 
-class AuthGenerateChallengeTester:
+class AuthDecryptTester:
     """Helper class for auth_generate_challenge testing."""
 
     def __init__(self, dut):
         self.dut = dut
 
         # Inputs
-        self.clk = dut.generate_challenge.clk
-        self.rst = dut.generate_challenge.rst
-        self.ready_i = dut.generate_challenge.ready_i
-        self.input_cipher_i = dut.generate_challenge.input_cipher_i
-        self.aes_read_data_i = dut.generate_challenge.aes_read_data_i
+        self.clk = dut.generate_challenge.decrypt.clk
+        self.rst = dut.generate_challenge.decrypt.rst
+        self.start_i = dut.generate_challenge.decrypt.start_i
+        self.aes_read_data_i = dut.generate_challenge.decrypt.aes_read_data_i
+        self.input_cipher_i = dut.generate_challenge.decrypt.input_cipher_i
 
         # Outputs
-        self.error_o = dut.generate_challenge.error_o
-        self.challenge_valid_o = dut.generate_challenge.challenge_valid_o
-        self.challenge_response_o = dut.generate_challenge.challenge_response_o
-        self.aes_cs_o = dut.generate_challenge.aes_cs_o
-        self.aes_we_o = dut.generate_challenge.aes_we_o
-        self.aes_address_o = dut.generate_challenge.aes_address_o
-        self.aes_write_data_o = dut.generate_challenge.aes_write_data_o
+        self.aes_cs_o = dut.generate_challenge.decrypt.aes_cs_o
+        self.aes_we_o = dut.generate_challenge.decrypt.aes_we_o
+        self.aes_address_o = dut.generate_challenge.decrypt.aes_address_o
+        self.aes_write_data_o = dut.generate_challenge.decrypt.aes_write_data_o
+        self.rc = dut.generate_challenge.decrypt.rc
+        self.valid_o = dut.generate_challenge.decrypt.valid_o
 
-        # Relevant internal registers
-        self.cur_top_st = dut.generate_challenge.cur_top_st
-        self.nxt_top_st = dut.generate_challenge.nxt_top_st
-        self.d_cur_st = dut.generate_challenge.d_cur_st
-        self.d_nxt_st = dut.generate_challenge.d_nxt_st
+        # Internal registers
+        self.state = dut.generate_challenge.decrypt.state
+        self.next_state = dut.generate_challenge.decrypt.next_state
 
 
 async def start_clock(dut, period_ns=10):
@@ -110,7 +107,7 @@ async def auth_init__write_key_to_aes_core(dut):
     assert len(written_data) == 4, f"Expected 8 key‑word writes, but saw {len(written_data)}."
 
     for idx, (address, key_fragment) in enumerate(written_data):
-        expected_address = 0x14 + idx
+        expected_address = 0x10 + idx
         expected_key_fragment = 0x0a + idx
 
         assert address == expected_address, (
@@ -134,34 +131,40 @@ async def auth_init__write_key_to_aes_core(dut):
 
 
 @cocotb.test()
-async def auth_generate_challenge__decrypt_input_cipher(dut):
-    tester = AuthGenerateChallengeTester(dut)
+async def auth_decrypt__decrypt_input_cipher(dut):
+    tester = AuthDecryptTester(dut)
 
-    key = b'\x01' * 16
-    rc = b'\xff' * 8
+    key = b'\x2b\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c'
+    plain = b'\x6b\xc1\xbe\xe2\x2e\x40\x9f\x96\xe9\x3d\x7e\x11\x73\x93\x17\x2a'
+
     cipher = AES.new(key, AES.MODE_ECB)
-    ciphertext = cipher.encrypt(rc + b'\x00' * 8)
+    ciphertext = cipher.encrypt(plain)
+
+    dut._log.info(f"Using cipher: {hex(int.from_bytes(ciphertext))}")
 
     await start_clock(dut)
     await reset_dut(dut)
 
     tester.input_cipher_i.value = int.from_bytes(ciphertext)
     dut.start_i.value = 1
-    await RisingEdge(tester.dut.clk)
+    await RisingEdge(tester.clk)
 
     counter = 0
     while True:
-        await RisingEdge(tester.dut.clk)
+        await RisingEdge(tester.clk)
 
-        if tester.cur_top_st.value == 3:
+        if tester.valid_o.value == 1:
+            dut.start_i.value = 0
             break
 
+        counter += 1
         if counter == 1000:
             break
-        else:
-            counter += 1
 
-    # TODO: Assert that decrypted rc is equal to original rc
+
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+    assert tester.rc.value == int.from_bytes(plain), "Decrypted rc is different from original rc."
 
 
 def test_auth():
@@ -173,6 +176,7 @@ def test_auth():
         proj_path / "src" / "auth.sv",
         proj_path / "src" / "auth_init.sv",
         proj_path / "src" / "auth_generate_challenge.sv",
+        proj_path / "src" / "auth_decrypt.sv",
         proj_path / "src" / "auth_verify_id.sv",
         proj_path / "secworks-aes" / "src" / "rtl" / "aes.v",
         proj_path / "secworks-aes" / "src" / "rtl" / "aes_core.v",

@@ -75,7 +75,7 @@ module auth(
     reg id_valid;
     reg reg_start;
 
-    assign generate_challenge_ready = (!operation_i) & auth_init_done;
+    assign generate_challenge_ready = (!operation_i) & auth_init_done & start_i;
 
     aes aes(
         .clk(clk),

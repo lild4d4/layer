@@ -5,6 +5,7 @@ module auth_decrypt(
     input logic [31:0] aes_read_data_i,
     input logic [127:0] input_cipher_i,
 
+    output logic        valid_o,
     output logic        aes_cs_o,
     output logic        aes_we_o,
     output logic [7:0]  aes_address_o,
@@ -17,9 +18,9 @@ enum {
     WRITE_MODE,
     WRITE_KEY,
     WRITE_INIT,
+    READ_READY,
     WRITE_BLOCK,
     WRITE_NEXT,
-    READ_READY,
     READ_VALID,
     READ_RESULT
 } state, next_state;
@@ -27,7 +28,7 @@ enum {
 localparam ADDR_CTRL    = 8'h08;
 localparam ADDR_STATUS  = 8'h09;
 localparam ADDR_CONFIG  = 8'h0a;
-localparam ADDR_KEY0    = 8'h14;
+localparam ADDR_KEY0    = 8'h10;
 localparam ADDR_BLOCK0  = 8'h20;
 localparam ADDR_RESULT0 = 8'h30;
 
@@ -35,6 +36,7 @@ logic [1:0] key_count;
 logic [1:0] block_count;
 logic [1:0] result_count;
 
+reg           ready_buffer_reg;
 reg   [127:0] plain_reg;
 
 always_ff @(posedge clk) begin
@@ -43,6 +45,7 @@ always_ff @(posedge clk) begin
         key_count <= 2'd0;
         block_count <= 2'd0;
         result_count <= 2'd0;
+        ready_buffer_reg <= 1'b0;
         plain_reg <= 128'd0;
         rc <= 64'd0;
 
@@ -74,6 +77,23 @@ always_comb begin
     case(state)
         IDLE: begin
             if (start_i) begin
+                next_state = WRITE_KEY;
+            end
+        end
+
+        WRITE_KEY: begin
+            aes_cs_o = 1'b1;
+            aes_we_o = 1'b1;
+            aes_address_o = ADDR_KEY0 + key_count;
+            // TODO: placeholder key
+            case (key_count)
+                2'b00: aes_write_data_o = 32'h2b7e1516;
+                2'b01: aes_write_data_o = 32'h28aed2a6;
+                2'b10: aes_write_data_o = 32'habf71588;
+                2'b11: aes_write_data_o = 32'h09cf4f3c;
+            endcase
+
+            if (key_count == 2'd3) begin
                 next_state = WRITE_MODE;
             end
         end
@@ -82,27 +102,16 @@ always_comb begin
             aes_cs_o = 1'b1;
             aes_we_o = 1'b1;
             aes_address_o = ADDR_CONFIG;
-            aes_write_data_o = 32'b0;
+            aes_write_data_o = 8'h00;
 
-            next_state = WRITE_KEY;
-        end
-
-        WRITE_KEY: begin
-            aes_cs_o = 1'b1;
-            aes_we_o = 1'b1;
-            aes_address_o = ADDR_KEY0 + key_count;
-            aes_write_data_o = key_count;
-
-            if (key_count == 2'd3) begin
-                next_state = WRITE_INIT;
-            end
+            next_state = WRITE_INIT;
         end
 
         WRITE_INIT: begin
             aes_cs_o = 1'b1;
             aes_we_o = 1'b1;
             aes_address_o = ADDR_CTRL;
-            aes_write_data_o = 32'b1;
+            aes_write_data_o = 8'h01;
 
             next_state = READ_READY;
         end
@@ -121,13 +130,7 @@ always_comb begin
             aes_cs_o = 1'b1;
             aes_we_o = 1'b1;
             aes_address_o = ADDR_BLOCK0 + block_count;
-            //aes_write_data_o = input_cipher_i[127 - (block_count*32) -: 32];
-            case (key_count)
-                2'd0: aes_write_data_o = 32'he93d7e11;
-                2'd1: aes_write_data_o = 32'h0d7a3660;
-                2'd2: aes_write_data_o = 32'ha89ecaf3;
-                2'd3: aes_write_data_o = 32'h2466ef97;
-            endcase
+            aes_write_data_o = input_cipher_i[127 - (block_count*32) -: 32];
 
             if (block_count == 2'd3) begin
                 next_state = WRITE_NEXT;
@@ -160,6 +163,7 @@ always_comb begin
 
             if (result_count == 2'd3) begin
                 rc = plain_reg[127:64];
+                valid_o = 1'b1;
                 next_state = IDLE;
             end
         end
