@@ -57,6 +57,7 @@ module top_mfrc_version (
 
       .tx_data(spi_tx_data),
       .rx_data(spi_rx_data),
+      .cs_sel (1'b0),
 
       .sclk(sclk),
       .mosi(mosi),

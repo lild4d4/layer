@@ -72,6 +72,7 @@ module test_mfrc_reg_if_top (
       .r_len  (spi_r_len),
       .tx_data(spi_tx_data),
       .rx_data(spi_rx_data),
+      .cs_sel (1'b0),
 
       .sclk(sclk),
       .mosi(mosi),

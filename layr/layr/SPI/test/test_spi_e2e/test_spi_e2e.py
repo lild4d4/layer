@@ -40,7 +40,8 @@ async def reset_dut(dut):
     """Assert reset for RESET_CYCLES, then release and wait for init."""
     dut.rst.value = 1
 
-    # TODO: add other sensible default resets
+    dut.spi_miso.value = 1
+
     dut.eeprom_start.value = 0
     dut.eeprom_get_key.value = 0
 
