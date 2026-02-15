@@ -59,8 +59,35 @@ module spi_ctrl (
   wire       spi_done;
   wire       spi_busy;
 
+
+  // -- retention records --     
+  reg go_rec; 
+  reg spi_done_rec; 
+  reg spi_busy_rec; 
+
+  // Spi clock divisor
+  logic spi_clk;
+  logic spi_clk_d;  // delayed version for edge detection
+  logic spi_clk_en; // one-cycle pulse on rising edge of spi_clk
+
+  clock_divider divider(
+      .clk(clk),
+      .rst(rst),
+      .clk_out(spi_clk)
+  );
+
+  // Detect rising edge of spi_clk in the clk domain
+  always_ff @(posedge clk or posedge rst) begin
+      if (rst)
+          spi_clk_d <= 0;
+      else
+          spi_clk_d <= spi_clk;
+  end
+  assign spi_clk_en = spi_clk & ~spi_clk_d;
+
   spi_master u_spi (
       .clk     (clk),
+      .clk_en  (spi_clk_en),
       .reset   (rst),
       .data_in (spi_data_in),
       .start   (spi_start),
@@ -91,97 +118,113 @@ module spi_ctrl (
 
   always @(posedge clk or posedge rst) begin
     if (rst) begin
-      state       <= S_IDLE;
-      spi_data_in <= 8'd0;
-      spi_start   <= 1'b0;
-      cs0         <= 1'b1;
-      cs1         <= 1'b1;
-      cs_sel_r    <= 1'b0;
-      done        <= 1'b0;
-      busy        <= 1'b0;
-      w_cnt       <= 6'd0;
-      r_cnt       <= 6'd0;
-      byte_idx    <= 5'd0;
-      rx_data     <= 256'd0;
+      state        <= S_IDLE;
+      spi_data_in  <= 8'd0;
+      spi_start    <= 1'b0;
+      cs0          <= 1'b1;
+      cs1          <= 1'b1;
+      cs_sel_r     <= 1'b0;
+      done         <= 1'b0;
+      busy         <= 1'b0;
+      w_cnt        <= 6'd0;
+      r_cnt        <= 6'd0;
+      byte_idx     <= 5'd0;
+      rx_data      <= 256'd0;
+      go_rec       <= 1'b0;
+      spi_done_rec <= 1'b0;
+      spi_busy_rec <= 1'b0;
     end else begin
-      spi_start <= 1'b0;
-      done      <= 1'b0;
+      if (!spi_clk_en) begin
+        done      <= 1'b0;
+        if (go)
+          go_rec <= go; 
+        if (spi_done)
+          spi_done_rec <= spi_done;
+        if (spi_busy)
+          spi_busy_rec <= spi_busy;
+      end else begin
+        spi_start <= 1'b0;
+        go_rec <= 1'b0;
+        spi_done_rec <= 1'b0;
+        spi_busy_rec <= 1'b0;
 
-      case (state)
-        S_IDLE: begin
-          if (go && (w_len != 0 || r_len != 0)) begin
-            busy     <= 1'b1;
-            w_cnt    <= w_len;
-            r_cnt    <= r_len;
-            byte_idx <= 5'd0;
-            cs_sel_r <= cs_sel;  // latch selection at start
-            state    <= S_SS_ON;
+        case (state)
+          S_IDLE: begin
+            if (go_rec && (w_len != 0 || r_len != 0)) begin
+              busy     <= 1'b1;
+              w_cnt    <= w_len;
+              r_cnt    <= r_len;
+              byte_idx <= 5'd0;
+              cs_sel_r <= cs_sel;  // latch selection at start
+              state    <= S_SS_ON;
+            end
           end
-        end
 
-        // Assert selected CS and load the first byte
-        S_SS_ON: begin
-          if (cs_sel_r == 1'b0) cs0 <= 1'b0;  // select MFRC522
-          else cs1 <= 1'b0;  // select EEPROM
+          // Assert selected CS and load the first byte
+          S_SS_ON: begin
+            if (cs_sel_r == 1'b0) cs0 <= 1'b0;  // select MFRC522
+            else cs1 <= 1'b0;  // select EEPROM
 
-          if (w_cnt != 0) spi_data_in <= `TX_BYTE(0);
-          else spi_data_in <= 8'h00;
-          state <= S_START;
-        end
+            if (w_cnt != 0) spi_data_in <= `TX_BYTE(0);
+            else spi_data_in <= 8'h00;
+            state <= S_START;
+          end
 
-        // Pulse spi_start
-        S_START: begin
-          spi_start <= 1'b1;
-          state     <= S_WAIT;
-        end
+          // Pulse spi_start
+          S_START: begin
+            spi_start <= 1'b1;
+            if (spi_busy_rec)
+              state <= S_WAIT;
+          end
 
-        // Wait for byte to finish, then decide what's next
-        S_WAIT: begin
-          if (spi_done) begin
-            if (w_cnt != 0) begin
-              // ── write phase ──
-              w_cnt <= w_cnt - 1;
-              if (w_cnt == 1) begin
-                if (r_cnt != 0) begin
-                  byte_idx    <= 5'd0;
-                  spi_data_in <= 8'h00;
-                  state       <= S_START;
+          // Wait for byte to finish, then decide what's next
+          S_WAIT: begin
+            if (spi_done_rec) begin
+              if (w_cnt != 0) begin
+                // ── write phase ──
+                w_cnt <= w_cnt - 1;
+                if (w_cnt == 1) begin
+                  if (r_cnt != 0) begin
+                    byte_idx    <= 5'd0;
+                    spi_data_in <= 8'h00;
+                    state       <= S_START;
+                  end else begin
+                    state <= S_DONE;
+                  end
                 end else begin
-                  state <= S_DONE;
+                  byte_idx    <= byte_idx + 1;
+                  spi_data_in <= `TX_BYTE(byte_idx + 1);
+                  state       <= S_START;
                 end
               end else begin
-                byte_idx    <= byte_idx + 1;
-                spi_data_in <= `TX_BYTE(byte_idx + 1);
-                state       <= S_START;
-              end
-            end else begin
-              // ── read phase ──
-              rx_data[255-byte_idx*8-:8] <= spi_data_out;
-              r_cnt <= r_cnt - 1;
-              if (r_cnt == 1) begin
-                state <= S_DONE;
-              end else begin
-                byte_idx    <= byte_idx + 1;
-                spi_data_in <= 8'h00;
-                state       <= S_START;
+                // ── read phase ──
+                rx_data[255-byte_idx*8-:8] <= spi_data_out;
+                r_cnt <= r_cnt - 1;
+                if (r_cnt == 1) begin
+                  state <= S_DONE;
+                end else begin
+                  byte_idx    <= byte_idx + 1;
+                  spi_data_in <= 8'h00;
+                  state       <= S_START;
+                end
               end
             end
           end
-        end
 
-        // Deassert both CS lines, signal completion
-        S_DONE: begin
-          cs0   <= 1'b1;
-          cs1   <= 1'b1;
-          done  <= 1'b1;
-          busy  <= 1'b0;
-          state <= S_IDLE;
-        end
+          // Deassert both CS lines, signal completion
+          S_DONE: begin
+            cs0   <= 1'b1;
+            cs1   <= 1'b1;
+            done  <= 1'b1;
+            busy  <= 1'b0;
+            state <= S_IDLE;
+          end
 
-        default: state <= S_IDLE;
-      endcase
-    end
+          default: state <= S_IDLE;
+        endcase
+      end
   end
+end
 
 endmodule
 

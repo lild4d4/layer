@@ -351,6 +351,7 @@ def test_spi_ctrl_runner():
     src = proj_dir / "src"
 
     sources = [
+        src / "clock_divider.sv",
         src / "spi_master.sv",
         src / "spi_ctrl.sv",
         test_dir / "test_spi_ctrl_top.sv",

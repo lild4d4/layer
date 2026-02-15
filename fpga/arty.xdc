@@ -10,10 +10,11 @@ set_property IOSTANDARD LVCMOS33 [get_ports clk]
 #set_property -dict { PACKAGE_PIN F1    IOSTANDARD LVCMOS33 } [get_ports { sclk }]; #IO_L18P_T2_35 Sch=ck_sck
 #set_property -dict { PACKAGE_PIN C1    IOSTANDARD LVCMOS33 } [get_ports { ss }]; #IO_L16N_T2_35 Sch=ck_ss
 
-set_property -dict {PACKAGE_PIN V15 IOSTANDARD LVCMOS33} [get_ports ss]
 set_property -dict {PACKAGE_PIN U16 IOSTANDARD LVCMOS33} [get_ports miso]
 set_property -dict {PACKAGE_PIN P14 IOSTANDARD LVCMOS33} [get_ports mosi]
 set_property -dict {PACKAGE_PIN T11 IOSTANDARD LVCMOS33} [get_ports sclk]
+set_property -dict {PACKAGE_PIN V15 IOSTANDARD LVCMOS33} [get_ports cs0]
+set_property -dict {PACKAGE_PIN R16 IOSTANDARD LVCMOS33 } [get_ports cs1]
 
 
 ## ChipKit Inner Digital Header
@@ -25,7 +26,6 @@ set_property -dict {PACKAGE_PIN R11 IOSTANDARD LVCMOS33} [get_ports {last_read[4
 set_property -dict {PACKAGE_PIN R13 IOSTANDARD LVCMOS33} [get_ports {last_read[5]}]
 set_property -dict {PACKAGE_PIN R15 IOSTANDARD LVCMOS33} [get_ports {last_read[6]}]
 set_property -dict {PACKAGE_PIN P15 IOSTANDARD LVCMOS33} [get_ports {last_read[7]}]
-#set_property -dict { PACKAGE_PIN R16   IOSTANDARD LVCMOS33 } [get_ports { ck_io35 }]; #IO_L15P_T2_DQS_RDWR_B_14 Sch=ck_io[34]
 #set_property -dict { PACKAGE_PIN N16   IOSTANDARD LVCMOS33 } [get_ports { ck_io35 }]; #IO_L11N_T1_SRCC_14 Sch=ck_io[35]
 #set_property -dict { PACKAGE_PIN N14   IOSTANDARD LVCMOS33 } [get_ports { ck_io36 }]; #IO_L8P_T1_D11_14 Sch=ck_io[36]
 #set_property -dict { PACKAGE_PIN U17   IOSTANDARD LVCMOS33 } [get_ports { ck_io37 }]; #IO_L17P_T2_A14_D30_14 Sch=ck_io[37]
@@ -55,7 +55,7 @@ create_clock -period 10.000 [get_ports clk]
 
 
 connect_debug_port u_ila_0/probe1 [get_nets [list miso]]
-connect_debug_port u_ila_0/probe5 [get_nets [list ss_OBUF]]
+connect_debug_port u_ila_0/probe5 [get_nets [list cs0_OBUF]]
 
 connect_debug_port u_ila_0/probe1 [get_nets [list {u_spi/p_1_in[0]} {u_spi/p_1_in[1]} {u_spi/p_1_in[2]} {u_spi/p_1_in[3]} {u_spi/p_1_in[4]} {u_spi/p_1_in[5]} {u_spi/p_1_in[6]} {u_spi/p_1_in[7]}]]
 
@@ -96,7 +96,7 @@ connect_debug_port u_ila_0/probe4 [get_nets [list sclk_OBUF]]
 create_debug_port u_ila_0 probe
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe5]
 set_property port_width 1 [get_debug_ports u_ila_0/probe5]
-connect_debug_port u_ila_0/probe5 [get_nets [list ss_OBUF]]
+connect_debug_port u_ila_0/probe5 [get_nets [list cs0_OBUF]]
 set_property C_CLK_INPUT_FREQ_HZ 300000000 [get_debug_cores dbg_hub]
 set_property C_ENABLE_CLK_DIVIDER false [get_debug_cores dbg_hub]
 set_property C_USER_SCAN_CHAIN 1 [get_debug_cores dbg_hub]
