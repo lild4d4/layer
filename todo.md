@@ -1,4 +1,3 @@
 - remove cs from mfrc
 - check spi_arb impl
 - write e2e tests for whole spi module
-- spi clk div
