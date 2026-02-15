@@ -1,15 +1,15 @@
 module auth_init(
     input logic clk,
     input logic rst,
-    input logic start_i, // manually triggers init process
+    input tri0  start_i, // manually triggers init process
 
-    output logic        init_done,
+    output reg          init_done,
     output logic        aes_cs_o,
     output logic        aes_we_o,
     output logic [7:0]  aes_address_o,
     output logic [31:0] aes_write_data_o
 );
-    localparam AES_CORE_KEY_ADDR = 8'h14;
+    localparam AES_CORE_KEY_ADDR = 8'h10;
 
     enum {
         IDLE,
@@ -27,14 +27,15 @@ module auth_init(
             state           <= FETCH;
             key_index       <= 2'd0;
             key_loaded      <= 1'b0;
+            next_key_index  <= 2'd0;
+            next_key_loaded <= 1'b0;
             aes_cs_o        <= 1'b0;
             aes_we_o        <= 1'b0;
             aes_address_o   <= AES_CORE_KEY_ADDR;
             aes_write_data_o<= 32'b0;
 
-            foreach (reg_key[i]) begin
-                reg_key[i] <= 32'd0;
-            end
+            foreach (reg_key[i]) reg_key[i] <= 32'd0;
+
         end else begin
             state           <= next_state;
             key_index       <= next_key_index;
@@ -46,7 +47,7 @@ module auth_init(
         end
     end
 
-    always_comb begin
+    always_ff @(posedge clk) begin
         next_state      = state;
         next_key_index  = key_index;
         next_key_loaded = key_loaded;
@@ -65,6 +66,7 @@ module auth_init(
                 reg_key[key_index] = 32'd10 + key_index; //TODO: Read from EEPROM
                 if (key_index == 2'd3) begin
                     next_key_loaded = 1'b1;
+                    next_key_index  = 1'b0;
                     next_state      = CONFIG;
                 end
                 next_key_index = key_index + 2'd1;

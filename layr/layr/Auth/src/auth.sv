@@ -17,7 +17,7 @@ module auth(
     //   1 = Run selected operation with
     //       data_i as input.
     //--------------------------------------
-    input wire operation_i,
+    input tri0 operation_i,
     input wire start_i,
 
     //--------------------------------------
@@ -69,10 +69,13 @@ module auth(
     wire [31:0] auth_verify_id_aes_write_data;
 
     // misc
+    wire generate_challenge_ready;
     reg reg_operation;
     reg generate_challenge_valid;
     reg id_valid;
     reg reg_start;
+
+    assign generate_challenge_ready = (!operation_i) & auth_init_done;
 
     aes aes(
         .clk(clk),
@@ -108,7 +111,7 @@ module auth(
         .rst(rst),
 
         // Inputs
-        .ready_i(!reg_operation),
+        .ready_i(generate_challenge_ready),
         .input_cipher_i(reg_data_i),
         .aes_read_data_i(aes_read_data),
 
