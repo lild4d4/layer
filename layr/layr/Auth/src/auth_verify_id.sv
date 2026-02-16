@@ -1,31 +1,32 @@
 module auth_verify_id(
     input logic clk,
     input logic rst,
+    input logic ready,
+    input logic result_valid,
+    input logic aes_core_ready,
+    input logic [127:0] input_cipher,
+    input logic [127:0] aes_core_result,
+    input reg [127:0] input_key,
 
-    input logic ready_i,
-    input logic [127:0] id_cipher_i,
-
-    output logic error_o,
-    output logic success_o,
-    output reg aes_cs_o,
-    output reg aes_we_o,
-    output reg [7:0] aes_address_o,
-    output reg [31:0] aes_write_data_o
+    output logic valid,
+    output logic encdec,
+    output logic aes_core_init,
+    output logic aes_core_next,
+    output logic [127:0] key,
+    output logic [127:0] block,
+    output reg id_valid
 );
 
-    reg [127:0] reg_id_cipher;
-    wire reset_aes_key;
+enum {
+    IDLE,
+    DECRYPT,
+    CHECK_ID
+} state, next_state;
 
-    assign error_o = 1'b0;
-    assign success_o = 1'b0;
-
-    auth_init auth_init(
-        .start_i(reset_aes_key)
-    );
-
-    // TODO: calculate session_key = AES_psk(rc || rt)
-    // TODO: decrypt reg_id_cipher with session_key
-    // TODO: Verify that card ID is allowed
-    // TODO: If the card ID is in the allowed list, set success to 1
+always_ff @(posedge clk or posedge rst) begin
+    if (rst) begin
+        state <= IDLE;
+    end
+end
 
 endmodule

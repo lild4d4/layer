@@ -100,7 +100,7 @@ always_comb begin
             block = input_cipher;
 
             if (aes_handler_valid) begin
-                rc = aes_core_result[127:64];
+                rc = aes_core_result >> 64;
                 next_state = GET_RANDOM;
             end
         end

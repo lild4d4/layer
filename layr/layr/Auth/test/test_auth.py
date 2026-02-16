@@ -93,8 +93,6 @@ async def auth_challenge__full_flow(dut):
             challenge = dut.data_o.value
             await RisingEdge(dut.clk)
             break
-    dut._log.info(f"{hex(int.from_bytes(rt + rc))}")
-    dut._log.info(f"{hex(int.from_bytes(rc + rt))}")
 
     challenge_raw = rt + rc
     session_key_raw = rc + rt
