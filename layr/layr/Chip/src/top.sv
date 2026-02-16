@@ -102,7 +102,7 @@ module top (
   logic status_busy;
 
   // cs_1 PAD (Pin13 - spi chip select 1 - AT25010B)
-  sg13g2_IOPadOut cs_1_pad (
+  sg13g2_IOPadOut4mA cs_1_pad (
 `ifdef USE_POWER_PINS
       .iovdd(IOVDD),
       .iovss(IOVSS),
@@ -114,7 +114,7 @@ module top (
   );
 
   // cs_0 PAD (Pin14 - spi chip select 2 - MFRC522)
-  sg13g2_IOPadOut cs_0_pad (
+  sg13g2_IOPadOut4mA cs_0_pad (
 `ifdef USE_POWER_PINS
       .iovdd(IOVDD),
       .iovss(IOVSS),
@@ -126,7 +126,7 @@ module top (
   );
 
   // spi_mosi PAD (Pin16)
-  sg13g2_IOPadOut spi_mosi_pad (
+  sg13g2_IOPadOut4mA spi_mosi_pad (
 `ifdef USE_POWER_PINS
       .iovdd(IOVDD),
       .iovss(IOVSS),
@@ -138,7 +138,7 @@ module top (
   );
 
   // spi_sclk PAD (Pin17)
-  sg13g2_IOPadOut spi_sclk_pad (
+  sg13g2_IOPadOut4mA spi_sclk_pad (
 `ifdef USE_POWER_PINS
       .iovdd(IOVDD),
       .iovss(IOVSS),
@@ -150,7 +150,7 @@ module top (
   );
 
   // status_busy PAD (Pin23)
-  sg13g2_IOPadOut status_busy_pad (
+  sg13g2_IOPadOut4mA status_busy_pad (
 `ifdef USE_POWER_PINS
       .iovdd(IOVDD),
       .iovss(IOVSS),
