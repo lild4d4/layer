@@ -8,12 +8,14 @@ module auth_challenge(
     input logic [127:0] aes_core_result,
     input reg [127:0] input_key,
 
-    output logic [127:0] key,
-    output logic [127:0] block,
+    output logic valid,
     output logic encdec,
     output logic aes_core_init,
     output logic aes_core_next,
-    output logic valid
+    output logic [127:0] key,
+    output logic [127:0] block,
+    output reg [127:0] challenge_o,
+    output reg [127:0] session_key_o
 );
 
 wire random_valid;
@@ -29,6 +31,9 @@ reg [63:0] rc;
 reg [63:0] rt;
 reg [127:0] challenge;
 reg [127:0] session_key;
+
+assign challenge_o = challenge;
+assign session_key_o = session_key;
 
 auth_aes_handler u_aes_handler(
     .clk(clk),
@@ -107,18 +112,6 @@ always_comb begin
 
             if (random_valid) begin
                 rt = random_value;
-                next_state = ENCRYPT_CHALLENGE;
-            end
-        end
-
-        ENCRYPT_CHALLENGE: begin
-            aes_handler_ready = 1'b1;
-            encdec = 1'b0;
-            key = input_key;
-            block = {rt, rc};
-
-            if (aes_handler_valid) begin
-                challenge = aes_core_result;
                 next_state = ENCRYPT_SESSION_KEY;
             end
         end
@@ -130,8 +123,20 @@ always_comb begin
             block = {rc, rt};
 
             if (aes_handler_valid) begin
-                valid = 1'b1;
                 session_key = aes_core_result;
+                next_state = ENCRYPT_CHALLENGE;
+            end
+        end
+
+        ENCRYPT_CHALLENGE: begin
+            aes_handler_ready = 1'b1;
+            encdec = 1'b0;
+            key = input_key;
+            block = {rt, rc};
+
+            if (aes_handler_valid) begin
+                valid = 1'b1;
+                challenge = aes_core_result;
                 next_state = IDLE;
             end
         end

@@ -35,26 +35,33 @@ module auth(
     //       can be read from data_o
     //--------------------------------------
     input  tri0 [127:0] data_i,
-    output tri0 [127:0] data_o,
-    output wire valid_o
+    output reg [127:0] data_o,
+    output reg valid_o
 );
 
-reg [63:0] rc;
-reg [63:0] rt;
-reg [127:0] input_key;
+enum {
+    IDLE,
+    GENERATE_CHALLENGE,
+    VERIFY_ID
+} state, next_state;
 
 wire encdec;
 wire aes_core_init;
 wire aes_core_next;
 wire aes_core_ready;
+wire result_valid;
+wire auth_challenge_valid;
 wire [127:0] key;
 wire [127:0] block;
 wire [127:0] result;
-wire result_valid;
-wire auth_challenge_valid;
+wire [127:0] challenge_o;
+wire [127:0] session_key_o;
 
-assign ready = start_i;
-assign valid_o = auth_challenge_valid;
+logic generate_challenge_ready;
+
+reg [127:0] input_key;
+reg [127:0] session_key;
+
 // TODO: Next up, read chiper from data_i when in challenge mode and start_i
 // is set.
 
@@ -78,7 +85,7 @@ aes_core u_aes_core(
 auth_challenge u_auth_challenge(
     .clk(clk),
     .rst(rst),
-    .ready(ready),
+    .ready(generate_challenge_ready),
     .result_valid(result_valid),
     .input_cipher(data_i),
     .input_key(input_key),
@@ -90,15 +97,53 @@ auth_challenge u_auth_challenge(
     .aes_core_init(aes_core_init),
     .aes_core_next(aes_core_next),
     .aes_core_ready(aes_core_ready),
-    .valid(auth_challenge_valid)
+    .valid(auth_challenge_valid),
+    .challenge_o(challenge_o),
+    .session_key_o(session_key_o)
 );
 
 always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
-        rc <= 64'b0;
-        rt <= 64'b0;
         input_key <= 128'h0;
+        session_key <= 128'h0;
+        data_o <= 128'h0;
+        generate_challenge_ready <= 1'b0;
+        state <= IDLE;
+    end else begin
+        state <= next_state;
     end
+end
+
+always_comb begin
+    valid_o = 1'b0;
+
+    case(state)
+        IDLE: begin
+            if (start_i) begin
+                case(operation_i)
+                    1'b0: next_state = GENERATE_CHALLENGE;
+                    1'b1: next_state = VERIFY_ID;
+                endcase
+            end
+        end
+
+        GENERATE_CHALLENGE: begin
+            generate_challenge_ready = 1'b1;
+
+            if (auth_challenge_valid) begin
+                session_key = session_key_o;
+                data_o = challenge_o;
+                valid_o = 1'b1;
+                next_state = IDLE;
+            end
+        end
+
+        VERIFY_ID: begin
+            next_state = IDLE;
+        end
+
+        default: next_state = IDLE;
+    endcase
 end
 
 endmodule

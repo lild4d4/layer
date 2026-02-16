@@ -49,11 +49,12 @@ always_ff @(posedge clk or posedge rst) begin
         ready <= 1'b1;
         busy <= 1'b0;
         counter <= 5'b0;
+        state <= multi_shift(state);
     end else begin
         ready <= !busy;
         valid <= 1'b0;
-        state <= multi_shift(state);
         counter <= counter + 5'b1;
+        state <= multi_shift(state);
     end
 end 
 
