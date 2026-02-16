@@ -2,76 +2,12 @@ import os
 from pathlib import Path
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, Timer, First
-from cocotbext.spi import SpiBus
-
-import sys
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from test_at25010b.at25010b_mock import AT25010B_EEPROM
-from test_mfrc522.mock_mfrc522 import Mfrc522SpiSlave
-
+from at25010b_helpers import eeprom_setup, eeprom_send_cmd, KEY_A, ID_A
+from mfrc522_helpers import mfrc_setup, mfrc_reqa, mfrc_anticoll, mfrc_select, mfrc_wupa
+from helpers import reset_dut
 from cocotb_tools.runner import get_runner
 
 CLK_PERIOD_NS = 10  # 100Mhz
-RESET_CYCLES = 5
-TRANSACTION_TIMEOUT_US = 500
-
-
-def build_spi_bus(dut, cs: int) -> SpiBus:
-    """
-    Build a SpiBus from the tb_top SPI port using custom signal names.
-
-    The SpiBus.from_entity() method automatically finds signals by name,
-    so we tell it the actual signal names used in eeprom_wire_modules.sv.
-    """
-
-    return SpiBus.from_entity(
-        dut,
-        sclk_name="spi_sclk",
-        mosi_name="spi_mosi",
-        miso_name="spi_miso",
-        cs_name=f"cs_{cs}",
-    )
-
-
-async def reset_dut(dut):
-    """Assert reset for RESET_CYCLES, then release and wait for init."""
-    dut.rst.value = 1
-
-    dut.spi_miso.value = 1
-
-    dut.eeprom_start.value = 0
-    dut.eeprom_get_key.value = 0
-
-    dut.mfrc_trx_valid.value = 0
-    dut.mfrc_trx_tx_len.value = 0
-    dut.mfrc_trx_tx_data.value = 0
-    dut.mfrc_trx_tx_last_bits.value = 0
-    dut.mfrc_trx_timeout_cycles.value = 0
-    dut.mfrc_ver_valid.value = 0
-
-    for _ in range(RESET_CYCLES):
-        await RisingEdge(dut.clk)
-
-    dut.rst.value = 0
-
-    await RisingEdge(dut.clk)
-
-
-async def wait_done(dut, wait_cond, timeout_us: int = TRANSACTION_TIMEOUT_US) -> None:
-    """
-    Block until wait_done pulses high, or raise TestFailure on timeout.
-    """
-    timeout_trigger = Timer(timeout_us, "us")
-    done_trigger = RisingEdge(wait_cond)
-
-    result = await First(done_trigger, timeout_trigger)
-    if result is timeout_trigger:
-        raise Exception(f"Timed out after {timeout_us} µs waiting for done. ")
-
-    await RisingEdge(dut.clk)
 
 
 async def setup(dut):
@@ -86,145 +22,8 @@ async def setup(dut):
 
 
 #
-# EEPROM Stuff
+# AT25010B Tests
 #
-
-KEY_A = bytes.fromhex("39558d1f193656ab8b4b65e25ac48474")
-ID_A = bytes.fromhex("bbe8278a67f960605adafd6f63cf7ba7")
-
-
-async def eeprom_setup(dut) -> AT25010B_EEPROM:
-    """
-    Start the simulation clock, reset the DUT, and attach the EEPROM mock.
-    Returns the mock so tests can pre-load / inspect memory.
-    """
-    eeprom = AT25010B_EEPROM(build_spi_bus(dut, 1))
-
-    eeprom.load_memory(KEY_A, offset=0x00)
-    eeprom.load_memory(ID_A, offset=0x40)
-
-    return eeprom
-
-
-async def eeprom_send_cmd(dut, get_key: int) -> None:
-    """
-    Drive a one-cycle eeprom_start pulse to start a transaction.
-
-    The caller must then wait for cmd_done (use wait_done()).
-    """
-    dut.eeprom_get_key.value = get_key
-    dut.eeprom_start.value = 1
-    await RisingEdge(dut.clk)
-    dut.eeprom_start.value = 0
-
-    await wait_done(dut, dut.eeprom_done)
-
-    return dut.eeprom_rbuffer.value
-
-
-#
-# MFRC Stuff
-#
-
-
-async def mfrc_setup(dut):
-    mfrc = Mfrc522SpiSlave(build_spi_bus(dut, 0))
-
-    return mfrc
-
-
-def _bytes_to_int(byte_list: list[int]) -> int:
-    """Pack bytes into 256-bit integer (byte 0 = MSB)."""
-    val = 0
-    for b in byte_list:
-        val = (val << 8) | b
-    val <<= (32 - len(byte_list)) * 8
-    return val
-
-
-def _int_to_bytes(val: int, count: int) -> list[int]:
-    """Extract count bytes from a 256-bit integer (byte 0 = MSB)."""
-    result = []
-    for i in range(count):
-        shift = 255 - i * 8
-        result.append((val >> (shift - 7)) & 0xFF)
-    return result
-
-
-async def mfrc_transceive(
-    dut, tx_bytes: list[int], tx_last_bits: int = 0, timeout_cycles: int = 1000
-) -> dict:
-    """Execute transceive, return {ok, rx_len, rx_data, rx_last_bits, error}."""
-    for _ in range(10):
-        if dut.mfrc_trx_ready.value == 1:
-            break
-        await RisingEdge(dut.clk)
-
-    dut.mfrc_trx_tx_len.value = len(tx_bytes) - 1
-    dut.mfrc_trx_tx_data.value = _bytes_to_int(tx_bytes)
-    dut.mfrc_trx_tx_last_bits.value = tx_last_bits
-    dut.mfrc_trx_timeout_cycles.value = timeout_cycles
-    dut.mfrc_trx_valid.value = 1
-    await RisingEdge(dut.clk)
-    dut.mfrc_trx_valid.value = 0
-
-    clk_budget = timeout_cycles * 60 + 10_000
-    for _ in range(clk_budget):
-        await RisingEdge(dut.clk)
-        if dut.mfrc_trx_done.value == 1:
-            break
-    else:
-        raise Exception("Timed out waiting for mfrc_trx_done")
-
-    rx_len_enc = int(dut.mfrc_trx_rx_len.value)
-    rx_count = rx_len_enc + 1
-    rx_data_int = int(dut.mfrc_trx_rx_data.value)
-    rx_bytes = _int_to_bytes(rx_data_int, rx_count)
-
-    return {
-        "ok": bool(dut.mfrc_trx_ok.value),
-        "rx_len": rx_count,
-        "rx_data": rx_bytes,
-        "rx_last_bits": int(dut.mfrc_trx_rx_last_bits.value),
-        "error": int(dut.mfrc_trx_error.value),
-    }
-
-
-async def mfrc_reqa(dut) -> dict:
-    """Send REQA (0x26), check for card. Returns transceive result."""
-    return await mfrc_transceive(dut, tx_bytes=[0x26], tx_last_bits=7)
-
-
-async def mfrc_wupa(dut) -> dict:
-    """Send WUPA (0x52), wake up card. Returns transceive result."""
-    return await mfrc_transceive(dut, tx_bytes=[0x52], tx_last_bits=7)
-
-
-async def mfrc_anticoll(dut) -> dict:
-    """Send ANTICOLL CL1 (0x93 0x20), get UID. Returns transceive result."""
-    return await mfrc_transceive(dut, tx_bytes=[0x93, 0x20])
-
-
-async def mfrc_select(dut, uid: list[int]) -> dict:
-    """Send SELECT CL1 with UID, select card. Returns transceive result."""
-    bcc = uid[0] ^ uid[1] ^ uid[2] ^ uid[3]
-    select_cmd = [0x93, 0x70] + uid + [bcc]
-    return await mfrc_transceive(dut, tx_bytes=select_cmd)
-
-
-#
-# Tests
-#
-
-
-@cocotb.test()
-async def test_reset_state(dut):
-    """After reset, eeprom_busy must be low and eeprom_done must be low."""
-    await setup(dut)
-    await RisingEdge(dut.clk)
-
-    assert int(dut.eeprom_busy.value) == 0, "busy should be 0 after reset"
-    assert int(dut.eeprom_done.value) == 0, "done should be 0 after reset"
 
 
 @cocotb.test()
@@ -245,6 +44,28 @@ async def test_eeprom_get_id(dut):
     result = await eeprom_send_cmd(dut, 0)
     expected = int.from_bytes(ID_A, byteorder="big")
     assert result == expected, f"Expected {expected:#x}, got {result:#x}"
+
+
+@cocotb.test()
+async def test_eeprom_conseq(dut):
+    """Read 128 bits (16 bytes) from EEPROM starting at address 0x00."""
+    _ = await setup(dut)
+
+    result = await eeprom_send_cmd(dut, 0)
+    expected = int.from_bytes(ID_A, byteorder="big")
+    assert result == expected, f"1: Expected {expected:#x}, got {result:#x}"
+
+    result = await eeprom_send_cmd(dut, 1)
+    expected = int.from_bytes(KEY_A, byteorder="big")
+    assert result == expected, f"2: Expected {expected:#x}, got {result:#x}"
+
+    result = await eeprom_send_cmd(dut, 1)
+    expected = int.from_bytes(KEY_A, byteorder="big")
+    assert result == expected, f"3: Expected {expected:#x}, got {result:#x}"
+
+    result = await eeprom_send_cmd(dut, 0)
+    expected = int.from_bytes(ID_A, byteorder="big")
+    assert result == expected, f"4: Expected {expected:#x}, got {result:#x}"
 
 
 #
@@ -328,6 +149,331 @@ async def test_mfrc_card_activate_sequence(dut):
     result = await mfrc_select(dut, uid)
     assert result["ok"]
     assert result["rx_data"][0] == 0x08
+
+
+# ---------------------------------------------------------------------------
+# Test: Simultaneous requests – first pair
+# ---------------------------------------------------------------------------
+
+
+@cocotb.test()
+async def test_simultaneous_first_grant_default(dut):
+    """
+    When both clients request at the same time (from reset),
+    rr_pref=0 so client A should be granted first, then B.
+    """
+    await setup(dut)
+
+    # Launch both transactions concurrently
+    eeprom_task = cocotb.start_soon(eeprom_send_cmd(dut, 1))
+    mfrc_task = cocotb.start_soon(mfrc_reqa(dut))
+
+    eeprom_result = await eeprom_task
+    mfrc_result = await mfrc_task
+
+    # Both should succeed
+    expected_key = int.from_bytes(KEY_A, byteorder="big")
+    assert (
+        eeprom_result == expected_key
+    ), f"EEPROM read failed: expected {expected_key:#x}, got {eeprom_result:#x}"
+    assert mfrc_result["ok"], f"MFRC REQA failed: error={mfrc_result['error']:#04x}"
+    assert mfrc_result["rx_data"] == [
+        0x04,
+        0x00,
+    ], f"Expected ATQA, got {mfrc_result['rx_data']}"
+
+
+@cocotb.test()
+async def test_simultaneous_first_grant_alternates(dut):
+    """
+    Two back-to-back simultaneous requests should alternate:
+    Round 1: A first (rr_pref starts at 0), then B
+    Round 2: B first (rr_pref flipped), then A
+
+    We verify both complete successfully each time.
+    """
+    await setup(dut)
+
+    # --- Round 1: both request simultaneously ---
+    e1 = cocotb.start_soon(eeprom_send_cmd(dut, 1))
+    m1 = cocotb.start_soon(mfrc_reqa(dut))
+    r_e1 = await e1
+    r_m1 = await m1
+
+    expected_key = int.from_bytes(KEY_A, byteorder="big")
+    assert r_e1 == expected_key, f"Round 1 EEPROM failed"
+    assert r_m1["ok"], f"Round 1 MFRC failed"
+
+    # --- Round 2: both request simultaneously again ---
+    e2 = cocotb.start_soon(eeprom_send_cmd(dut, 0))
+    m2 = cocotb.start_soon(mfrc_reqa(dut))
+    r_e2 = await e2
+    r_m2 = await m2
+
+    expected_id = int.from_bytes(ID_A, byteorder="big")
+    assert r_e2 == expected_id, f"Round 2 EEPROM failed"
+    assert r_m2["ok"], f"Round 2 MFRC failed"
+
+
+# ---------------------------------------------------------------------------
+# Test: Sequential single-client requests (no contention)
+# ---------------------------------------------------------------------------
+
+
+@cocotb.test()
+async def test_eeprom_then_mfrc_no_contention(dut):
+    """
+    Client A finishes, then client B requests. No arbitration conflict.
+    Both should succeed normally.
+    """
+    await setup(dut)
+
+    # EEPROM first (no contention)
+    result_a = await eeprom_send_cmd(dut, 1)
+    expected_key = int.from_bytes(KEY_A, byteorder="big")
+    assert result_a == expected_key, f"EEPROM read failed"
+
+    # MFRC second (no contention)
+    result_b = await mfrc_reqa(dut)
+    assert result_b["ok"], f"MFRC REQA failed"
+    assert result_b["rx_data"] == [0x04, 0x00]
+
+
+@cocotb.test()
+async def test_mfrc_then_eeprom_no_contention(dut):
+    """
+    Client B finishes, then client A requests. No arbitration conflict.
+    """
+    await setup(dut)
+
+    result_b = await mfrc_reqa(dut)
+    assert result_b["ok"], f"MFRC REQA failed"
+
+    result_a = await eeprom_send_cmd(dut, 0)
+    expected_id = int.from_bytes(ID_A, byteorder="big")
+    assert result_a == expected_id, f"EEPROM read failed"
+
+
+# ---------------------------------------------------------------------------
+# Test: Repeated back-to-back single-client doesn't starve
+# ---------------------------------------------------------------------------
+
+
+@cocotb.test()
+async def test_eeprom_back_to_back(dut):
+    """
+    Multiple EEPROM transactions in a row (no MFRC contention).
+    Ensures the arbiter doesn't get stuck after repeated same-client use.
+    """
+    await setup(dut)
+
+    for i in range(4):
+        get_key = i % 2  # alternate key/id reads
+        result = await eeprom_send_cmd(dut, get_key)
+        if get_key:
+            expected = int.from_bytes(KEY_A, byteorder="big")
+        else:
+            expected = int.from_bytes(ID_A, byteorder="big")
+        assert result == expected, f"EEPROM iteration {i} failed"
+
+
+@cocotb.test()
+async def test_mfrc_back_to_back(dut):
+    """
+    Multiple MFRC transactions in a row (no EEPROM contention).
+    """
+    await setup(dut)
+
+    for i in range(4):
+        result = await mfrc_reqa(dut)
+        assert result["ok"], f"MFRC iteration {i} failed: error={result['error']:#04x}"
+        assert result["rx_data"] == [0x04, 0x00], f"MFRC iteration {i} bad ATQA"
+
+
+# ---------------------------------------------------------------------------
+# Test: Fairness over many simultaneous requests
+# ---------------------------------------------------------------------------
+
+
+@cocotb.test()
+async def test_fairness_many_simultaneous(dut):
+    """
+    Launch 6 rounds of simultaneous requests. All should complete
+    successfully, demonstrating the arbiter doesn't favor one client.
+    """
+    await setup(dut)
+
+    expected_key = int.from_bytes(KEY_A, byteorder="big")
+    expected_id = int.from_bytes(ID_A, byteorder="big")
+
+    for i in range(6):
+        get_key = i % 2
+        e = cocotb.start_soon(eeprom_send_cmd(dut, get_key))
+        m = cocotb.start_soon(mfrc_reqa(dut))
+
+        r_e = await e
+        r_m = await m
+
+        expected = expected_key if get_key else expected_id
+        assert r_e == expected, f"Round {i} EEPROM failed"
+        assert r_m["ok"], f"Round {i} MFRC failed"
+
+
+# ---------------------------------------------------------------------------
+# Test: Interleaved — one client mid-transaction, other arrives
+# ---------------------------------------------------------------------------
+
+
+@cocotb.test()
+async def test_mfrc_arrives_during_eeprom(dut):
+    """
+    Start an EEPROM read, then while it's in-flight start an MFRC request.
+    The MFRC should wait and then succeed after EEPROM completes.
+    """
+    await setup(dut)
+
+    # Start EEPROM (will take many SPI clocks)
+    eeprom_task = cocotb.start_soon(eeprom_send_cmd(dut, 1))
+
+    # Wait a few clocks so EEPROM is mid-transaction
+    for _ in range(50):
+        await RisingEdge(dut.clk)
+
+    # Now start MFRC — should be queued
+    mfrc_task = cocotb.start_soon(mfrc_reqa(dut))
+
+    r_e = await eeprom_task
+    r_m = await mfrc_task
+
+    expected_key = int.from_bytes(KEY_A, byteorder="big")
+    assert r_e == expected_key, f"EEPROM read failed"
+    assert r_m["ok"], f"MFRC REQA failed after waiting"
+
+
+@cocotb.test()
+async def test_eeprom_arrives_during_mfrc(dut):
+    """
+    Start an MFRC REQA, then while it's in-flight start an EEPROM request.
+    The EEPROM should wait and then succeed after MFRC completes.
+    """
+    await setup(dut)
+
+    mfrc_task = cocotb.start_soon(mfrc_reqa(dut))
+
+    for _ in range(50):
+        await RisingEdge(dut.clk)
+
+    eeprom_task = cocotb.start_soon(eeprom_send_cmd(dut, 0))
+
+    r_m = await mfrc_task
+    r_e = await eeprom_task
+
+    assert r_m["ok"], f"MFRC REQA failed"
+    expected_id = int.from_bytes(ID_A, byteorder="big")
+    assert r_e == expected_id, f"EEPROM read failed after waiting"
+
+
+# ---------------------------------------------------------------------------
+# Test: Rapid alternating requests (A, B, A, B without overlap)
+# ---------------------------------------------------------------------------
+
+
+@cocotb.test()
+async def test_rapid_alternating(dut):
+    """
+    Quickly alternate: EEPROM → MFRC → EEPROM → MFRC, each sequential.
+    Verifies arbiter state doesn't get corrupted by rapid switching.
+    """
+    await setup(dut)
+
+    expected_key = int.from_bytes(KEY_A, byteorder="big")
+
+    for i in range(4):
+        if i % 2 == 0:
+            r = await eeprom_send_cmd(dut, 1)
+            assert r == expected_key, f"Step {i} EEPROM failed"
+        else:
+            r = await mfrc_reqa(dut)
+            assert r["ok"], f"Step {i} MFRC failed"
+
+
+# ---------------------------------------------------------------------------
+# Test: MFRC ANTICOLL with simultaneous EEPROM
+# ---------------------------------------------------------------------------
+
+
+@cocotb.test()
+async def test_anticoll_simultaneous_with_eeprom(dut):
+    """
+    Simultaneous ANTICOLL (longer MFRC transaction) + EEPROM read.
+    Tests that longer multi-byte SPI transactions also work under contention.
+    """
+    await setup(dut)
+
+    eeprom_task = cocotb.start_soon(eeprom_send_cmd(dut, 1))
+    mfrc_task = cocotb.start_soon(mfrc_anticoll(dut))
+
+    r_e = await eeprom_task
+    r_m = await mfrc_task
+
+    expected_key = int.from_bytes(KEY_A, byteorder="big")
+    assert r_e == expected_key, f"EEPROM failed"
+    assert r_m["ok"], f"ANTICOLL failed"
+    assert r_m["rx_len"] == 5, f"Expected 5 bytes UID+BCC, got {r_m['rx_len']}"
+
+
+# ---------------------------------------------------------------------------
+# Test: Stress — many simultaneous rounds with varied operations
+# ---------------------------------------------------------------------------
+
+
+@cocotb.test()
+async def test_stress_mixed_operations(dut):
+    """
+    Stress test: 8 rounds of simultaneous requests mixing different
+    EEPROM addresses and MFRC commands.
+    """
+    await setup(dut)
+
+    expected_key = int.from_bytes(KEY_A, byteorder="big")
+    expected_id = int.from_bytes(ID_A, byteorder="big")
+
+    operations = [
+        (1, "reqa"),
+        (0, "reqa"),
+        (1, "anticoll"),
+        (0, "anticoll"),
+        (1, "reqa"),
+        (0, "reqa"),
+        (1, "anticoll"),
+        (0, "anticoll"),
+    ]
+
+    for i, (get_key, mfrc_op) in enumerate(operations):
+        if mfrc_op == "reqa":
+            mfrc_coro = mfrc_reqa(dut)
+        else:
+            mfrc_coro = mfrc_anticoll(dut)
+
+        eeprom_task = cocotb.start_soon(eeprom_send_cmd(dut, get_key))
+        mfrc_task = cocotb.start_soon(mfrc_coro)
+
+        r_e = await eeprom_task
+        r_m = await mfrc_task
+
+        expected = expected_key if get_key else expected_id
+        assert r_e == expected, f"Round {i} EEPROM (get_key={get_key}) failed"
+        assert r_m["ok"], f"Round {i} MFRC ({mfrc_op}) failed"
+
+        if mfrc_op == "reqa":
+            assert r_m["rx_data"] == [
+                0x04,
+                0x00,
+            ], f"Round {i} bad ATQA: {r_m['rx_data']}"
+        else:
+            assert (
+                r_m["rx_len"] == 5
+            ), f"Round {i} ANTICOLL expected 5 bytes, got {r_m['rx_len']}"
 
 
 #

@@ -186,20 +186,24 @@ class AT25010B_EEPROM(SpiSlaveBase):
 
         opcode = int(await self._shift(8, tx_word=0))
 
-        if opcode == _WREN:
-            self._handle_wren()
-        elif opcode == _WRDI:
-            self._handle_wrdi()
-        elif opcode == _RDSR:
-            await self._handle_rdsr()
-        elif opcode == _WRSR:
-            await self._handle_wrsr()
-        elif opcode == _READ:
-            await self._handle_read()
-        elif opcode == _WRITE:
-            await self._handle_write()
-        else:
-            cocotb.log.warning(f"AT25010B: unknown opcode {opcode:#04x} - ignoring")
+        try:
+            if opcode == _WREN:
+                self._handle_wren()
+            elif opcode == _WRDI:
+                self._handle_wrdi()
+            elif opcode == _RDSR:
+                await self._handle_rdsr()
+            elif opcode == _WRSR:
+                await self._handle_wrsr()
+            elif opcode == _READ:
+                await self._handle_read()
+            elif opcode == _WRITE:
+                await self._handle_write()
+            else:
+                cocotb.log.warning(f"AT25010B: unknown opcode {opcode:#04x} - ignoring")
+        except Exception:
+            # frame_end already consumed by SpiFrameError
+            return
 
         await frame_end
 
@@ -210,12 +214,12 @@ class AT25010B_EEPROM(SpiSlaveBase):
     def _handle_wren(self):
         """WREN (0x06): assert WEL. Single-byte transaction."""
         self.status_register |= _SR_WEL
-        cocotb.log.debug("AT25010B: WREN - WEL set")
+        cocotb.log.info("AT25010B: WREN - WEL set")
 
     def _handle_wrdi(self):
         """WRDI (0x04): deassert WEL. Single-byte transaction."""
         self.status_register &= ~_SR_WEL
-        cocotb.log.debug("AT25010B: WRDI - WEL cleared")
+        cocotb.log.info("AT25010B: WRDI - WEL cleared")
 
     async def _handle_rdsr(self):
         """
@@ -244,7 +248,7 @@ class AT25010B_EEPROM(SpiSlaveBase):
             new_sr_byte & _SR_WRITABLE_MASK
         )
         self.status_register &= ~_SR_WEL
-        cocotb.log.debug(f"AT25010B: WRSR - SR now {self.status_register:#04x}")
+        cocotb.log.info(f"AT25010B: WRSR - SR now {self.status_register:#04x}")
 
     async def _handle_read(self):
         """
@@ -261,14 +265,16 @@ class AT25010B_EEPROM(SpiSlaveBase):
         addr_byte = int(await self._shift(8, tx_word=0))
         addr = addr_byte & 0x7F
 
-        cocotb.log.debug(f"AT25010B: READ from {addr:#04x}")
-
+        cocotb.log.info(f"AT25010B: READ from {addr:#04x}")
+        byte_index = 0
         try:
             while True:
                 await self._shift(8, tx_word=self.memory[addr % _MEMORY_SIZE])
                 addr = (addr + 1) % _MEMORY_SIZE
+                byte_index += 1
         except Exception:
-            pass  # CS deasserted - normal end of streaming read
+            cocotb.log.info(f"READ: loop ended after {byte_index} bytes")
+            raise  # <-- RE-RAISE so _transaction skips await frame_end
 
     async def _handle_write(self):
         """
@@ -301,7 +307,7 @@ class AT25010B_EEPROM(SpiSlaveBase):
         page_base = (addr // _PAGE_SIZE) * _PAGE_SIZE
         page_offset = addr % _PAGE_SIZE
 
-        cocotb.log.debug(f"AT25010B: WRITE to {addr:#04x} (page_base={page_base:#04x})")
+        cocotb.log.info(f"AT25010B: WRITE to {addr:#04x} (page_base={page_base:#04x})")
 
         byte_count = 0
         try:
@@ -322,12 +328,12 @@ class AT25010B_EEPROM(SpiSlaveBase):
         except Exception:
             pass  # CS deasserted - normal end of write
 
-        cocotb.log.debug(f"AT25010B: WRITE complete - {byte_count} byte(s) processed")
+        cocotb.log.info(f"AT25010B: WRITE complete - {byte_count} byte(s) processed")
         self.status_register &= ~_SR_WEL
 
     async def _send_status(self):
         """Drive the status register byte onto MISO (used by RDSR)."""
-        cocotb.log.debug(f"AT25010B: RDSR - SR={self.status_register:#04x}")
+        cocotb.log.info(f"AT25010B: RDSR - SR={self.status_register:#04x}")
         await self._shift(8, tx_word=self.status_register)
 
     # ------------------------------------------------------------------
