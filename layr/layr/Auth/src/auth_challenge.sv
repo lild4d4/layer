@@ -118,7 +118,7 @@ always_comb begin
 
         ENCRYPT_SESSION_KEY: begin
             aes_handler_ready = 1'b1;
-            encdec = 1'b0;
+            encdec = 1'b1;
             key = input_key;
             block = {rc, rt};
 
@@ -130,7 +130,7 @@ always_comb begin
 
         ENCRYPT_CHALLENGE: begin
             aes_handler_ready = 1'b1;
-            encdec = 1'b0;
+            encdec = 1'b1;
             key = input_key;
             block = {rt, rc};
 

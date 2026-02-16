@@ -96,10 +96,10 @@ async def auth_challenge__full_flow(dut):
     dut._log.info(f"{hex(int.from_bytes(rt + rc))}")
     dut._log.info(f"{hex(int.from_bytes(rc + rt))}")
 
-    cipher = AES.new(key, AES.MODE_ECB)
-    challenge = cipher.encrypt(rt + rc)
-    cipher = AES.new(key, AES.MODE_ECB)
-    session_key = cipher.encrypt(rc + rt)
+    challenge_raw = rt + rc
+    session_key_raw = rc + rt
+    challenge = cipher.encrypt(challenge_raw)
+    session_key = cipher.encrypt(session_key_raw)
 
     assert dut.data_o.value == int.from_bytes(challenge), f"challenge value mismatch: {hex(dut.data_o.value)} != {hex(int.from_bytes(challenge))}"
     assert dut.u_auth_challenge.session_key.value == int.from_bytes(session_key), f"session key mismatch: {dut.u_auth_challenge.session_key.value} != {hex(int.from_bytes(session_key))}"
