@@ -4,7 +4,8 @@ module auth_decrypt(
     input logic ready,
     input logic aes_core_ready,
     input logic result_valid,
-    input logic [127:0] result,
+    input logic [127:0] input_cipher,
+    input logic [127:0] input_key,
 
     output logic [127:0] key,
     output logic [127:0] block,
@@ -54,7 +55,7 @@ always_comb begin
         end
 
         WRITE_KEY: begin
-            key = 128'h2b7e151628aed2a6abf7158809cf4f3c;
+            key = input_key;
             aes_core_init = 1'b1;
             next_state = READ_READY;
         end
@@ -66,7 +67,7 @@ always_comb begin
         end
 
         WRITE_BLOCK: begin
-            block = 128'h3ad77bb40d7a3660a89ecaf32466ef97;
+            block = input_cipher;
             aes_core_next = 1'b1;
             next_state = READ_VALID;
         end

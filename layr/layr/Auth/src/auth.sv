@@ -39,18 +39,26 @@ module auth(
     output wire valid_o
 );
 
+reg [63:0] rc;
+reg [63:0] rt;
+
 wire encdec;
 wire aes_core_init;
 wire aes_core_next;
 wire aes_core_ready;
+wire [127:0] input_key;
 wire [127:0] key;
 wire [127:0] block;
 wire [127:0] result;
 wire result_valid;
 
 assign ready = start_i;
-
 assign valid_o = result_valid;
+
+// TODO: Next up, read chiper from data_i when in challenge mode and start_i
+// is set.
+
+// TODO: Add ready wire to indicate when the module is busy.
 
 aes_core u_aes_core(
     .clk(clk),
@@ -72,7 +80,8 @@ auth_challenge u_auth_challenge(
     .rst(rst),
     .ready(ready),
     .result_valid(result_valid),
-    .result(result),
+    .input_cipher(data_i),
+    .input_key(input_key),
 
     .key(key),
     .block(block),

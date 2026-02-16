@@ -4,7 +4,8 @@ module auth_challenge(
     input logic ready,
     input logic result_valid,
     input logic aes_core_ready,
-    input logic [127:0] result,
+    input logic [127:0] input_cipher,
+    input logic [127:0] input_key,
 
     output logic [127:0] key,
     output logic [127:0] block,
@@ -29,7 +30,8 @@ auth_decrypt u_auth_decrypt(
     .rst(rst),
     .ready(decrypt_ready),
     .result_valid(result_valid),
-    .result(result),
+    .input_cipher(input_cipher),
+    .input_key(input_key),
 
     .key(key),
     .block(block),
@@ -53,7 +55,6 @@ always_ff @(posedge clk or posedge rst) begin
         rt <= 64'd0;
     end else begin
         state <= next_state;
-        if (result_valid) rc <= result[127:64];
     end
 end
 

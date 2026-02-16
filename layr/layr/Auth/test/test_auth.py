@@ -24,7 +24,6 @@ class AuthDecryptTester:
 
         # Outputs
         self.valid = dut.u_auth_challenge.u_auth_decrypt.valid
-        self.result = dut.u_auth_challenge.u_auth_decrypt.result
 
 
 async def start_clock(dut, period_ns=10):
@@ -57,6 +56,7 @@ async def auth_decrypt__decrypt_input_cipher(dut):
 
     dut.operation_i.value = 0
     dut.data_i.value = int.from_bytes(ciphertext)
+    dut.u_auth_challenge.input_key.value = int.from_bytes(key);
     dut.start_i.value = 1
 
     while True:
@@ -67,7 +67,7 @@ async def auth_decrypt__decrypt_input_cipher(dut):
             await RisingEdge(dut.clk)
             break
 
-    assert tester.result.value == int.from_bytes(plain)
+    assert dut.u_aes_core.result.value == int.from_bytes(plain)
 
 
 def test_auth():
