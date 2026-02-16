@@ -6,6 +6,7 @@ from at25010b_helpers import eeprom_setup, eeprom_send_cmd, KEY_A, ID_A
 from mfrc522_helpers import mfrc_setup, mfrc_reqa, mfrc_anticoll, mfrc_select, mfrc_wupa
 from helpers import reset_dut
 from cocotb_tools.runner import get_runner
+from cocotb.triggers import RisingEdge
 
 CLK_PERIOD_NS = 10  # 100Mhz
 
