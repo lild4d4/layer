@@ -8,75 +8,22 @@ from pathlib import Path
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, FallingEdge
-from cocotb.types import LogicArray
-
+from cocotb.triggers import RisingEdge
 from cocotb_tools.runner import get_runner
-import random
+
+from Crypto.Cipher import AES
 
 os.environ["COCOTB_ANSI_OUTPUT"] = "1"
 
 
-class AuthInitTester:
-    """Helper class for auth_init testing."""
-
-    def __init__(self, dut):
-        self.dut = dut
-
-        # Inputs
-        self.clk = dut.clk
-        self.rst = dut.rst
-
-        # Outputs
-        self.aes_cs_o = dut.aes_cs_o
-        self.aes_we_o = dut.aes_we_o
-        self.aes_address_o = dut.aes_address_o
-        self.aes_write_data_o = dut.aes_write_data_o
-
-        # Relevant internal registers
-        self.current_state = dut.current_state
-        self.key_index = dut.key_index
-        self.reg_key = dut.reg_key
-
-
-class AuthGenerateChallengeTester:
+class AuthDecryptTester:
     """Helper class for auth_generate_challenge testing."""
 
     def __init__(self, dut):
         self.dut = dut
 
-        # Inputs
-        self.clk = dut.clk
-        self.rst = dut.rst
-        self.external_ready_i = dut.external_ready_i
-        self.external_valid_i = dut.external_valid_i
-        self.input_cipher_i = dut.input_cipher_i
-
         # Outputs
-        self.error_o = dut.error_o
-        self.internal_ready_o = dut.internal_ready_o
-        self.internal_valid_o = dut.internal_valid_o
-        self.challenge_response_o = dut.challenge_response_o
-
-
-class AuthVerifyIdTester:
-    """Helper class for auth_verify_id testing."""
-
-    def __init__(self, dut):
-        self.dut = dut
-
-        # Inputs
-        self.clk = dut.clk
-        self.rst = dut.rst
-        self.external_valid_i = dut.external_valid_i
-        self.id_cipher_i = dut.id_cipher_i
-        self.rc_i = dut.rc_i
-        self.rt_i = dut.rt_i
-
-        # Outputs
-        self.error_o = dut.error_o
-        self.success_o = dut.success_o
-        self.internal_ready_o = dut.internal_ready_o
+        self.valid = dut.u_auth_challenge.u_auth_decrypt.valid
 
 
 async def start_clock(dut, period_ns=10):
@@ -87,54 +34,40 @@ async def start_clock(dut, period_ns=10):
 async def reset_dut(tester, cycles=2):
     """Apply an active‑high reset for *cycles* clock edges."""
     tester.rst.value = 1
-    for _ in range(cycles):
-        await RisingEdge(tester.clk)
-    tester.rst.value = 0
-    # Give the design one more edge to come out of reset cleanly
     await RisingEdge(tester.clk)
+    tester.rst.value = 0
+    await RisingEdge(tester.clk)
+    # Give the design one more edge to come out of reset cleanly
+
 
 
 @cocotb.test()
-async def auth_init__write_key_to_aes_core(dut):
-    """Test: Check key write to aes core"""
-    tester = AuthInitTester(dut)
+async def auth_decrypt__decrypt_input_cipher(dut):
+    tester = AuthDecryptTester(dut)
+
+    key = b'\x2b\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c'
+    plain = b'\x6b\xc1\xbe\xe2\x2e\x40\x9f\x96\xe9\x3d\x7e\x11\x73\x93\x17\x2a'
+
+    cipher = AES.new(key, AES.MODE_ECB)
+    ciphertext = cipher.encrypt(plain)
+
     await start_clock(dut)
-    await reset_dut(tester)
+    await reset_dut(dut)
+
+    dut.operation_i.value = 0
+    dut.data_i.value = int.from_bytes(ciphertext)
+    dut.u_auth_challenge.input_key.value = int.from_bytes(key);
+    dut.start_i.value = 1
 
     while True:
-        await RisingEdge(tester.clk)
+        await RisingEdge(dut.clk)
 
-        if int(tester.current_state.value) == 1:
+        if dut.valid_o.value == 1:
+            dut.start_i.value = 0
+            await RisingEdge(dut.clk)
             break
 
-    written_data = []
-    while True:
-        await RisingEdge(tester.clk)
-
-        if int(tester.current_state.value) == 0:
-            break
-
-        if tester.aes_cs_o.value == 1 and tester.aes_we_o.value == 1:
-            written_data.append((
-                tester.aes_address_o.value,
-                tester.aes_write_data_o.value
-            ))
-
-    assert len(written_data) == 4, f"Expected 8 key‑word writes, but saw {len(written_data)}."
-
-    for idx, (address, key_fragment) in enumerate(written_data):
-        expected_address = 0x10 + idx
-        expected_key_fragment = 10 + idx
-
-        assert address == expected_address, (
-            f"Key word {idx}: address mismatch – got {address}, "
-            f"expected {bin(expected_address)}"
-        )
-
-        assert key_fragment == expected_key_fragment, (
-            f"Key word {idx}: key fragment mismatch – got {key_fragment}, "
-            f"expected {bin(expected_key_fragment)}"
-        )
+    assert dut.u_aes_core.result.value == int.from_bytes(plain)
 
 
 def test_auth():
@@ -143,10 +76,10 @@ def test_auth():
     proj_path = Path(__file__).resolve().parent.parent
 
     sources = [
-        proj_path / "src" / "auth_init.sv",
-        proj_path / "src" / "auth_generate_challenge.sv",
+        proj_path / "src" / "auth.sv",
+        proj_path / "src" / "auth_challenge.sv",
+        proj_path / "src" / "auth_decrypt.sv",
         proj_path / "src" / "auth_verify_id.sv",
-        proj_path / "secworks-aes" / "src" / "rtl" / "aes.v",
         proj_path / "secworks-aes" / "src" / "rtl" / "aes_core.v",
         proj_path / "secworks-aes" / "src" / "rtl" / "aes_decipher_block.v",
         proj_path / "secworks-aes" / "src" / "rtl" / "aes_encipher_block.v",
@@ -159,14 +92,14 @@ def test_auth():
 
     auth_init_runner.build(
         sources=sources,
-        hdl_toplevel="auth_init",
+        hdl_toplevel="auth",
         always=True,
         waves=True,
         timescale=("1ns", "1ps"),
     )
 
     auth_init_runner.test(
-        hdl_toplevel="auth_init", test_module="test_auth", waves=True
+        hdl_toplevel="auth", test_module="test_auth", waves=True
     )
 
 
