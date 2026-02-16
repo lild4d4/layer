@@ -23,12 +23,6 @@ module spi_top (
     output wire [  2:0] mfrc_trx_rx_last_bits,
     output wire [  7:0] mfrc_trx_error,
 
-    input  wire       mfrc_ver_valid,
-    output wire       mfrc_ver_ready,
-    output wire       mfrc_ver_done,
-    output wire       mfrc_ver_ok,
-    output wire [7:0] mfrc_ver_value,
-
     // spi bus output
     // names according to challenge spec
     output wire spi_sclk,
@@ -92,13 +86,6 @@ module spi_top (
       .trx_rx_data(mfrc_trx_rx_data),
       .trx_rx_last_bits(mfrc_trx_rx_last_bits),
       .trx_error(mfrc_trx_error),
-
-      // util API (VersionReg read)
-      .ver_valid(mfrc_ver_valid),
-      .ver_ready(mfrc_ver_ready),
-      .ver_done(mfrc_ver_done),
-      .ver_ok(mfrc_ver_ok),
-      .ver_value(mfrc_ver_value),
 
       // connection to spi_arb (Client B)
       .spi_go(m_spi_go),

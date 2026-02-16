@@ -36,7 +36,6 @@ async def reset_dut(dut):
     dut.mfrc_trx_tx_data.value = 0
     dut.mfrc_trx_tx_last_bits.value = 0
     dut.mfrc_trx_timeout_cycles.value = 0
-    dut.mfrc_ver_valid.value = 0
 
     for _ in range(RESET_CYCLES):
         await RisingEdge(dut.clk)

@@ -487,9 +487,7 @@ def test_spi_e2e_runner():
     spi_module_path = Path(__file__).resolve().parent.parent.parent
     src_dir = spi_module_path / "src"
 
-    exclude = ["mfrc_util.sv", "mfrc_core.sv"]
     sources = list(src_dir.glob("*.sv"))
-    sources = [src for src in sources if src.name not in exclude]
 
     runner = get_runner(sim)
     runner.build(
