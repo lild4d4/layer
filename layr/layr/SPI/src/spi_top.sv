@@ -132,6 +132,25 @@ module spi_top (
       .b_rx_data(m_spi_rx_data),
       .b_busy(m_spi_busy),
 
+
+      // // Client A (MFRC)
+      // .a_go(m_spi_go),
+      // .a_wlen(m_spi_w_len),
+      // .a_rlen(m_spi_r_len),
+      // .a_tx_data(m_spi_tx_data),
+      // .a_done(m_spi_done),
+      // .a_rx_data(m_spi_rx_data),
+      // .a_busy(m_spi_busy),
+      //
+      // // Client B (EEPROM)
+      // .b_go(e_spi_go),
+      // .b_wlen(e_spi_w_len),
+      // .b_rlen(e_spi_r_len),
+      // .b_tx_data(e_spi_tx_data),
+      // .b_done(e_spi_done),
+      // .b_rx_data(e_spi_rx_data),
+      // .b_busy(e_spi_busy),
+
       // spi bus out
       .sclk(spi_sclk),
       .mosi(spi_mosi),

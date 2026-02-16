@@ -152,7 +152,7 @@ def _int_to_bytes(val: int, count: int) -> list[int]:
 
 
 async def mfrc_transceive(
-    dut, tx_bytes: list[int], tx_last_bits: int = 0, timeout_cycles: int = 500_000
+    dut, tx_bytes: list[int], tx_last_bits: int = 0, timeout_cycles: int = 1000
 ) -> dict:
     """Execute transceive, return {ok, rx_len, rx_data, rx_last_bits, error}."""
     for _ in range(10):
@@ -168,7 +168,7 @@ async def mfrc_transceive(
     await RisingEdge(dut.clk)
     dut.mfrc_trx_valid.value = 0
 
-    clk_budget = timeout_cycles * 60 + 200_000
+    clk_budget = timeout_cycles * 60 + 10_000
     for _ in range(clk_budget):
         await RisingEdge(dut.clk)
         if dut.mfrc_trx_done.value == 1:
