@@ -51,10 +51,11 @@ module eeprom_spi (
       eeprom_done <= 1'b0;
       spi_start   <= 1'b0;  // auto clear
 
-      spi_tx_data <= 256'h0;
 
       case (state)
         S_IDLE: begin
+          spi_tx_data <= 256'h0;
+
           if (eeprom_start) begin
             lat_addr <= eeprom_addr;
             state    <= S_READ_0;
