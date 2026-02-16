@@ -34,27 +34,27 @@ module auth(
     //   1 = the operation is done, data
     //       can be read from data_o
     //--------------------------------------
-    input reg [127:0] data_i,
-    output reg [127:0] data_o,
+    input  tri0 [127:0] data_i,
+    output tri0 [127:0] data_o,
     output wire valid_o
 );
 
 reg [63:0] rc;
 reg [63:0] rt;
+reg [127:0] input_key;
 
 wire encdec;
 wire aes_core_init;
 wire aes_core_next;
 wire aes_core_ready;
-wire [127:0] input_key;
 wire [127:0] key;
 wire [127:0] block;
 wire [127:0] result;
 wire result_valid;
+wire auth_challenge_valid;
 
 assign ready = start_i;
-assign valid_o = result_valid;
-
+assign valid_o = auth_challenge_valid;
 // TODO: Next up, read chiper from data_i when in challenge mode and start_i
 // is set.
 
@@ -82,13 +82,23 @@ auth_challenge u_auth_challenge(
     .result_valid(result_valid),
     .input_cipher(data_i),
     .input_key(input_key),
+    .aes_core_result(result),
 
     .key(key),
     .block(block),
     .encdec(encdec),
     .aes_core_init(aes_core_init),
     .aes_core_next(aes_core_next),
-    .aes_core_ready(aes_core_ready)
+    .aes_core_ready(aes_core_ready),
+    .valid(auth_challenge_valid)
 );
+
+always_ff @(posedge clk or posedge rst) begin
+    if (rst) begin
+        rc <= 64'b0;
+        rt <= 64'b0;
+        input_key <= 128'h0;
+    end
+end
 
 endmodule

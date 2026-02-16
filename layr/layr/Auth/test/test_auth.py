@@ -42,12 +42,35 @@ async def reset_dut(tester, cycles=2):
 
 
 @cocotb.test()
-async def auth_decrypt__decrypt_input_cipher(dut):
-    tester = AuthDecryptTester(dut)
-
+async def auth_challenge__decrypt_input_cipher(dut):
     key = b'\x2b\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c'
     plain = b'\x6b\xc1\xbe\xe2\x2e\x40\x9f\x96\xe9\x3d\x7e\x11\x73\x93\x17\x2a'
+    cipher = AES.new(key, AES.MODE_ECB)
+    ciphertext = cipher.encrypt(plain)
 
+    await start_clock(dut)
+    await reset_dut(dut)
+
+    dut.operation_i.value = 0
+    dut.data_i.value = int.from_bytes(ciphertext)
+    dut.u_auth_challenge.input_key.value = int.from_bytes(key);
+    dut.start_i.value = 1
+
+    while True:
+        await RisingEdge(dut.clk)
+
+        if dut.u_auth_challenge.u_aes_handler.valid.value == 1:
+            dut.start_i.value = 0
+            await RisingEdge(dut.clk)
+            break
+
+    assert dut.u_aes_core.result.value == int.from_bytes(plain)
+
+
+@cocotb.test()
+async def auth_challenge__encrypt_challenge(dut):
+    key = b'\x2b\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c'
+    plain = b'\x11\x11\xca\xfe\xaf\xfe\x11\x11\x00\x00\x00\x00\x00\x00\x00\x00'
     cipher = AES.new(key, AES.MODE_ECB)
     ciphertext = cipher.encrypt(plain)
 
@@ -67,8 +90,6 @@ async def auth_decrypt__decrypt_input_cipher(dut):
             await RisingEdge(dut.clk)
             break
 
-    assert dut.u_aes_core.result.value == int.from_bytes(plain)
-
 
 def test_auth():
     sim = os.getenv("SIM", "icarus")
@@ -79,6 +100,8 @@ def test_auth():
         proj_path / "src" / "auth.sv",
         proj_path / "src" / "auth_challenge.sv",
         proj_path / "src" / "auth_decrypt.sv",
+        proj_path / "src" / "auth_encrypt.sv",
+        proj_path / "src" / "auth_random.sv",
         proj_path / "src" / "auth_verify_id.sv",
         proj_path / "secworks-aes" / "src" / "rtl" / "aes_core.v",
         proj_path / "secworks-aes" / "src" / "rtl" / "aes_decipher_block.v",

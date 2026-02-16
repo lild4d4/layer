@@ -5,7 +5,8 @@ module auth_challenge(
     input logic result_valid,
     input logic aes_core_ready,
     input logic [127:0] input_cipher,
-    input logic [127:0] input_key,
+    input logic [127:0] aes_core_result,
+    input reg [127:0] input_key,
 
     output logic [127:0] key,
     output logic [127:0] block,
@@ -15,30 +16,41 @@ module auth_challenge(
     output logic valid
 );
 
-wire decrypt_valid;
+wire random_valid;
+wire random_ready;
+wire aes_handler_valid;
+wire [63:0] random_value;
+
+logic random_load;
+logic aes_handler_ready;
 
 reg decrypt_ready;
 reg [63:0] rc;
 reg [63:0] rt;
+reg [127:0] challenge;
+reg [127:0] session_key;
 
-// TODO: Temporary, needs to be only valid after chal and session key are
-// calculated.
-assign valid = result_valid;
-
-auth_decrypt u_auth_decrypt(
+auth_aes_handler u_aes_handler(
     .clk(clk),
     .rst(rst),
-    .ready(decrypt_ready),
+    .ready(aes_handler_ready),
+    .aes_core_ready(aes_core_ready),
     .result_valid(result_valid),
-    .input_cipher(input_cipher),
-    .input_key(input_key),
 
-    .key(key),
-    .block(block),
-    .valid(decrypt_valid),
+    .valid(aes_handler_valid),
     .aes_core_init(aes_core_init),
-    .aes_core_next(aes_core_next),
-    .aes_core_ready(aes_core_ready)
+    .aes_core_next(aes_core_next)
+);
+
+auth_random u_random(
+    .clk(clk),
+    .rst(rst),
+    .load(random_load),
+    .seed(rc),
+
+    .rnd(random_value),
+    .valid(random_valid),
+    .ready(random_ready)
 );
 
 enum {
@@ -53,6 +65,12 @@ always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
         rc <= 64'd0;
         rt <= 64'd0;
+        key <= 128'h0;
+        block <= 128'h0;
+        valid <= 1'b0;
+        challenge <= 128'h0;
+        session_key <= 128'h0;
+        state <= IDLE;
     end else begin
         state <= next_state;
     end
@@ -60,7 +78,10 @@ end
 
 always_comb begin
     next_state = state;
-    decrypt_ready = 1'b0;
+    encdec = 1'b0;
+    valid = 1'b0;
+    aes_handler_ready = 1'b0;
+    random_load = 1'b0;
 
     case(state)
         IDLE: begin
@@ -68,23 +89,51 @@ always_comb begin
         end
 
         DECRYPT: begin
-            decrypt_ready = 1'b1;
+            aes_handler_ready = 1'b1;
+            encdec = 1'b0;
+            key = input_key;
+            block = input_cipher;
 
-            if (decrypt_valid) begin
+            if (aes_handler_valid) begin
+                rc = aes_core_result[127:64];
                 next_state = GET_RANDOM;
             end
         end
 
         GET_RANDOM: begin
-            next_state = IDLE;
+            if (random_ready && !random_valid) begin
+                random_load = 1'b1;
+            end
+
+            if (random_valid) begin
+                rt = random_value;
+                next_state = ENCRYPT_CHALLENGE;
+            end
         end
 
         ENCRYPT_CHALLENGE: begin
-            next_state = IDLE;
+            aes_handler_ready = 1'b1;
+            encdec = 1'b0;
+            key = input_key;
+            block = {rt, rc};
+
+            if (aes_handler_valid) begin
+                challenge = aes_core_result;
+                next_state = ENCRYPT_SESSION_KEY;
+            end
         end
 
         ENCRYPT_SESSION_KEY: begin
-            next_state = IDLE;
+            aes_handler_ready = 1'b1;
+            encdec = 1'b0;
+            key = input_key;
+            block = {rc, rt};
+
+            if (aes_handler_valid) begin
+                valid = 1'b1;
+                session_key = aes_core_result;
+                next_state = IDLE;
+            end
         end
 
         default: next_state = IDLE;
