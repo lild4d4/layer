@@ -1,6 +1,7 @@
 /**
  * LAYR Guardian
  * Purpose: Read Card ID via ISO 14443-4 (RATS + SELECT + GET_ID)
+ * https://randomnerdtutorials.com/esp32-mfrc522-rfid-reader-arduino/
  */
 
 #include <Arduino.h>
@@ -10,7 +11,7 @@
 #include <MFRC522DriverPinSimple.h>
 #include <MFRC522Debug.h>
 
-#define PIN_SS    10
+#define PIN_SS    5
 
 MFRC522DriverPinSimple ss_pin(PIN_SS);
 MFRC522DriverSPI driver{ss_pin};
