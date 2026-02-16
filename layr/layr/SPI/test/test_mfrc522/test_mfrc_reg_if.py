@@ -3,6 +3,7 @@ test_mfrc_reg_if.py
 Tests for mfrc_reg_if → spi_ctrl → spi_master chain, with the
 Mfrc522SpiSlave mock attached to the SPI bus via cocotbext-spi.
 """
+
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, Timer
@@ -10,9 +11,8 @@ import os
 from cocotb_tools.runner import get_runner
 from pathlib import Path
 
-from cocotbext.spi import SpiConfig, SpiBus
+from cocotbext.spi import SpiBus
 from mock_mfrc522 import Mfrc522SpiSlave
-
 
 
 def _int_to_bytes(val: int, count: int) -> list[int]:
@@ -36,6 +36,7 @@ def _bytes_to_int(byte_list: list[int]) -> int:
 # ─────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────
+
 
 async def _reset(dut):
     """Apply reset and initialise all inputs."""
@@ -82,7 +83,7 @@ async def _read_reg(dut, addr: int, burst_len: int = 1) -> list[int]:
     """Issue a register read via mfrc_reg_if and return the data as a list of bytes."""
     dut.req_addr.value = addr & 0x3F
     dut.req_write.value = 0
-    dut.req_len.value = burst_len - 1 
+    dut.req_len.value = burst_len - 1
     dut.req_wdata.value = 0
     dut.req_valid.value = 1
     await RisingEdge(dut.clk)
@@ -103,12 +104,13 @@ async def _read_reg(dut, addr: int, burst_len: int = 1) -> list[int]:
 # Tests
 # ─────────────────────────────────────────────────────────────────────
 
+
 @cocotb.test()
 async def test_read_version_register(dut):
     """Read MFRC522 VersionReg (0x37) — should return 0x92."""
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     await _reset(dut)
-    mock = _attach_mock(dut, version=0x92)
+    _ = _attach_mock(dut, version=0x92)
 
     result = await _read_reg(dut, Mfrc522SpiSlave.REG_VERSION)
     dut._log.info(f"VersionReg = {result[0]:#04x}")
@@ -121,7 +123,7 @@ async def test_read_version_alternate(dut):
     """Instantiate mock with version 0x91 and verify."""
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     await _reset(dut)
-    mock = _attach_mock(dut, version=0x91)
+    _ = _attach_mock(dut, version=0x91)
 
     result = await _read_reg(dut, Mfrc522SpiSlave.REG_VERSION)
     assert result == [0x91], f"Expected [0x91], got {result}"
@@ -152,7 +154,7 @@ async def test_command_reg_reset_default(dut):
     """CommandReg resets to 0x20 (RcvOff=1)."""
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     await _reset(dut)
-    mock = _attach_mock(dut)
+    _ = _attach_mock(dut)
 
     result = await _read_reg(dut, Mfrc522SpiSlave.REG_COMMAND)
     assert result == [0x20], f"Expected [0x20], got {result}"
@@ -164,7 +166,7 @@ async def test_fifo_write_and_read(dut):
     """Write bytes into FIFODataReg, check level, read them back."""
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     await _reset(dut)
-    mock = _attach_mock(dut)
+    _ = _attach_mock(dut)
 
     # Write 3 bytes into FIFO
     for b in [0x11, 0x22, 0x33]:
@@ -184,13 +186,14 @@ async def test_fifo_write_and_read(dut):
     assert level == [0], f"Expected FIFO level [0], got {level}"
     dut._log.info("test_fifo_write_and_read PASSED ✓")
 
+
 # TODO: FIX BURST
 @cocotb.test()
 async def test_fifo_burst_write_and_burst_read(dut):
     """Write bytes into FIFODataReg in burst, check level, burst read them back."""
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     await _reset(dut)
-    mock = _attach_mock(dut)
+    _ = _attach_mock(dut)
 
     # Write 3 bytes into FIFO
     await _write_reg(dut, Mfrc522SpiSlave.REG_FIFO_DATA, [0x11, 0x22, 0x33])
@@ -201,7 +204,11 @@ async def test_fifo_burst_write_and_burst_read(dut):
 
     # Burst read back all 3 bytes at once
     got = await _read_reg(dut, Mfrc522SpiSlave.REG_FIFO_DATA, burst_len=3)
-    assert got == [0x11, 0x22, 0x33], f"FIFO burst read: expected [0x11, 0x22, 0x33], got {got}"
+    assert got == [
+        0x11,
+        0x22,
+        0x33,
+    ], f"FIFO burst read: expected [0x11, 0x22, 0x33], got {got}"
 
     # FIFO should be empty
     level = await _read_reg(dut, Mfrc522SpiSlave.REG_FIFO_LEVEL)
@@ -214,7 +221,7 @@ async def test_fifo_flush(dut):
     """Writing FlushBuffer bit (0x80) to FIFOLevelReg clears the FIFO."""
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     await _reset(dut)
-    mock = _attach_mock(dut)
+    _ = _attach_mock(dut)
 
     for b in [0xAA, 0xBB, 0xCC]:
         await _write_reg(dut, Mfrc522SpiSlave.REG_FIFO_DATA, [b])
@@ -260,7 +267,7 @@ async def test_req_ready_and_resp_ok(dut):
     """req_ready should be high when idle, resp_ok should be 1 on completion."""
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     await _reset(dut)
-    mock = _attach_mock(dut)
+    _ = _attach_mock(dut)
 
     # Should be ready before any request
     assert dut.req_ready.value == 1, "req_ready should be high when idle"
@@ -294,7 +301,7 @@ async def test_back_to_back_writes(dut):
     """Issue writes immediately after each other."""
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     await _reset(dut)
-    mock = _attach_mock(dut)
+    _ = _attach_mock(dut)
 
     for i in range(5):
         await _write_reg(dut, 0x14, [i])
@@ -309,7 +316,7 @@ async def test_cs0_used_cs1_idle(dut):
     """Verify that mfrc_reg_if always uses cs0 and cs1 stays high."""
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     await _reset(dut)
-    mock = _attach_mock(dut)
+    _ = _attach_mock(dut)
 
     await _read_reg(dut, Mfrc522SpiSlave.REG_VERSION)
 
@@ -322,6 +329,7 @@ async def test_cs0_used_cs1_idle(dut):
 # ─────────────────────────────────────────────────────────────────────
 # Runner
 # ─────────────────────────────────────────────────────────────────────
+
 
 def test_mfrc_reg_if_runner():
     sim = os.getenv("SIM", "icarus")
