@@ -23,7 +23,7 @@ module eeprom_ctrl (
   reg [6:0] eeprom_addr;  // read / write address in eeprom
   reg [127:0] eeprom_rdata;  // data read from an address
   reg eeprom_busy;
-  reg eeprom_don;
+  reg eeprom_done;
 
   eeprom_spi u_eeprom_spi (
       .clk(clk),
