@@ -1,15 +1,10 @@
-module auth_decrypt(
+module auth_aes_handler(
     input logic clk,
     input logic rst,
     input logic ready,
     input logic aes_core_ready,
     input logic result_valid,
-    input logic [127:0] input_cipher,
-    input logic [127:0] input_key,
 
-    output logic [127:0] key,
-    output logic [127:0] block,
-    output logic encdec,
     output logic valid,
     output logic aes_core_init,
     output logic aes_core_next
@@ -17,24 +12,18 @@ module auth_decrypt(
 
 enum {
     IDLE,
-    WRITE_KEY,
+    WRITE_INIT,
     READ_READY,
     WRITE_BLOCK,
-    WRITE_MODE_AGAIN,
-    WRITE_NEXT,
-    READ_VALID,
-    READ_RESULT
+    READ_VALID
 } state, next_state;
-
-assign valid = result_valid;
 
 always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
         aes_core_init <= 1'b0;
         aes_core_next <= 1'b0;
-        block <= 128'b0;
-        key <= 128'b0;
         state <= IDLE;
+        valid <= 1'b0;
 
     end else begin
         state <= next_state;
@@ -49,13 +38,14 @@ always_comb begin
 
     case(state)
         IDLE: begin
+            valid = 1'b0;
+
             if (ready) begin
-                next_state = WRITE_KEY;
+                next_state = WRITE_INIT;
             end
         end
 
-        WRITE_KEY: begin
-            key = input_key;
+        WRITE_INIT: begin
             aes_core_init = 1'b1;
             next_state = READ_READY;
         end
@@ -67,13 +57,13 @@ always_comb begin
         end
 
         WRITE_BLOCK: begin
-            block = input_cipher;
             aes_core_next = 1'b1;
             next_state = READ_VALID;
         end
 
         READ_VALID: begin
             if (result_valid) begin
+                valid = 1'b1;
                 next_state = IDLE;
             end
         end
