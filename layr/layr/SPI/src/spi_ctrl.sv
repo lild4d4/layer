@@ -134,19 +134,24 @@ module spi_ctrl (
       spi_done_rec <= 1'b0;
       spi_busy_rec <= 1'b0;
     end else begin
-      if (!spi_clk_en) begin
-        done      <= 1'b0;
-        if (go)
-          go_rec <= go; 
-        if (spi_done)
-          spi_done_rec <= spi_done;
-        if (spi_busy)
-          spi_busy_rec <= spi_busy;
-      end else begin
-        spi_start <= 1'b0;
+      done      <= 1'b0;
+      if (go)
+        go_rec <= go; 
+      else if (spi_clk_en)
         go_rec <= 1'b0;
+
+      if (spi_done)
+        spi_done_rec <= spi_done;
+      else if (spi_clk_en)
         spi_done_rec <= 1'b0;
+
+      if (spi_busy)
+        spi_busy_rec <= spi_busy;
+      else if (spi_clk_en)
         spi_busy_rec <= 1'b0;
+
+      if (spi_clk_en) begin
+        spi_start <= 1'b0;
 
         case (state)
           S_IDLE: begin

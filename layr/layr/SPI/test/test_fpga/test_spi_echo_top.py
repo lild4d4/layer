@@ -15,10 +15,11 @@ async def reset(dut):
     await RisingEdge(dut.clk)
 
 @cocotb.test()
-async def test_spi_top(dut):
+async def test_spi_echo_top(dut):
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     await reset(dut)
-    for _ in range(1000):
+    dut.miso.value = 1
+    for i in range(2000):
         await RisingEdge(dut.clk)
 
 # ─────────────────────────────────────────────────────────────────────
@@ -26,10 +27,10 @@ async def test_spi_top(dut):
 # ─────────────────────────────────────────────────────────────────────
 
 
-def test_spi_top_runner():
+def test_spi_echo_top_runner():
     sim = os.getenv("SIM", "icarus")
 
-    test_dir = Path(__file__).resolve().parent.parent
+    test_dir = Path(__file__).resolve().parent
     proj_dir = test_dir.parent.parent  # layr/layr/SPI
     spi_ext_dir = str(test_dir.parent / "cocotbext-spi")
 
@@ -38,8 +39,8 @@ def test_spi_top_runner():
     sources = [
         src / "spi_master.sv",
         src / "clock_divider.sv",
-        test_dir / "spi_echo.sv",
-        test_dir / "fpga" / "spi_top.sv",
+        test_dir / "test_spi" / "spi_echo.sv",
+        test_dir / "test_fpga" / "spi_echo_top.sv",
     ]
 
     extra_paths = [str(test_dir), spi_ext_dir]
@@ -51,18 +52,18 @@ def test_spi_top_runner():
     runner = get_runner(sim)
     runner.build(
         sources=sources,
-        hdl_toplevel="spi_top",
+        hdl_toplevel="spi_echo_top",
         always=True,
         waves=True,
         timescale=("1ns", "1ps"),
     )
 
     runner.test(
-        hdl_toplevel="spi_top",
-        test_module="test_spi_top",
+        hdl_toplevel="spi_echo_top",
+        test_module="test_spi_echo_top",
         waves=True,
     )
 
 
 if __name__ == "__main__":
-    test_spi_top_runner()
+    test_spi_echo_top_runner()

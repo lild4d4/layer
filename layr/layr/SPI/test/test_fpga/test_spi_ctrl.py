@@ -30,7 +30,7 @@ async def test_spi_ctrl_top(dut):
 def test_spi_ctrl_top_runner():
     sim = os.getenv("SIM", "icarus")
 
-    test_dir = Path(__file__).resolve().parent.parent
+    test_dir = Path(__file__).resolve().parent
     proj_dir = test_dir.parent.parent  # layr/layr/SPI
 
     src = proj_dir / "src"
