@@ -1,107 +1,93 @@
+// mfrc_util – small MFRC522 utility client
+//
+// For now: read VersionReg (0x37) through a shared mfrc_reg_if interface.
+//
+// Interface style mirrors mfrc_core:
+//   - start/ready handshake
+//   - done pulse with version byte
+
 module mfrc_util (
     input wire clk,
     input wire rst,
 
-    input  wire start,
-    output wire ready,
+    // Command
+    input  wire ver_valid,
+    output wire ver_ready,
 
-    output reg       done,
-    output reg       ok,
-    output reg [7:0] version,
+    // Result
+    output reg       ver_done,
+    output reg       ver_ok,
+    output reg [7:0] ver_value,
 
-    // ---- spi_ctrl 
-    output wire         spi_go,
-    input  wire         spi_done,
-    input  wire         spi_busy,
-    output wire [  5:0] spi_w_len,
-    output wire [  5:0] spi_r_len,
-    output wire [255:0] spi_tx_data,
-    input  wire [255:0] spi_rx_data
+    // Shared mfrc_reg_if request/response interface (to arbiter)
+    output reg          reg_req_valid,
+    input  wire         reg_req_ready,
+    output reg          reg_req_write,
+    output reg  [  5:0] reg_req_addr,
+    output reg  [  4:0] reg_req_len,
+    output reg  [255:0] reg_req_wdata,
+
+    input wire         reg_resp_valid,
+    input wire [255:0] reg_resp_rdata,
+    input wire         reg_resp_ok
 );
 
-  // VersionReg address
+  // MFRC522 VersionReg address (6-bit)
   localparam [5:0] REG_VERSION = 6'h37;
 
-  // reg_if request/response
-  reg          req_valid;
-  wire         req_ready;
-  reg          req_write;
-  reg  [  5:0] req_addr;
-  reg  [  4:0] req_len;
-  reg  [255:0] req_wdata;
-
-  wire         resp_valid;
-  wire [255:0] resp_rdata;
-  wire         resp_ok;
-
-  // Shared register interface instance
-  mfrc_reg_if u_reg_if (
-      .clk(clk),
-      .rst(rst),
-
-      .req_valid(req_valid),
-      .req_ready(req_ready),
-      .req_write(req_write),
-      .req_addr (req_addr),
-      .req_len  (req_len),
-      .req_wdata(req_wdata),
-
-      .resp_valid(resp_valid),
-      .resp_rdata(resp_rdata),
-      .resp_ok   (resp_ok),
-
-      .spi_go     (spi_go),
-      .spi_done   (spi_done),
-      .spi_busy   (spi_busy),
-      .spi_w_len  (spi_w_len),
-      .spi_r_len  (spi_r_len),
-      .spi_tx_data(spi_tx_data),
-      .spi_rx_data(spi_rx_data)
-  );
-
-  localparam [1:0] S_IDLE = 2'd0, S_WAIT = 2'd1;
+  localparam [1:0] S_IDLE = 2'd0, S_ISSUE = 2'd1, S_WAIT = 2'd2, S_DONE = 2'd3;
 
   reg [1:0] state;
 
-  // Ready only when idle and reg_if can accept a request
-  assign ready = (state == S_IDLE) && req_ready;
+  assign ver_ready = (state == S_IDLE);
 
   always @(posedge clk or posedge rst) begin
     if (rst) begin
-      state     <= S_IDLE;
-      req_valid <= 1'b0;
-      req_write <= 1'b0;
-      req_addr  <= 6'd0;
-      req_len   <= 5'd0;
-      req_wdata <= 256'd0;
-      done      <= 1'b0;
-      ok        <= 1'b0;
-      version   <= 8'd0;
+      state         <= S_IDLE;
+      ver_done      <= 1'b0;
+      ver_ok        <= 1'b0;
+      ver_value     <= 8'd0;
+
+      reg_req_valid <= 1'b0;
+      reg_req_write <= 1'b0;
+      reg_req_addr  <= 6'd0;
+      reg_req_len   <= 5'd0;
+      reg_req_wdata <= 256'd0;
     end else begin
-      req_valid <= 1'b0;
-      done      <= 1'b0;
+      // defaults
+      ver_done      <= 1'b0;
+      reg_req_valid <= 1'b0;
 
       case (state)
         S_IDLE: begin
-          if (start && req_ready) begin
-            // 1-byte read of VersionReg
-            req_write <= 1'b0;
-            req_addr  <= REG_VERSION;
-            req_len   <= 5'd0;  // 0 -> 1 byte
-            req_wdata <= 256'd0;
+          if (ver_valid) begin
+            state <= S_ISSUE;
+          end
+        end
 
-            req_valid <= 1'b1;  // pulse
-            state     <= S_WAIT;
+        S_ISSUE: begin
+          if (reg_req_ready) begin
+            // 1-byte register read
+            reg_req_valid <= 1'b1;
+            reg_req_write <= 1'b0;
+            reg_req_addr  <= REG_VERSION;
+            reg_req_len   <= 5'd0;  // 0 => 1 byte
+            reg_req_wdata <= 256'd0;
+            state         <= S_WAIT;
           end
         end
 
         S_WAIT: begin
-          if (resp_valid) begin
-            version <= resp_rdata[255:248];
-            ok      <= resp_ok;
-            done    <= 1'b1;
-            state   <= S_IDLE;
+          if (reg_resp_valid) begin
+            ver_value <= reg_resp_rdata[255:248];
+            ver_ok    <= reg_resp_ok;
+            state     <= S_DONE;
           end
+        end
+
+        S_DONE: begin
+          ver_done <= 1'b1;
+          state    <= S_IDLE;
         end
 
         default: state <= S_IDLE;
@@ -110,4 +96,3 @@ module mfrc_util (
   end
 
 endmodule
-

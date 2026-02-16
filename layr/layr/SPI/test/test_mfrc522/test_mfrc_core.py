@@ -3,6 +3,7 @@ test_mfrc_core.py
 Tests for mfrc_core transceive primitive, with the Mfrc522SpiSlave mock
 attached to the SPI bus via cocotbext-spi.
 """
+
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles
@@ -38,6 +39,7 @@ def _int_to_bytes(val: int, count: int) -> list[int]:
 # Helpers
 # ─────────────────────────────────────────────────────────────────────
 
+
 async def _reset(dut):
     """Apply active-high reset and initialise all inputs."""
     dut.rst.value = 1
@@ -58,8 +60,9 @@ def _attach_mock(dut):
     return Mfrc522SpiSlave(spi_bus)
 
 
-async def _do_transceive(dut, tx_bytes: list[int], tx_last_bits: int = 0,
-                         timeout_cycles: int = 500_000) -> dict:
+async def _do_transceive(
+    dut, tx_bytes: list[int], tx_last_bits: int = 0, timeout_cycles: int = 500_000
+) -> dict:
     """
     Drive the trx_valid handshake and wait for trx_done.
     len encoding: 0 = 1 byte, so len = len(tx_bytes) - 1.
@@ -75,7 +78,7 @@ async def _do_transceive(dut, tx_bytes: list[int], tx_last_bits: int = 0,
         await RisingEdge(dut.clk)
     assert dut.trx_ready.value == 1, "mfrc_core not ready"
 
-    dut.trx_tx_len.value = len(tx_bytes) - 1   # 0 = 1 byte
+    dut.trx_tx_len.value = len(tx_bytes) - 1  # 0 = 1 byte
     dut.trx_tx_data.value = _bytes_to_int(tx_bytes)
     dut.trx_tx_last_bits.value = tx_last_bits
     dut.trx_timeout_cycles.value = timeout_cycles
@@ -94,7 +97,7 @@ async def _do_transceive(dut, tx_bytes: list[int], tx_last_bits: int = 0,
     else:
         assert False, "Timed out waiting for trx_done"
 
-    rx_len_enc = int(dut.trx_rx_len.value)   # 0 = 1 byte
+    rx_len_enc = int(dut.trx_rx_len.value)  # 0 = 1 byte
     rx_count = rx_len_enc + 1
     rx_data_int = int(dut.trx_rx_data.value)
     rx_bytes = _int_to_bytes(rx_data_int, rx_count)
@@ -111,6 +114,7 @@ async def _do_transceive(dut, tx_bytes: list[int], tx_last_bits: int = 0,
 # ─────────────────────────────────────────────────────────────────────
 # Tests
 # ─────────────────────────────────────────────────────────────────────
+
 
 @cocotb.test()
 async def test_transceive_reqa(dut):
@@ -189,7 +193,7 @@ async def test_trx_ready_deasserts(dut):
 
     assert dut.trx_ready.value == 1
 
-    dut.trx_tx_len.value = 0          # 0 = 1 byte
+    dut.trx_tx_len.value = 0  # 0 = 1 byte
     dut.trx_tx_data.value = _bytes_to_int([0x26])
     dut.trx_tx_last_bits.value = 7
     dut.trx_timeout_cycles.value = 500_000
@@ -296,7 +300,9 @@ async def test_transceive_error_injection(dut):
 
     dut._log.info(f"Error injection result: {result}")
     assert not result["ok"], "Expected trx_ok=0 when ErrorReg is non-zero"
-    assert result["error"] & 0x20, f"Expected CollErr bit set, got {result['error']:#04x}"
+    assert result["error"] & 0x20, (
+        f"Expected CollErr bit set, got {result['error']:#04x}"
+    )
     dut._log.info("test_transceive_error_injection PASSED ✓")
 
     # Clean up for subsequent tests
@@ -345,7 +351,9 @@ async def test_trx_valid_while_busy(dut):
     rx_data_int = int(dut.trx_rx_data.value)
     rx_bytes = _int_to_bytes(rx_data_int, rx_count) if rx_data_int != 0 else []
 
-    assert bool(dut.trx_ok.value), "Original REQA should succeed despite spurious trx_valid"
+    assert bool(dut.trx_ok.value), (
+        "Original REQA should succeed despite spurious trx_valid"
+    )
     assert rx_bytes == [0x04, 0x00], f"Expected ATQA, got {rx_bytes}"
     dut._log.info("test_trx_valid_while_busy PASSED ✓")
 
@@ -408,6 +416,7 @@ async def test_transceive_max_burst_32_bytes(dut):
 # Runner
 # ─────────────────────────────────────────────────────────────────────
 
+
 def test_mfrc_core_runner():
     sim = os.getenv("SIM", "icarus")
 
@@ -419,6 +428,9 @@ def test_mfrc_core_runner():
     sources = [
         src / "spi_master.sv",
         src / "spi_ctrl.sv",
+        src / "mfrc_top.sv",
+        src / "mfrc_util.sv",
+        src / "mfrc_reg_arb.sv",
         src / "mfrc_reg_if.sv",
         src / "mfrc_core.sv",
         test_dir / "test_mfrc_core_top.sv",

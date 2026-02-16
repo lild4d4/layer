@@ -3,6 +3,7 @@ test_mfrc_util.py
 Tests for mfrc_util → spi_ctrl → spi_master chain, with the
 Mfrc522SpiSlave mock attached to the SPI bus via cocotbext-spi.
 """
+
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles
@@ -17,6 +18,7 @@ from mock_mfrc522 import Mfrc522SpiSlave
 # ─────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────
+
 
 async def _reset(dut):
     """Apply reset and initialise all inputs."""
@@ -54,6 +56,7 @@ async def _run_util(dut, timeout=50000):
 # Tests
 # ─────────────────────────────────────────────────────────────────────
 
+
 @cocotb.test()
 async def test_version_0x92(dut):
     """mfrc_util should read VersionReg and return 0x92."""
@@ -64,7 +67,9 @@ async def test_version_0x92(dut):
     await _run_util(dut)
 
     assert dut.ok.value == 1, "ok should be 1"
-    assert int(dut.version.value) == 0x92, f"Expected 0x92, got {int(dut.version.value):#04x}"
+    assert int(dut.version.value) == 0x92, (
+        f"Expected 0x92, got {int(dut.version.value):#04x}"
+    )
     dut._log.info("test_version_0x92 PASSED ✓")
 
 
@@ -78,7 +83,9 @@ async def test_version_0x91(dut):
     await _run_util(dut)
 
     assert dut.ok.value == 1, "ok should be 1"
-    assert int(dut.version.value) == 0x91, f"Expected 0x91, got {int(dut.version.value):#04x}"
+    assert int(dut.version.value) == 0x91, (
+        f"Expected 0x91, got {int(dut.version.value):#04x}"
+    )
     dut._log.info("test_version_0x91 PASSED ✓")
 
 
@@ -128,6 +135,7 @@ async def test_back_to_back(dut):
 # Runner
 # ─────────────────────────────────────────────────────────────────────
 
+
 def test_mfrc_util_runner():
     sim = os.getenv("SIM", "icarus")
 
@@ -140,8 +148,11 @@ def test_mfrc_util_runner():
     sources = [
         src / "spi_master.sv",
         src / "spi_ctrl.sv",
-        src / "mfrc_reg_if.sv",
+        src / "mfrc_top.sv",
         src / "mfrc_util.sv",
+        src / "mfrc_reg_arb.sv",
+        src / "mfrc_reg_if.sv",
+        src / "mfrc_core.sv",
         test_dir / "test_mfrc_util_top.sv",
     ]
 

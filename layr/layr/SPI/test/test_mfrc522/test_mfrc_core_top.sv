@@ -1,6 +1,6 @@
-// test_mfrc_core_top – testbench wrapper for mfrc_core
+// test_mfrc_core_top – testbench wrapper for mfrc_top
 //
-// Instantiates mfrc_core (contains mfrc_reg_if) and spi_ctrl
+// Instantiates mfrc_top (contains mfrc_core, mfrc_reg_if, arbiter) and spi_ctrl
 // side by side, wiring the spi_* ports between them.
 
 module test_mfrc_core_top (
@@ -31,7 +31,7 @@ module test_mfrc_core_top (
     output wire cs1
 );
 
-  // spi_ctrl <-> mfrc_core wires
+  // spi_ctrl <-> mfrc_top wires
   wire         spi_go;
   wire         spi_done;
   wire         spi_busy;
@@ -40,7 +40,7 @@ module test_mfrc_core_top (
   wire [255:0] spi_tx_data;
   wire [255:0] spi_rx_data;
 
-  mfrc_core u_core (
+  mfrc_top u_core (
       .clk(clk),
       .rst(rst),
 
@@ -57,6 +57,12 @@ module test_mfrc_core_top (
       .trx_rx_data     (trx_rx_data),
       .trx_rx_last_bits(trx_rx_last_bits),
       .trx_error       (trx_error),
+
+      .ver_valid(1'b0),
+      .ver_ready(),
+      .ver_done (),
+      .ver_ok   (),
+      .ver_value(),
 
       .spi_go     (spi_go),
       .spi_done   (spi_done),

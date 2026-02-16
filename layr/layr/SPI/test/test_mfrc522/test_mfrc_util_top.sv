@@ -25,14 +25,29 @@ module top_mfrc_version (
   wire [255:0] spi_tx_data;
   wire [255:0] spi_rx_data;
 
-  mfrc_util u_util (
-      .clk    (clk),
-      .rst    (rst),
-      .start  (start),
-      .ready  (ready),
-      .done   (done),
-      .ok     (ok),
-      .version(version),
+  mfrc_top u_mfrc_top (
+      .clk(clk),
+      .rst(rst),
+
+      .trx_valid(1'b0),
+      .trx_ready(),
+      .trx_tx_len(5'b0),
+      .trx_tx_data(256'b0),
+      .trx_tx_last_bits(3'b0),
+      .trx_timeout_cycles(32'b0),
+
+      .trx_done(),
+      .trx_ok(),
+      .trx_rx_len(),
+      .trx_rx_data(),
+      .trx_rx_last_bits(),
+      .trx_error(),
+
+      .ver_valid(start),
+      .ver_ready(ready),
+      .ver_done(done),
+      .ver_ok(ok),
+      .ver_value(version),
 
       .spi_go     (spi_go),
       .spi_done   (spi_done),

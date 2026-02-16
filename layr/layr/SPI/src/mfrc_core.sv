@@ -1,8 +1,9 @@
 // mfrc_core – MFRC522 "command plane" controller
 //
 // Sits above mfrc_reg_if and provides a transceive() primitive.
-// Instantiates mfrc_reg_if; exposes its spi_* ports for the parent
-// to wire to spi_ctrl.
+// This module no longer instantiates mfrc_reg_if; instead it exposes
+// the mfrc_reg_if request/response interface so multiple clients can
+// share a single mfrc_reg_if via an arbiter.
 //
 // Length encoding follows mfrc_reg_if: 5-bit, 0 = 1 byte, 31 = 32 bytes.
 //
@@ -30,14 +31,17 @@ module mfrc_core (
     output reg [  2:0] trx_rx_last_bits,
     output reg [  7:0] trx_error,
 
-    // ── spi_ctrl connection (directly exposed from mfrc_reg_if) ──
-    output wire         spi_go,
-    input  wire         spi_done,
-    input  wire         spi_busy,
-    output wire [  5:0] spi_w_len,
-    output wire [  5:0] spi_r_len,
-    output wire [255:0] spi_tx_data,
-    input  wire [255:0] spi_rx_data
+    // ── mfrc_reg_if request/response interface (to arbiter/shared reg_if) ──
+    output reg          reg_req_valid,
+    input  wire         reg_req_ready,
+    output reg          reg_req_write,
+    output reg  [  5:0] reg_req_addr,
+    output reg  [  4:0] reg_req_len,
+    output reg  [255:0] reg_req_wdata,
+
+    input wire         reg_resp_valid,
+    input wire [255:0] reg_resp_rdata,
+    input wire         reg_resp_ok
 );
 
   // =====================================================================
@@ -61,43 +65,8 @@ module mfrc_core (
   localparam [7:0] IRQ_RX = 8'h20;  // ComIrqReg bit5
   localparam [7:0] IRQ_TIMER = 8'h01;  // ComIrqReg bit0
 
-  // =====================================================================
-  // Internal wires to mfrc_reg_if
-  // =====================================================================
-  reg          reg_req_valid;
-  wire         reg_req_ready;
-  reg          reg_req_write;
-  reg  [  5:0] reg_req_addr;
-  reg  [  4:0] reg_req_len;
-  reg  [255:0] reg_req_wdata;
-
-  wire         reg_resp_valid;
-  wire [255:0] reg_resp_rdata;
-  wire         reg_resp_ok;
-
-  // =====================================================================
-  // Instantiate mfrc_reg_if
-  // =====================================================================
-  mfrc_reg_if u_reg_if (
-      .clk        (clk),
-      .rst        (rst),
-      .req_valid  (reg_req_valid),
-      .req_ready  (reg_req_ready),
-      .req_write  (reg_req_write),
-      .req_addr   (reg_req_addr),
-      .req_len    (reg_req_len),
-      .req_wdata  (reg_req_wdata),
-      .resp_valid (reg_resp_valid),
-      .resp_rdata (reg_resp_rdata),
-      .resp_ok    (reg_resp_ok),
-      .spi_go     (spi_go),
-      .spi_done   (spi_done),
-      .spi_busy   (spi_busy),
-      .spi_w_len  (spi_w_len),
-      .spi_r_len  (spi_r_len),
-      .spi_tx_data(spi_tx_data),
-      .spi_rx_data(spi_rx_data)
-  );
+  // reg_resp_ok is currently not used in this FSM; the higher layer can
+  // optionally incorporate it into trx_ok/trx_error handling.
 
   // =====================================================================
   // Transceive FSM
@@ -133,7 +102,7 @@ module mfrc_core (
   reg [ 31:0] timeout_cnt;
   reg         poll_success;
   reg         poll_outstanding;  // prevents issuing multiple ComIrqReg reads
-  reg [  5:0] fifo_level;  // raw byte count from FIFOLevelReg (0..64)
+  reg [  5:0] fifo_level;  // clamped byte count (0..32)
 
   // Latched request
   reg [  4:0] lat_tx_len;
@@ -245,7 +214,8 @@ module mfrc_core (
               end else begin
                 reg_req_write <= 1'b0;
                 reg_req_addr  <= REG_FIFO_DATA;
-                reg_req_len   <= fifo_level[4:0] - 5'd1;  // encode: 0 = 1 byte
+                // fifo_level is clamped to 1..32 here
+                reg_req_len   <= (fifo_level - 6'd1);  // encode: 0 = 1 byte
                 reg_req_wdata <= 256'd0;
               end
             end
@@ -361,16 +331,19 @@ module mfrc_core (
         S_CAPTURE: begin
           case (step)
             STEP_RD_LEVEL: begin
-              // Store raw byte count (0..32); clamp to 32
-              if (reg_resp_rdata[255:248] > 8'd32) fifo_level <= 6'd32;
-              else fifo_level <= {1'b0, reg_resp_rdata[252:248]};
+              // FIFOLevelReg: bit7=FlushBuffer, bits[6:0]=level (0..64)
+              // Clamp to 32 because our datapath supports max 32 bytes.
+              // Extract level from bits[6:0] => reg_resp_rdata[254:248]
+              if (reg_resp_rdata[254:248] > 7'd32) fifo_level <= 6'd32;
+              else fifo_level <= reg_resp_rdata[253:248];
 
               step  <= STEP_RD_FIFO;
               state <= S_SETUP;
             end
 
             STEP_RD_FIFO: begin
-              trx_rx_len  <= fifo_level[4:0] - 5'd1;  // encode: 0 = 1 byte
+              // fifo_level is 1..32 here. Encode: 0=1 byte
+              trx_rx_len  <= (fifo_level == 6'd0) ? 5'd0 : (fifo_level - 6'd1);
               trx_rx_data <= reg_resp_rdata;
               step        <= STEP_RD_CTRL;
               state       <= S_SETUP;

@@ -280,9 +280,9 @@ async def test_transceive_select_sak(dut):
 
     crc = _crc_a(bytes([0x08]))
     expected_crc = [crc & 0xFF, (crc >> 8) & 0xFF]
-    assert (
-        result["rx_data"][1:] == expected_crc
-    ), f"Expected CRC {expected_crc}, got {result['rx_data'][1:]}"
+    assert result["rx_data"][1:] == expected_crc, (
+        f"Expected CRC {expected_crc}, got {result['rx_data'][1:]}"
+    )
     dut._log.info("test_transceive_select_sak PASSED ✓")
 
 
@@ -300,9 +300,9 @@ async def test_transceive_error_injection(dut):
 
     dut._log.info(f"Error injection result: {result}")
     assert not result["ok"], "Expected trx_ok=0 when ErrorReg is non-zero"
-    assert (
-        result["error"] & 0x20
-    ), f"Expected CollErr bit set, got {result['error']:#04x}"
+    assert result["error"] & 0x20, (
+        f"Expected CollErr bit set, got {result['error']:#04x}"
+    )
     dut._log.info("test_transceive_error_injection PASSED ✓")
 
     # Clean up for subsequent tests
@@ -351,9 +351,9 @@ async def test_trx_valid_while_busy(dut):
     rx_data_int = int(dut.trx_rx_data.value)
     rx_bytes = _int_to_bytes(rx_data_int, rx_count) if rx_data_int != 0 else []
 
-    assert bool(
-        dut.trx_ok.value
-    ), "Original REQA should succeed despite spurious trx_valid"
+    assert bool(dut.trx_ok.value), (
+        "Original REQA should succeed despite spurious trx_valid"
+    )
     assert rx_bytes == [0x04, 0x00], f"Expected ATQA, got {rx_bytes}"
     dut._log.info("test_trx_valid_while_busy PASSED ✓")
 
@@ -428,11 +428,11 @@ def test_mfrc_core_runner():
     sources = [
         src / "spi_master.sv",
         src / "spi_ctrl.sv",
-        src / "mfrc_reg_if.sv",
-        src / "mfrc_core_nc.sv",
-        src / "mfrc_util_nc.sv",
-        src / "mfrc_reg_arb.sv",
         src / "mfrc_top.sv",
+        src / "mfrc_util.sv",
+        src / "mfrc_reg_arb.sv",
+        src / "mfrc_reg_if.sv",
+        src / "mfrc_core.sv",
         test_dir / "test_mfrc_core_arb_top.sv",
     ]
 
