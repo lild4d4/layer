@@ -43,7 +43,7 @@ async def reset_dut(dut):
     await RisingEdge(dut.clk)
 
 
-async def send_cmd(dut, *, write: bool, addr: int, wdata: int = 0) -> None:
+async def send_cmd(dut, *, addr: int) -> None:
     """
     Drive a one-cycle eeprom_start pulse to start a transaction.
 
@@ -70,15 +70,15 @@ async def wait_done(dut, timeout_us: int = TRANSACTION_TIMEOUT_US) -> None:
     await RisingEdge(dut.clk)
 
 
-async def eeprom_write(dut, addr: int, data: int) -> None:
+async def eeprom_write(dut, addr: int) -> None:
     """Issue a write command and wait for completion."""
-    await send_cmd(dut, write=True, addr=addr, wdata=data)
+    await send_cmd(dut, addr=addr)
     await wait_done(dut)
 
 
 async def eeprom_read(dut, addr: int) -> int:
     """Issue a read command, wait for completion, return eeprom_rdata."""
-    await send_cmd(dut, write=False, addr=addr)
+    await send_cmd(dut, addr=addr)
     await wait_done(dut)
     return int(dut.eeprom_rdata.value)
 
@@ -88,6 +88,10 @@ async def eeprom_read(dut, addr: int) -> int:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+ID_A = bytes.fromhex("bbe8278a67f960605adafd6f63cf7ba7")
+KEY_A = bytes.fromhex("39558d1f193656ab8b4b65e25ac48474")
+
+
 async def setup(dut) -> AT25010B_EEPROM:
     """
     Start the simulation clock, reset the DUT, and attach the EEPROM mock.
@@ -95,6 +99,10 @@ async def setup(dut) -> AT25010B_EEPROM:
     """
     cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     eeprom = AT25010B_EEPROM(build_spi_bus(dut))
+
+    eeprom.load_memory(KEY_A, offset=0x00)
+    eeprom.load_memory(ID_A, offset=0x40)
+
     await reset_dut(dut)
     return eeprom
 
@@ -117,27 +125,31 @@ async def test_reset_state(dut):
 @cocotb.test()
 async def test_read_128bits_from_addr_0(dut):
     """Read 128 bits (16 bytes) from EEPROM starting at address 0x00."""
-    eeprom = await setup(dut)
-    # Pre-load 16 bytes at addresses 0x00-0x0F
-    test_data = bytes.fromhex("39558d1f193656ab8b4b65e25ac48474")
-    eeprom.load_memory(test_data, offset=0x00)
-    # Read 128 bits starting at address 0x00
+    _ = await setup(dut)
     result = await eeprom_read(dut, addr=0x00)
-    # MSB: first byte (0x00) should be at [127:120], last byte (0xFF) at [7:0]
-    expected = int.from_bytes(test_data, byteorder="big")
+    expected = int.from_bytes(KEY_A, byteorder="big")
     assert result == expected, f"Expected {expected:#x}, got {result:#x}"
 
 
 @cocotb.test()
 async def test_read_id_A(dut):
     """Read 128 bits (16 bytes) from EEPROM starting at page 4 (address 0x18)."""
-    eeprom = await setup(dut)
-    test_data = bytes.fromhex("bbe8278a67f960605adafd6f63cf7ba7")
-    eeprom.load_memory(test_data, offset=0x40)
+    _ = await setup(dut)
     result = await eeprom_read(dut, addr=0x40)
-    # MSB: first byte (0xA0) should be at [127:120], last byte (0x9F) at [7:0]
-    expected = int.from_bytes(test_data, byteorder="big")
+    expected = int.from_bytes(ID_A, byteorder="big")
     assert result == expected, f"Expected {expected:#x}, got {result:#x}"
+
+
+@cocotb.test()
+async def test_conseq_reads(dut):
+    _ = await setup(dut)
+    result = await eeprom_read(dut, addr=0x40)
+    expected = int.from_bytes(ID_A, byteorder="big")
+    assert result == expected, f"1: Expected {expected:#x}, got {result:#x}"
+
+    result = await eeprom_read(dut, addr=0x00)
+    expected = int.from_bytes(KEY_A, byteorder="big")
+    assert result == expected, f"2: Expected {expected:#x}, got {result:#x}"
 
 
 #

@@ -21,7 +21,6 @@ module test_eeprom_spi_tb (
   wire [255:0] spi_rx_data;
   wire [5:0] spi_w_len;
   wire [5:0] spi_r_len;
-  wire spi_cs_sel;
 
   wire spi_start;
   wire spi_done;
@@ -44,8 +43,7 @@ module test_eeprom_spi_tb (
       .spi_tx_data(spi_tx_data),
       .spi_rx_data(spi_rx_data),
       .spi_w_len  (spi_w_len),
-      .spi_r_len  (spi_r_len),
-      .spi_cs_sel (spi_cs_sel)
+      .spi_r_len  (spi_r_len)
   );
 
   spi_ctrl u_spi_ctrl (
@@ -57,7 +55,6 @@ module test_eeprom_spi_tb (
       .done(spi_done),
       .busy(spi_busy),
 
-      .cs_sel (spi_cs_sel),
       .tx_data(spi_tx_data),
       .rx_data(spi_rx_data),
       .w_len  (spi_w_len),

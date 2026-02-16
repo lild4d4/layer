@@ -43,8 +43,7 @@ module test_eeprom_ctrl_tb (
       .spi_tx_data(spi_tx_data),
       .spi_rx_data(spi_rx_data),
       .spi_w_len(spi_w_len),
-      .spi_r_len(spi_r_len),
-      .spi_cs_sel(spi_cs_sel)
+      .spi_r_len(spi_r_len)
   );
 
   spi_ctrl u_spi_ctrl (
@@ -56,7 +55,6 @@ module test_eeprom_ctrl_tb (
       .done(spi_done),
       .busy(spi_busy),
 
-      .cs_sel (spi_cs_sel),
       .tx_data(spi_tx_data),
       .rx_data(spi_rx_data),
       .w_len  (spi_w_len),

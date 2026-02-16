@@ -14,11 +14,10 @@ module eeprom_spi (
     input  reg spi_done,
     input  reg spi_busy,
 
-    input reg [255:0] spi_rx_data,  // Data received
+    input  reg [255:0] spi_rx_data,  // Data received
     output reg [255:0] spi_tx_data,  // Data to Send
-    output reg spi_cs_sel,  // 1 = eeprom, 0 = nfc
-    output reg [5:0] spi_w_len,
-    output reg [5:0] spi_r_len
+    output reg [  5:0] spi_w_len,
+    output reg [  5:0] spi_r_len
 );
   typedef enum logic [5:0] {
     S_IDLE,
@@ -47,7 +46,6 @@ module eeprom_spi (
       spi_tx_data  <= 8'h0;
       spi_w_len    <= 5'd0;
       spi_r_len    <= 5'd0;
-      spi_cs_sel   <= 1'b0;
     end else begin
       // auto-clear states
       eeprom_done <= 1'b0;
@@ -63,16 +61,15 @@ module eeprom_spi (
 
         // READ sequence
         //
-        // 1. set cs_1 low
+        // 1. set cs_1 low, handled by spi_arb
         // 2. send OP (03h)
         // 3. send ADDR (1 byte)
         // 4. read (16 byte)
-        // 5. set cs_1 high
+        // 5. set cs_1 high, hanlded by spi_arb
 
         // pull cs_1, send read command
         S_READ_0: begin
           if (!spi_busy) begin
-            spi_cs_sel <= 1'b1;
             spi_w_len <= 5'd2;
             spi_r_len <= 5'd16;  // byte
             spi_tx_data[255:248] <= OPREAD;  // byte 0: opcode
