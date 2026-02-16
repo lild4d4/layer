@@ -1,93 +1,87 @@
 module auth_init(
     input logic clk,
     input logic rst,
-    input logic start_i, // manually trigger init process, has to be active during posedge of clk
+    input tri0  start_i, // manually triggers init process
 
-    output reg aes_cs_o,
-    output reg aes_we_o,
-    output reg [7:0] aes_address_o,
-    output reg [31:0] aes_write_data_o
+    output reg          init_done,
+    output logic        aes_cs_o,
+    output logic        aes_we_o,
+    output logic [7:0]  aes_address_o,
+    output logic [31:0] aes_write_data_o
 );
+    localparam AES_CORE_KEY_ADDR = 8'h10;
 
     enum {
         IDLE,
         FETCH,
         CONFIG
-    } current_state, next_state;
+    } state, next_state;
 
-    reg key_loaded; // TODO: Handle key_loaded = 1 state (Skip FETCH state)
-    reg [31:0] reg_key [0:7]; // Store key locally after first init, so external connection to EEPROM is only necessary once.
-    reg [2:0] key_index;
+    logic        key_loaded, next_key_loaded;
+    logic [1:0]  key_index, next_key_index;
+    logic [31:0] reg_key [0:3];
 
     always_ff @(posedge clk or posedge rst) begin
-        if (rst || start_i) begin
-            current_state <= FETCH;
-            key_index <= 4'd0;
-            key_loaded <= 1'b0;
-            aes_cs_o <= 1'b0;
-            aes_we_o <= 1'b0;
-            aes_address_o <= 8'b0;
-            aes_write_data_o <= 32'b0;
+        if (rst) begin
+            init_done       <= 1'b0;
+            state           <= FETCH;
+            key_index       <= 2'd0;
+            key_loaded      <= 1'b0;
+            next_key_index  <= 2'd0;
+            next_key_loaded <= 1'b0;
+            aes_cs_o        <= 1'b0;
+            aes_we_o        <= 1'b0;
+            aes_address_o   <= AES_CORE_KEY_ADDR;
+            aes_write_data_o<= 32'b0;
 
-        end else if (current_state == FETCH) begin
-            if (key_index == 4'd3) begin
-                key_index <= 4'd0;
-                current_state <= CONFIG;
-
-            end else begin
-                key_index <= key_index + 4'd1;
-            end
-
-        // Handle key index while writing key to aes core.
-        end else if (current_state == CONFIG) begin
-            if (key_index == 4'd3) begin
-                key_index <= 4'd0;
-                aes_cs_o = 1'b0;
-                aes_we_o = 1'b0;
-                aes_address_o <= 8'b0;
-                aes_write_data_o <= 32'b0;
-                current_state <= IDLE;
-
-            end else begin
-                key_index <= key_index + 4'd1;
-            end
+            foreach (reg_key[i]) reg_key[i] <= 32'd0;
 
         end else begin
-            key_index <= 4'd0;
-            current_state <= next_state;
+            state           <= next_state;
+            key_index       <= next_key_index;
+            key_loaded      <= next_key_loaded;
+            aes_cs_o        <= (next_state == CONFIG);
+            aes_we_o        <= (next_state == CONFIG);
+            aes_address_o   <= AES_CORE_KEY_ADDR + next_key_index;
+            aes_write_data_o<= reg_key[next_key_index];
         end
     end
 
-    always_comb begin
-        next_state = current_state;
+    always_ff @(posedge clk) begin
+        next_state      = state;
+        next_key_index  = key_index;
+        next_key_loaded = key_loaded;
 
-        case (current_state)
-            IDLE: begin
-                next_state = IDLE;
-            end
+        if (start_i) begin
+            init_done       = 1'b0;
+            next_state      = FETCH;
+            next_key_index  = 2'd0;
+            next_key_loaded = 1'b0;
+        end
+
+        case (state)
+            IDLE: init_done = 1'b1;
 
             FETCH: begin
-                // TODO: Get key from EEPROM, prolly not possible in one cycle.
-                // Only change state to config after key has been loaded.
-                // TODO: Keep in mind that key index 0 is the most significant
-                // portion of the key.
-                reg_key[key_index] = 32'd10 + key_index;
+                reg_key[key_index] = 32'd10 + key_index; //TODO: Read from EEPROM
+                if (key_index == 2'd3) begin
+                    next_key_loaded = 1'b1;
+                    next_key_index  = 1'b0;
+                    next_state      = CONFIG;
+                end
+                next_key_index = key_index + 2'd1;
             end
 
             CONFIG: begin
-                //  Key addresses (32 bit write bus):
-                //      start: 8'h10
-                //      end:   8'h17
-                aes_address_o = 8'h10 + key_index;
-                aes_write_data_o = reg_key[key_index];
-                aes_we_o = 1'b1;
-                aes_cs_o = 1'b1;
+                if (key_index == 2'd3) begin
+                    next_state      = IDLE;
+                    next_key_index  = 2'd0;
+                end else begin
+                    next_key_index = key_index + 2'd1;
+                end
             end
 
-            default: begin
-                next_state = IDLE;
-            end
+            default: ;
         endcase
     end
-
 endmodule
