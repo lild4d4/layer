@@ -14,7 +14,6 @@ from pathlib import Path
 from cocotbext.spi import SpiBus
 from mock_mfrc522 import Mfrc522SpiSlave
 
-
 # ─────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────
@@ -67,9 +66,9 @@ async def test_version_0x92(dut):
     await _run_util(dut)
 
     assert dut.ok.value == 1, "ok should be 1"
-    assert int(dut.version.value) == 0x92, (
-        f"Expected 0x92, got {int(dut.version.value):#04x}"
-    )
+    assert (
+        int(dut.version.value) == 0x92
+    ), f"Expected 0x92, got {int(dut.version.value):#04x}"
     dut._log.info("test_version_0x92 PASSED ✓")
 
 
@@ -83,9 +82,9 @@ async def test_version_0x91(dut):
     await _run_util(dut)
 
     assert dut.ok.value == 1, "ok should be 1"
-    assert int(dut.version.value) == 0x91, (
-        f"Expected 0x91, got {int(dut.version.value):#04x}"
-    )
+    assert (
+        int(dut.version.value) == 0x91
+    ), f"Expected 0x91, got {int(dut.version.value):#04x}"
     dut._log.info("test_version_0x91 PASSED ✓")
 
 
@@ -148,11 +147,8 @@ def test_mfrc_util_runner():
     sources = [
         src / "spi_master.sv",
         src / "spi_ctrl.sv",
-        src / "mfrc_top.sv",
         src / "mfrc_util.sv",
-        src / "mfrc_reg_arb.sv",
         src / "mfrc_reg_if.sv",
-        src / "mfrc_core.sv",
         test_dir / "test_mfrc_util_top.sv",
     ]
 
@@ -165,14 +161,14 @@ def test_mfrc_util_runner():
     runner = get_runner(sim)
     runner.build(
         sources=sources,
-        hdl_toplevel="top_mfrc_version",
+        hdl_toplevel="test_mfrc_util_top",
         always=True,
         waves=True,
         timescale=("1ns", "1ps"),
     )
 
     runner.test(
-        hdl_toplevel="top_mfrc_version",
+        hdl_toplevel="test_mfrc_util_top",
         test_module="test_mfrc_util",
         waves=True,
     )
