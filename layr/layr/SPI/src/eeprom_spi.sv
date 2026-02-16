@@ -43,7 +43,7 @@ module eeprom_spi (
       eeprom_done  <= 1'b0;
       eeprom_rdata <= 8'h0;
       spi_start    <= 1'b0;
-      spi_tx_data  <= 8'h0;
+      spi_tx_data  <= 256'h0;
       spi_w_len    <= 5'd0;
       spi_r_len    <= 5'd0;
     end else begin
@@ -51,8 +51,11 @@ module eeprom_spi (
       eeprom_done <= 1'b0;
       spi_start   <= 1'b0;  // auto clear
 
+
       case (state)
         S_IDLE: begin
+          spi_tx_data <= 256'h0;
+
           if (eeprom_start) begin
             lat_addr <= eeprom_addr;
             state    <= S_READ_0;

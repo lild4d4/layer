@@ -2,18 +2,16 @@ meta:
   version: 3
   flow: Chip
   substituting_steps:
-  
     # Magic reports some overlaps which can be ignored
     Checker.IllegalOverlap: null
     # Not working correctly
     KLayout.SealRing: null
-    # Disable magic DRC 
+    # Disable magic DRC
     Magic.DRC: null
     Checker.MagicDRC: null
     # Disable KLayout density check
     KLayout.Density: null
     Checker.KLayoutDensity: null
-
 
     # you can uncomment this for the flow to be faster. Comment it again in the final run.
     KLayout.DRC: null
@@ -22,7 +20,7 @@ meta:
     # you can uncomment this for the flow to be faster. Comment it again in the final run.
     KLayout.Antenna: null
     Checker.KLayoutAntenna: null
-    
+
     # you can uncomment this for the flow to be faster. Comment it again in the final run.
     OpenROAD.IRDropReport: null
     KLayout.XOR: null
@@ -31,15 +29,24 @@ meta:
 
 DESIGN_NAME: top
 VERILOG_FILES:
-- src/top.sv
-- src/chip.sv
+  - src/top.sv
+  - src/chip.sv
+  - ../SPI/src/spi_top.sv
+  - ../SPI/src/spi_arb.sv
+  - ../SPI/src/spi_ctrl.sv
+  - ../SPI/src/spi_master.sv
+  - ../SPI/src/eeprom_ctrl.sv
+  - ../SPI/src/eeprom_spi.sv
+  - ../SPI/src/mfrc_top.sv
+  - ../SPI/src/mfrc_core.sv
+  - ../SPI/src/mfrc_reg_if.sv
 USE_SLANG: true
 
 CLOCK_PERIOD: 10
 CLOCK_PORT: clk_PAD
 
 FP_SIZING: absolute
-DIE_AREA: [0, 0, 1200, 1200]
+DIE_AREA: [0, 0, 2400, 2400]
 CORE_AREA: [358.00, 358.00, 842, 842]
 
 PDN_CORE_RING: true
@@ -52,118 +59,48 @@ PDN_VPITCH: 50
 PDN_HPITCH: 50
 PDN_VWIDTH: 3.5
 PDN_HWIDTH: 3.5
+PAD_SITE_NAME: sg13g2_ioSite
+PAD_CORNER_SITE_NAME: sg13g2_ioSite
 
 VDD_NETS: ["VDD"]
 GND_NETS: ["VSS"]
 
 GRT_ALLOW_CONGESTION: true
 IGNORE_DISCONNECTED_MODULES:
-- bondpad_70x70
-EXTRA_GDS: 
-- dir::bondpad/bondpad_70x70.gds
+  - bondpad_70x70
+EXTRA_GDS:
+  - dir::bondpad/bondpad_70x70.gds
 EXTRA_LEFS:
-- dir::bondpad/bondpad_70x70.lef
+  - dir::bondpad/bondpad_70x70.lef
+
+# Pinout based on user requirements:
+# Pin1: rst (input)
+# Pin2: sys_clk (input)
+# Pin13: cs_1 (spi chip select 1 - AT25010B)
+# Pin14: cs_2/cs_0 (spi chip select 2 - MFRC522)
+# Pin15: spi_miso (input to chip)
+# Pin16: spi_mosi (output from chip)
+# Pin17: spi_sclk (output from chip)
+# Pin23: status_busy (output)
 
 PAD_WEST:
+  - rst_pad
   - clk_pad
-  - rst_n_pad
-  - "x_pads\\[0\\].x_pad"
-  - "x_pads\\[1\\].x_pad"
-  - "x_pads\\[2\\].x_pad"
-  - "x_pads\\[3\\].x_pad"
-  - button_pad
 
 PAD_SOUTH:
-  - "vdd_pads\\[0\\].vdd_pad"
-  - "vss_pads\\[0\\].vss_pad"
-  - "iovdd_pads\\[0\\].iovdd_pad"
-  - "iovss_pads\\[0\\].iovss_pad"
+  [
+    "vdd_pads\\[0\\].vdd_pad",
+    "vss_pads\\[0\\].vss_pad",
+    "iovdd_pads\\[0\\].iovdd_pad",
+    "iovss_pads\\[0\\].iovss_pad",
+  ]
 
 PAD_EAST:
-  - "seg0_pads\\[0\\].seg0_pad"
-  - "seg0_pads\\[1\\].seg0_pad"
-  - "seg0_pads\\[2\\].seg0_pad"
-  - "seg0_pads\\[3\\].seg0_pad"
-  - "seg0_pads\\[4\\].seg0_pad"
-  - "seg0_pads\\[5\\].seg0_pad"
-  - "seg0_pads\\[6\\].seg0_pad"
+  - cs_1_pad
+  - cs_0_pad
+  - spi_mosi_pad
+  - spi_sclk_pad
+  - status_busy_pad
 
 PAD_NORTH:
-  - "seg1_pads\\[0\\].seg1_pad"
-  - "seg1_pads\\[1\\].seg1_pad"
-  - "seg1_pads\\[2\\].seg1_pad"
-  - "seg1_pads\\[3\\].seg1_pad"
-  - "seg1_pads\\[4\\].seg1_pad"
-  - "seg1_pads\\[5\\].seg1_pad"
-  - "seg1_pads\\[6\\].seg1_pad"
-
-MACROS:
-  "controller":
-    gds: dir::../M1_Controller/final/gds/controller.gds
-    lef: dir::../M1_Controller/final/lef/controller.lef
-    nl: dir::../M1_Controller/final/nl/controller.nl.v
-    lib:
-      nom_fast_1p32V_m40C: dir::../M1_Controller/final/lib/nom_fast_1p32V_m40C/controller__nom_fast_1p32V_m40C.lib
-      nom_slow_1p08V_125C: dir::../M1_Controller/final/lib/nom_slow_1p08V_125C/controller__nom_slow_1p08V_125C.lib
-      nom_typ_1p20V_25C: dir::../M1_Controller/final/lib/nom_typ_1p20V_25C/controller__nom_typ_1p20V_25C.lib
-    spef:   
-      nom_typ_1p20V_25C: dir::../M1_Controller/final/spef/nom/controller.nom.spef
-    instances:
-      u_chip.u_ctrl: 
-        location: [465, 459] # GOOD
-        orientation: N
-
-  "adder":
-    gds: dir::../M2_Adder/final/gds/adder.gds
-    lef: dir::../M2_Adder/final/lef/adder.lef
-    nl: dir::../M2_Adder/final/nl/adder.nl.v
-    lib:
-      nom_fast_1p32V_m40C: dir::../M2_Adder/final/lib/nom_fast_1p32V_m40C/adder__nom_fast_1p32V_m40C.lib
-      nom_slow_1p08V_125C: dir::../M2_Adder/final/lib/nom_slow_1p08V_125C/adder__nom_slow_1p08V_125C.lib
-      nom_typ_1p20V_25C: dir::../M2_Adder/final/lib/nom_typ_1p20V_25C/adder__nom_typ_1p20V_25C.lib
-    spef:       
-      nom_typ_1p20V_25C: dir::../M2_Adder/final/spef/nom/adder.nom.spef
-    instances:
-      u_chip.u_adder: 
-        location: [500, 430] # GOOD 
-        orientation: N
-
-  "bcd_converter":
-    gds: dir::../M3_BCD/final/gds/bcd_converter.gds
-    lef: dir::../M3_BCD/final/lef/bcd_converter.lef
-    nl: dir::../M3_BCD/final/nl/bcd_converter.nl.v
-    lib:
-      nom_fast_1p32V_m40C: dir::../M3_BCD/final/lib/nom_fast_1p32V_m40C/bcd_converter__nom_fast_1p32V_m40C.lib
-      nom_slow_1p08V_125C: dir::../M3_BCD/final/lib/nom_slow_1p08V_125C/bcd_converter__nom_slow_1p08V_125C.lib
-      nom_typ_1p20V_25C: dir::../M3_BCD/final/lib/nom_typ_1p20V_25C/bcd_converter__nom_typ_1p20V_25C.lib
-    spef:       
-      nom_typ_1p20V_25C: dir::../M3_BCD/final/spef/nom/bcd_converter.nom.spef
-    instances:
-      u_chip.u_bcd: 
-        location: [615, 459] # BAD
-        orientation: N
-
-  "seven_segment":
-    gds: dir::../M4_7segment/final/gds/seven_segment.gds
-    lef: dir::../M4_7segment/final/lef/seven_segment.lef
-    nl: dir::../M4_7segment/final/nl/seven_segment.nl.v
-    lib:
-      nom_fast_1p32V_m40C: dir::../M4_7segment/final/lib/nom_fast_1p32V_m40C/seven_segment__nom_fast_1p32V_m40C.lib
-      nom_slow_1p08V_125C: dir::../M4_7segment/final/lib/nom_slow_1p08V_125C/seven_segment__nom_slow_1p08V_125C.lib
-      nom_typ_1p20V_25C: dir::../M4_7segment/final/lib/nom_typ_1p20V_25C/seven_segment__nom_typ_1p20V_25C.lib
-    spef:       
-      nom_typ_1p20V_25C: dir::../M4_7segment/final/spef/nom/seven_segment.nom.spef
-    instances:
-      u_chip.u_seg0:
-        location: [500, 570] # GOOD
-        orientation: N
-      u_chip.u_seg1: 
-        location: [650, 570] # BAD
-        orientation: N
-
-PDN_MACRO_CONNECTIONS: 
-  - u_chip.u_ctrl VDD VSS VPWR VGND 
-  - u_chip.u_adder VDD VSS VPWR VGND 
-  - u_chip.u_bcd VDD VSS VPWR VGND 
-  - u_chip.u_seg0 VDD VSS VPWR VGND 
-  - u_chip.u_seg1 VDD VSS VPWR VGND 
+  - spi_miso_pad
