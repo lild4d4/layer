@@ -46,6 +46,12 @@ async def test_happy_path(dut):
 async def run_validation(dut, id_cypher):
     dut.card_present.value = 1
     assert dut.command_valid.value == 0
+
+    await await_command_valid(dut, "Select Prog Command")
+    assert dut.command.value == 0x00A4040006F000000CDC00, "Expected chip select command"
+    await set_response(dut, 24)
+
+    assert dut.command_valid.value == 0
     await await_command_valid(dut, "Auth_Init Command")
     assert dut.command.value == 0x0801000001000000000000000000000000000000000, (
         "Auth init"

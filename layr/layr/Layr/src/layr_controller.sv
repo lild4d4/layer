@@ -7,6 +7,8 @@ module layr_controller(
     input logic rst,
 
     input logic start,
+
+    input logic prog_selected,
     input logic auth_initialized,
     input logic challenge_generated,
     input logic authed,
@@ -14,6 +16,7 @@ module layr_controller(
     input logic id_verified,
     input logic id_valid,
 
+    output logic select_prog,
     output logic auth_init,
     output logic generate_challenge,
     output logic auth,
@@ -24,7 +27,7 @@ module layr_controller(
     output logic status_valid
 );
 
-enum {READY, AUTH_INIT, GENERATE_CHALLENGE, AUTH, GET_ID, VERIFY_ID, REQUEST_VALIDATED, REQUEST_DENIED} state, next_state;
+enum {READY, SELECT_PROG, AUTH_INIT, GENERATE_CHALLENGE, AUTH, GET_ID, VERIFY_ID, REQUEST_VALIDATED, REQUEST_DENIED} state, next_state;
 
 // Driving the state
 always_comb begin
@@ -32,29 +35,28 @@ always_comb begin
 
     case (state)
         READY: begin
-            if(start) begin
+            if(start)
+                next_state = SELECT_PROG;
+        end
+        SELECT_PROG: begin
+            if(prog_selected)
                 next_state = AUTH_INIT;
-            end
         end
         AUTH_INIT: begin
-            if(auth_initialized) begin
+            if(auth_initialized)
                 next_state = GENERATE_CHALLENGE;
-            end
         end
         GENERATE_CHALLENGE: begin
-            if(challenge_generated) begin
+            if(challenge_generated)
                 next_state = AUTH;
-            end
         end
         AUTH: begin
-            if(authed) begin
+            if(authed)
                 next_state = GET_ID;
-            end
         end
         GET_ID: begin
-            if(id_retrieved) begin
+            if(id_retrieved)
                 next_state = VERIFY_ID;
-            end
         end
         VERIFY_ID: begin
             if(id_verified) begin
@@ -69,42 +71,35 @@ end
 
 // Advancing the state
 always_ff @(posedge clk) begin
+    select_prog <= 0;
+    auth_init <= 0;
+    generate_challenge <= 0;
+    auth <= 0;
+    get_id <= 0;
+    verify_id <= 0;
+    status <= 0;
+    status_valid <= 0;
+
     if (rst) begin
         state <= READY;
-        auth_init <= 0;
-        generate_challenge <= 0;
-        auth <= 0;
-        get_id <= 0;
-        verify_id <= 0;
-        status <= 0;
-        status_valid <= 0;
     end else begin
         state <= next_state;
-        auth_init <= 0;
-        generate_challenge <= 0;
-        auth <= 0;
-        get_id <= 0;
-        verify_id <= 0;
-        status_valid <= 0;
 
         case (next_state)
             READY: begin
             end
-            AUTH_INIT: begin
+            SELECT_PROG:
+                select_prog <= (state != SELECT_PROG);
+            AUTH_INIT:
                 auth_init <= (state != AUTH_INIT);
-            end
-            GENERATE_CHALLENGE: begin
+            GENERATE_CHALLENGE:
                 generate_challenge <= (state != GENERATE_CHALLENGE);
-            end
-            AUTH: begin
+            AUTH:
                 auth <= (state != AUTH);
-            end
-            GET_ID: begin
+            GET_ID:
                 get_id <= (state != GET_ID);
-            end
-            VERIFY_ID: begin
+            VERIFY_ID:
                 verify_id <= (state != VERIFY_ID);
-            end
             REQUEST_VALIDATED: begin
                 status <= 1;
                 status_valid <= (state != REQUEST_VALIDATED);

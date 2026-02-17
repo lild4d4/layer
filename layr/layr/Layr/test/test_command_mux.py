@@ -11,6 +11,11 @@ from cocotb_tools.runner import get_runner
 
 os.environ["COCOTB_ANSI_OUTPUT"] = "1"
 
+SETUP_PROG = 0
+AUTH_INIT = 1
+AUTH = 2
+GET_ID = 3
+
 
 async def reset(dut):
     """Apply reset pulse."""
@@ -29,36 +34,6 @@ async def reset(dut):
 
 
 @cocotb.test()
-async def test_transmission_mode_cannot_be_changed_when_running(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
-    await reset(dut)
-    challenge = secrets.token_bytes(16)
-    expected = int.from_bytes(
-        0x08011000010.to_bytes(5, byteorder="big") + challenge, byteorder="big"
-    )
-
-    dut.auth.value = 1
-    dut.chip_challenge.value = int.from_bytes(challenge, byteorder="big")
-    # todo js check again why here two rising edges are needed
-    await RisingEdge(dut.clk)
-    await RisingEdge(dut.clk)
-    assert dut.state.value == 1, "Expected the fsm to be in sending state"
-    assert dut.active_transmission.value == 1, (
-        "Expected active transmission to be of type auth"
-    )
-    assert dut.command.value == expected, f"Expected the value to be {bin(expected)}"
-
-    dut.auth_init.value = 1
-    await RisingEdge(dut.clk)
-    await RisingEdge(dut.clk)
-    assert dut.state.value == 1, "Expected the fsm to still be in sending state"
-    assert dut.active_transmission.value == 1, (
-        "Expected active transmission to still be of type auth"
-    )
-    assert dut.command.value == expected
-
-
-@cocotb.test()
 async def test_auth_init_transmission(dut):
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     await reset(dut)
@@ -66,7 +41,7 @@ async def test_auth_init_transmission(dut):
     await RisingEdge(dut.clk)
     await RisingEdge(dut.clk)
     assert dut.state.value == 1, "Expected the fsm to be in sending state"
-    assert dut.active_transmission.value == 0, (
+    assert dut.active_transmission.value == AUTH_INIT, (
         "Expected active transmission to be of type auth_init"
     )
     assert dut.command.value == 0x0801000001000000000000000000000000000000000
@@ -89,6 +64,36 @@ async def test_auth_init_transmission(dut):
 
 
 @cocotb.test()
+async def test_transmission_mode_cannot_be_changed_when_running(dut):
+    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    await reset(dut)
+    challenge = secrets.token_bytes(16)
+    expected = int.from_bytes(
+        0x08011000010.to_bytes(5, byteorder="big") + challenge, byteorder="big"
+    )
+
+    dut.auth.value = 1
+    dut.chip_challenge.value = int.from_bytes(challenge, byteorder="big")
+    # todo js check again why here two rising edges are needed
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+    assert dut.state.value == 1, "Expected the fsm to be in sending state"
+    assert dut.active_transmission.value == AUTH, (
+        "Expected active transmission to be of type auth"
+    )
+    assert dut.command.value == expected, f"Expected the value to be {bin(expected)}"
+
+    dut.auth_init.value = 1
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+    assert dut.state.value == 1, "Expected the fsm to still be in sending state"
+    assert dut.active_transmission.value == AUTH, (
+        "Expected active transmission to still be of type auth"
+    )
+    assert dut.command.value == expected
+
+
+@cocotb.test()
 async def test_auth_transmission(dut):
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     await reset(dut)
@@ -102,7 +107,7 @@ async def test_auth_transmission(dut):
     await RisingEdge(dut.clk)
     await RisingEdge(dut.clk)
     assert dut.state.value == 1, "Expected the fsm to be in sending state"
-    assert dut.active_transmission.value == 1, (
+    assert dut.active_transmission.value == AUTH, (
         "Expected active transmission to be of type auth"
     )
     assert dut.command.value == expected, f"Expected the value to be {bin(expected)}"
@@ -129,7 +134,7 @@ async def test_get_id_transmission(dut):
     await RisingEdge(dut.clk)
     await RisingEdge(dut.clk)
     assert dut.state.value == 1, "Expected the fsm to be in sending state"
-    assert dut.active_transmission.value == 2, (
+    assert dut.active_transmission.value == GET_ID, (
         "Expected active transmission to be of type get_id"
     )
     assert dut.command.value == 0x0801200001000000000000000000000000000000000
@@ -161,6 +166,7 @@ async def test_reset(dut):
     assert dut.state.value == 1, "Expected the fsm to be in sending state"
     await reset(dut)
     assert dut.state.value == 0, "Expected to be in ready state"
+    assert dut.prog_selected.value == 0, "Expected that the id not to be retireved"
     assert dut.command_valid.value == 0, "Expected command to be not valid"
     assert dut.command.value == 0, "Expected command to be reset"
     assert dut.auth_initialized.value == 0, "Expected the auth not to be initialized"

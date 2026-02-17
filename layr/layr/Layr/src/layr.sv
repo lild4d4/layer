@@ -13,8 +13,8 @@ module layr(
     output logic status_valid           // 1 if the status is valid.
 );
 
-logic auth_init, generate_challenge, auth, get_id, verify_id, authed;
-logic auth_initialized, challenge_generated, authenticated, id_retrieved, id_verified, id_valid;
+logic select_prog, auth_init, generate_challenge, auth, get_id, verify_id, authed;
+logic prog_selected, auth_initialized, challenge_generated, authenticated, id_retrieved, id_verified, id_valid;
 
 logic [127:0] id_cipher;
 logic [127:0] card_cipher;
@@ -28,6 +28,7 @@ layr_controller controller(
     .rst(rst_),
 
     .start(card_present),
+    .select_prog(select_prog),
     .auth_initialized(auth_initialized),
     .challenge_generated(challenge_generated),
     .authed(authed),
@@ -35,6 +36,7 @@ layr_controller controller(
     .id_verified(id_verified),
     .id_valid(id_valid),
 
+    .prog_selected(prog_selected),
     .auth_init(auth_init),
     .generate_challenge(generate_challenge),
     .auth(auth),
@@ -49,6 +51,7 @@ command_mux mux(
     .clk(clk),
     .rst(rst_),
 
+    .select_prog(select_prog),
     .auth_init(auth_init),
     .auth(auth),
     .get_id(get_id),
@@ -58,6 +61,7 @@ command_mux mux(
     .response_valid(response_valid),
     .response(response),
 
+    .prog_selected(prog_selected),
     .auth_initialized(auth_initialized),
     .card_challenge(card_cipher),
 

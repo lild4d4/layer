@@ -15,6 +15,7 @@ from cocotb_tools.runner import get_runner
 os.environ["COCOTB_ANSI_OUTPUT"] = "1"
 
 outputs = [
+    "select_prog",
     "auth_init",
     "generate_challenge",
     "auth",
@@ -24,6 +25,7 @@ outputs = [
 
 expected = {
     "READY": [],
+    "SELECT_PROG": ["select_prog"],
     "AUTH_INIT": ["auth_init"],
     "GENERATE_CHALLENGE": ["generate_challenge"],
     "AUTH": ["auth"],
@@ -76,8 +78,13 @@ async def test_full(dut):
 
     dut.start.value = 1
     await RisingEdge(dut.clk)
-    await tester.check_outputs("AUTH_INIT")
+    await tester.check_outputs("SELECT_PROG")
     dut.start.value = 0
+
+    dut.prog_selected.value = 1
+    await RisingEdge(dut.clk)
+    await tester.check_outputs("AUTH_INIT")
+    dut.prog_selected.value = 0
 
     dut.auth_initialized.value = 1
     await RisingEdge(dut.clk)

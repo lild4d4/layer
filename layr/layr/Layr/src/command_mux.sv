@@ -11,20 +11,19 @@ module command_mux(
     input logic clk,
     input logic rst,
 
+    input logic select_prog,
     input logic auth_init,
     input logic auth,
     input logic get_id,
-
     input logic [127: 0] chip_challenge,
 
     input logic response_valid,
     input logic [127: 0] response,
 
+    output logic prog_selected,
     output logic auth_initialized,
     output logic [127: 0] card_challenge,
-
     output logic authed,
-
     output logic id_retrieved,
     output logic [127: 0] id_cipher,
 
@@ -34,25 +33,37 @@ module command_mux(
 
 parameter CLA = 8'h80;
 
-enum {AUTH_INIT, AUTH, GET_ID} active_transmission, next_active_transmission;
+enum {SELECT_PROG, AUTH_INIT, AUTH, GET_ID} active_transmission, next_active_transmission;
 enum {READY, EXECUTING, DONE} state, next_state;
 
 
-logic [127:0] payload;
-logic [7:0] cla, ins;
+function automatic logic [168:0] cmd (
+    input logic [7:0] ins,
+    input logic [127:0] payload
+);
+    return {
+        CLA,
+        ins,
+        16'h00, // instructions
+        8'h10,  // payload size
+        payload
+    };
+endfunction
 
 always_comb begin
     next_state = state;
     next_active_transmission = active_transmission;
     case(state)
         READY: begin
+            if(select_prog)
+                next_active_transmission = SELECT_PROG;
             if(auth_init)
                 next_active_transmission = AUTH_INIT;
             else if(auth)
                 next_active_transmission = AUTH;
             else if(get_id)
                 next_active_transmission = GET_ID;
-            if (auth_init || auth || get_id)begin
+            if (auth_init || auth || get_id || select_prog)begin
                 next_state = EXECUTING;
             end
         end
@@ -64,39 +75,28 @@ always_comb begin
     endcase
 end
 
-always_comb begin
-    ins = 8'h00;
-    payload = 0;
-
-    case (next_active_transmission)
-        AUTH_INIT: begin
-            ins = 8'h10;
-        end
-        AUTH: begin
-            ins = 8'h11;
-            payload = chip_challenge;
-        end
-        GET_ID: begin
-            ins = 8'h12;
-        end
-    endcase
-end
-
 // updating the command
 always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
         command <= '0;
         command_valid <= 0;
     end else begin
-        if(state == READY & next_state != READY)
-            command <= {
-                CLA,
-                ins,
-                16'h00, // instructions
-                8'h10,  // payload size
-                payload
-            };
         command_valid <= next_state != READY;
+        if(state == READY & next_state != READY)begin
+            case (next_active_transmission)
+                SELECT_PROG:
+                    command <= {
+                        8'h00, 8'hA4, 8'h04, 8'h00, 8'h06,
+                        8'hF0, 8'h00, 8'h00, 8'h0C, 8'hDC, 8'h00
+                    };
+                AUTH_INIT:
+                    command <= cmd(8'h10, 0);
+                AUTH:
+                    command = cmd(8'h11, chip_challenge);
+                GET_ID:
+                    command = cmd(8'h12, 0);
+            endcase;
+        end;
     end
 end
 
@@ -117,6 +117,7 @@ always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
         auth_initialized <= 0;
         card_challenge <= 0;
+        prog_selected <= 0;
 
         authed <= 0;
 
@@ -128,13 +129,14 @@ always_ff @(posedge clk or posedge rst) begin
         active_transmission <= next_active_transmission;
         if(response_valid) begin
             case(active_transmission)
+                SELECT_PROG:
+                    prog_selected <= 1;
                 AUTH_INIT: begin
                     card_challenge <= response;
                     auth_initialized <= 1;
                 end
-                AUTH: begin
+                AUTH:
                     authed <= 1;
-                end
                 GET_ID: begin
                     id_retrieved <= 1;
                     id_cipher <= response;
