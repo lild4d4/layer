@@ -18,64 +18,64 @@ class Mfrc522SpiSlave(SpiSlaveBase):
     """
 
     # --- Register addresses (6-bit address space) ---
-    REG_COMMAND      = 0x01  # CommandReg
-    REG_COM_IEN      = 0x02  # ComIEnReg
-    REG_DIV_IEN      = 0x03  # DivIEnReg
-    REG_COM_IRQ      = 0x04  # ComIrqReg
-    REG_DIV_IRQ      = 0x05  # DivIrqReg
-    REG_ERROR        = 0x06  # ErrorReg
-    REG_STATUS1      = 0x07  # Status1Reg
+    REG_COMMAND = 0x01  # CommandReg
+    REG_COM_IEN = 0x02  # ComIEnReg
+    REG_DIV_IEN = 0x03  # DivIEnReg
+    REG_COM_IRQ = 0x04  # ComIrqReg
+    REG_DIV_IRQ = 0x05  # DivIrqReg
+    REG_ERROR = 0x06  # ErrorReg
+    REG_STATUS1 = 0x07  # Status1Reg
 
-    REG_FIFO_DATA    = 0x09  # FIFODataReg
-    REG_FIFO_LEVEL   = 0x0A  # FIFOLevelReg
-    REG_WATER_LEVEL  = 0x0B  # WaterLevelReg
-    REG_CONTROL      = 0x0C  # ControlReg
-    REG_BIT_FRAMING  = 0x0D  # BitFramingReg
+    REG_FIFO_DATA = 0x09  # FIFODataReg
+    REG_FIFO_LEVEL = 0x0A  # FIFOLevelReg
+    REG_WATER_LEVEL = 0x0B  # WaterLevelReg
+    REG_CONTROL = 0x0C  # ControlReg
+    REG_BIT_FRAMING = 0x0D  # BitFramingReg
 
-    REG_MODE         = 0x11  # ModeReg
+    REG_MODE = 0x11  # ModeReg
+    REG_TX_CONTROL = 0x14  # TxControlReg
     REG_CRC_RESULT_MSB = 0x21  # CRCResultReg (higher bits)
     REG_CRC_RESULT_LSB = 0x22  # CRCResultReg (lower bits)
 
-    REG_VERSION      = 0x37  # VersionReg
+    REG_VERSION = 0x37  # VersionReg
     # --- Bits in ComIrqReg (bit7 is Set1: set/clear selection) ---
-    COMIRQ_TIMER   = 1 << 0
-    COMIRQ_ERR     = 1 << 1
+    COMIRQ_TIMER = 1 << 0
+    COMIRQ_ERR = 1 << 1
     COMIRQ_LOALERT = 1 << 2
     COMIRQ_HIALERT = 1 << 3
-    COMIRQ_IDLE    = 1 << 4
-    COMIRQ_RX      = 1 << 5
-    COMIRQ_TX      = 1 << 6
-    COMIRQ_SET1    = 1 << 7  # :contentReference[oaicite:18]{index=18}
+    COMIRQ_IDLE = 1 << 4
+    COMIRQ_RX = 1 << 5
+    COMIRQ_TX = 1 << 6
+    COMIRQ_SET1 = 1 << 7  # :contentReference[oaicite:18]{index=18}
 
     # --- Bits in DivIrqReg (bit7 is Set2) ---
     DIVIRQ_MFINACT = 1 << 4
-    DIVIRQ_CRCIRq  = 1 << 2
-    DIVIRQ_SET2    = 1 << 7
+    DIVIRQ_CRCIRq = 1 << 2
+    DIVIRQ_SET2 = 1 << 7
 
     # --- Bits in ErrorReg ---
-    ERR_PROTOCOL    = 1 << 0
-    ERR_PARITY      = 1 << 1
-    ERR_CRC         = 1 << 2
-    ERR_COLLISION   = 1 << 3
+    ERR_PROTOCOL = 1 << 0
+    ERR_PARITY = 1 << 1
+    ERR_CRC = 1 << 2
+    ERR_COLLISION = 1 << 3
     ERR_BUFFER_OVFL = 1 << 4
-    ERR_TEMPCOL     = 1 << 5  # reserved/implementation-specific
-    ERR_TEMP_ERR    = 1 << 6
-    ERR_WR_ERR      = 1 << 7
+    ERR_TEMPCOL = 1 << 5  # reserved/implementation-specific
+    ERR_TEMP_ERR = 1 << 6
+    ERR_WR_ERR = 1 << 7
 
     # --- Bits in Status1Reg ---
-    STATUS1_LOALERT  = 1 << 0
-    STATUS1_HIALERT  = 1 << 1
+    STATUS1_LOALERT = 1 << 0
+    STATUS1_HIALERT = 1 << 1
     STATUS1_TRUNNING = 1 << 3
-    STATUS1_IRQ      = 1 << 4
+    STATUS1_IRQ = 1 << 4
     STATUS1_CRCREADY = 1 << 5
-    STATUS1_CRCOK    = 1 << 6
-
+    STATUS1_CRCOK = 1 << 6
 
     # --- Command codes (CommandReg.Command[3:0]) ---
-    CMD_IDLE      = 0x00
-    CMD_CALCCRC   = 0x03
+    CMD_IDLE = 0x00
+    CMD_CALCCRC = 0x03
     CMD_NO_CMD_CHANGE = 0x07
-    CMD_TRANSCEIVE= 0x0C
+    CMD_TRANSCEIVE = 0x0C
     CMD_SOFTRESET = 0x0F  # :contentReference[oaicite:20]{index=20}
 
     def __init__(self, bus):
@@ -106,6 +106,15 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         self._prev_hialert: bool = False
         self._prev_loalert: bool = False
 
+        # ── MFRC522 state tracking for realistic behavior ──
+        # The MFRC522 needs to be initialized (soft reset) and have antennas
+        # enabled before it can communicate with cards.
+        self._initialized: bool = False
+        self._antenna_on: bool = False
+
+        # Flag to control whether to simulate 50ms init delay
+        self._simulate_init_delay: bool = True
+
         self._reset_regs()
 
     # -------------------------
@@ -133,6 +142,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         A read address byte has bit7=1 and bit0=0.
         """
         return (byte_val & 0x81) == 0x80
+
     # ------------------------------------------------------------------
     # CPHA=0 fix: pre-drive MISO before the first SCLK rising edge
     # ------------------------------------------------------------------
@@ -149,7 +159,6 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             shifted_tx = (tx_word << 1) & ((1 << num_bits) - 1)
             return await super()._shift(num_bits, tx_word=shifted_tx)
         return await super()._shift(num_bits, tx_word=tx_word)
-
 
     # -------------------------
     # Public helpers (optional)
@@ -204,6 +213,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         self._prev_loalert = loalert
 
         self._update_alerts_and_irq()
+
     def _compute_alerts(self) -> tuple[bool, bool]:
         """Compute current HiAlert/LoAlert level bits from FIFO fill and WaterLevel."""
         water = self._regs[self.REG_WATER_LEVEL] & 0x3F
@@ -217,7 +227,9 @@ class Mfrc522SpiSlave(SpiSlaveBase):
     def _update_status1_irq(self) -> None:
         """Update Status1Reg.IRq based on *enabled* pending interrupt sources."""
         com_en = self._regs[self.REG_COM_IEN] & 0x7F
-        div_en = self._regs[self.REG_DIV_IEN] & (self.DIVIRQ_MFINACT | self.DIVIRQ_CRCIRq)
+        div_en = self._regs[self.REG_DIV_IEN] & (
+            self.DIVIRQ_MFINACT | self.DIVIRQ_CRCIRq
+        )
 
         com_pending = (self._regs[self.REG_COM_IRQ] & 0x7F) & com_en
         div_pending = (self._regs[self.REG_DIV_IRQ] & 0x7F) & div_en
@@ -255,11 +267,9 @@ class Mfrc522SpiSlave(SpiSlaveBase):
 
         self._update_status1_irq()
 
-
-
     def _fifo_push(self, b: int) -> None:
         if len(self._fifo) >= 64:
-            # BufferOvfl is in ErrorReg and can only be cleared by FIFOLevelReg.FlushBuffer. 
+            # BufferOvfl is in ErrorReg and can only be cleared by FIFOLevelReg.FlushBuffer.
             self._regs[self.REG_ERROR] |= self.ERR_BUFFER_OVFL  # BufferOvfl
             self._regs[self.REG_COM_IRQ] |= self.COMIRQ_ERR
             return
@@ -273,6 +283,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         b = self._fifo.popleft()
         self._update_alerts_and_irq()
         return b
+
     def _read_reg(self, addr: int) -> int:
         addr &= 0x3F
 
@@ -314,7 +325,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             return self._regs[addr] & 0xFF
 
         return self._regs[addr] & 0xFF
-    
+
     def _unread_reg(self, addr: int, value: int) -> None:
         """Undo a destructive _read_reg for FIFO registers.
 
@@ -332,7 +343,14 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         data &= 0xFF
 
         # Ignore writes to read-only regs we currently shadow.
-        if addr in (self.REG_STATUS1, self.REG_ERROR, self.REG_CONTROL, self.REG_CRC_RESULT_MSB, self.REG_CRC_RESULT_LSB, self.REG_VERSION):
+        if addr in (
+            self.REG_STATUS1,
+            self.REG_ERROR,
+            self.REG_CONTROL,
+            self.REG_CRC_RESULT_MSB,
+            self.REG_CRC_RESULT_LSB,
+            self.REG_VERSION,
+        ):
             return
 
         if addr == self.REG_COMMAND:
@@ -341,13 +359,18 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             # Command execution clears all error bits except TempErr. BufferOvfl is
             # only cleared by FlushBuffer, so preserve it as well.
             if cmd not in (self.CMD_IDLE, getattr(self, "CMD_NO_CMD_CHANGE", 0x07)):
-                preserve = self._regs[self.REG_ERROR] & (self.ERR_TEMP_ERR | self.ERR_BUFFER_OVFL)
+                preserve = self._regs[self.REG_ERROR] & (
+                    self.ERR_TEMP_ERR | self.ERR_BUFFER_OVFL
+                )
                 self._regs[self.REG_ERROR] = preserve
 
             self._regs[addr] = data
 
             if cmd == self.CMD_SOFTRESET:
                 self._reset_regs()
+                self._initialized = True
+                if self._simulate_init_delay:
+                    cocotb.start_soon(self._delayed_antenna_enable())
                 return
             if cmd == self.CMD_CALCCRC:
                 cocotb.start_soon(self._do_calccrc())
@@ -362,13 +385,26 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             return
 
         if addr == self.REG_DIV_IEN:
-            self._regs[addr] = data & (0x80 | 0x10 | 0x04)  # IRQPushPull, MfinActIEn, CRCIEn
+            self._regs[addr] = data & (
+                0x80 | 0x10 | 0x04
+            )  # IRQPushPull, MfinActIEn, CRCIEn
             self._update_status1_irq()
             return
 
         if addr == self.REG_MODE:
             # mask reserved bits (6,4,2)
             self._regs[addr] = data & (0x80 | 0x20 | 0x08 | 0x03)
+            return
+
+        if addr == self.REG_TX_CONTROL:
+            # TxControlReg bits[1:0] control TX1 and TX2 outputs
+            # 2'b11 enables both antennas
+            if (data & 0x03) == 0x03:
+                self._antenna_on = True
+                self._regs[addr] = data
+            else:
+                self._antenna_on = False
+                self._regs[addr] = data
             return
 
         if addr == self.REG_FIFO_DATA:
@@ -417,13 +453,13 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         # Default: store
         self._regs[addr] = data
 
-
     def _maybe_start_transceive(self) -> None:
         cmd = self._regs[self.REG_COMMAND] & 0x0F
-        start_send = bool(self._regs[self.REG_BIT_FRAMING] & 0x80)  # StartSend in BitFramingReg :contentReference[oaicite:41]{index=41}
+        start_send = bool(
+            self._regs[self.REG_BIT_FRAMING] & 0x80
+        )  # StartSend in BitFramingReg :contentReference[oaicite:41]{index=41}
         if cmd == self.CMD_TRANSCEIVE and start_send:
             cocotb.start_soon(self._do_transceive())
-
 
     async def _do_transceive(self) -> None:
         """Very small ISO/IEC 14443-A PICC emulation for bring-up.
@@ -432,14 +468,24 @@ class Mfrc522SpiSlave(SpiSlaveBase):
           - REQA (0x26) / WUPA (0x52) -> ATQA (0x04 0x00)
           - ANTICOLL CL1 (0x93 0x20) -> UID0..UID3 + BCC
           - SELECT   CL1 (0x93 0x70 + UID0..UID3 + BCC + CRC_A) -> SAK + CRC_A
+
+        Only responds when chip is initialized AND antenna is enabled.
         """
         await Timer(50, unit="ns")
+
+        # Check if MFRC522 is initialized and antenna is on
+        if not self._initialized or not self._antenna_on:
+            # No response - set a timeout-like error
+            self._regs[self.REG_ERROR] |= self.ERR_PROTOCOL
+            self._regs[self.REG_COM_IRQ] |= self.COMIRQ_TIMER
+            self._regs[self.REG_BIT_FRAMING] &= ~0x80
+            return
 
         req = bytes(self._fifo)
         self._fifo.clear()
 
         resp: bytes = b""
-        rx_last_bits: int = 0   # ControlReg[2:0]
+        rx_last_bits: int = 0  # ControlReg[2:0]
 
         if req in (b"\x26", b"\x52"):
             resp = b"\x04\x00"
@@ -453,8 +499,8 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             uid = self._uid[:4]
             uid_in = req[2:6]
             bcc_in = req[6]
-            bcc_ok = (bcc_in == (uid_in[0] ^ uid_in[1] ^ uid_in[2] ^ uid_in[3]))
-            uid_ok = (uid_in == uid)
+            bcc_ok = bcc_in == (uid_in[0] ^ uid_in[1] ^ uid_in[2] ^ uid_in[3])
+            uid_ok = uid_in == uid
 
             if uid_ok and bcc_ok:
                 sak = 0x08
@@ -470,18 +516,20 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             self._fifo_push(b)
 
         # Update ControlReg RxLastBits (bits 2:0)
-        self._regs[self.REG_CONTROL] = (self._regs[self.REG_CONTROL] & 0xF8) | (rx_last_bits & 0x07)
+        self._regs[self.REG_CONTROL] = (self._regs[self.REG_CONTROL] & 0xF8) | (
+            rx_last_bits & 0x07
+        )
 
         # IRQs: set RxIRq only when we actually have a response.
         if resp:
-            self._regs[self.REG_COM_IRQ] |= (self.COMIRQ_RX | self.COMIRQ_IDLE)
+            self._regs[self.REG_COM_IRQ] |= self.COMIRQ_RX | self.COMIRQ_IDLE
         else:
             self._regs[self.REG_COM_IRQ] |= self.COMIRQ_IDLE
 
         # Optional error injection hook for tests.
         if self._inject_error:
             self._regs[self.REG_ERROR] |= self._inject_error
-            self._regs[self.REG_COM_IRQ] |= (self.COMIRQ_RX | self.COMIRQ_IDLE)
+            self._regs[self.REG_COM_IRQ] |= self.COMIRQ_RX | self.COMIRQ_IDLE
 
         # Clear StartSend (self-clears in silicon as the state machine progresses)
         self._regs[self.REG_BIT_FRAMING] &= ~0x80
@@ -530,6 +578,17 @@ class Mfrc522SpiSlave(SpiSlaveBase):
 
         self._update_alerts_and_irq()
 
+    async def _delayed_antenna_enable(self) -> None:
+        """Simulate the 50ms oscillator startup delay after soft reset.
+
+        After soft reset, the MFRC522 needs ~50ms for the crystal oscillator
+        to stabilize before the antenna can be enabled.
+        """
+        # 50ms @ 100MHz = 5,000,000 cycles
+        # For faster tests, we use a shorter delay but still meaningful
+        await Timer(50_000, unit="ns")  # 50us for test speed
+        # Antenna will be enabled by the init sequence writing to TX_CONTROL
+
     @staticmethod
     def _bit_reverse8(x: int) -> int:
         x &= 0xFF
@@ -561,6 +620,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         Returns received byte, or None if frame ended before/at this byte.
         """
         from cocotb.triggers import RisingEdge, FallingEdge, First
+
         # Create a fresh frame_end trigger each call — cocotb 2.x triggers
         # may not be reusable after being cancelled by First().
         if self._config.cs_active_low:
@@ -609,7 +669,9 @@ class Mfrc522SpiSlave(SpiSlaveBase):
                 if rx is None:
                     # Frame ended — the master never clocked this byte in.
                     # Undo the destructive read only if we actually popped.
-                    if (addr & 0x3F) == self.REG_FIFO_DATA and len(self._fifo) < fifo_len_before:
+                    if (addr & 0x3F) == self.REG_FIFO_DATA and len(
+                        self._fifo
+                    ) < fifo_len_before:
                         self._unread_reg(addr, tx)
                     break
                 self._last_frame.append(rx)
@@ -632,4 +694,3 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         # so do NOT await frame_end again — that would hang waiting for
         # the *next* rising edge of CS.
         self.idle.set()
-

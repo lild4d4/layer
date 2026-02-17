@@ -9,22 +9,34 @@ module spi_top (
     input wire eeprom_get_key,  // get_key = 1, get_id = 0
     output wire [127:0] eeprom_rbuffer,
 
-    // mfrc interface
-    input  wire         mfrc_trx_valid,
-    output wire         mfrc_trx_ready,
-    input  wire [  4:0] mfrc_trx_tx_len,
-    input  wire [255:0] mfrc_trx_tx_data,
-    input  wire [  2:0] mfrc_trx_tx_last_bits,
-    input  wire [ 31:0] mfrc_trx_timeout_cycles,
-    output wire         mfrc_trx_done,
-    output wire         mfrc_trx_ok,
-    output wire [  4:0] mfrc_trx_rx_len,
-    output wire [255:0] mfrc_trx_rx_data,
-    output wire [  2:0] mfrc_trx_rx_last_bits,
-    output wire [  7:0] mfrc_trx_error,
+    // mfrc command inputs
+    input wire mfrc_cmd_init,  // pulse to re-run initialization
+    input wire mfrc_cmd_poll,  // pulse for manual poll
+
+    // mfrc status outputs
+    output wire        mfrc_ready,         // 1 = idle/ready
+    output wire        mfrc_init_done,     // 1 = init complete
+    output wire        mfrc_card_present,  // 1 = card detected
+    output wire [15:0] mfrc_atqa,          // ATQA response
+    output wire [ 7:0] mfrc_status,        // 0=OK, non-zero=error
+
+    // mfrc TX interface (to card)
+    input  wire         mfrc_tx_valid,
+    output wire         mfrc_tx_ready,
+    input  wire [  4:0] mfrc_tx_len,
+    input  wire [255:0] mfrc_tx_data,
+    input  wire [  2:0] mfrc_tx_last_bits,
+    input  wire [ 31:0] mfrc_tx_timeout,
+
+    // mfrc RX interface (from card)
+    output wire         mfrc_rx_valid,
+    output wire         mfrc_rx_ok,
+    output wire [  4:0] mfrc_rx_len,
+    output wire [255:0] mfrc_rx_data,
+    output wire [  2:0] mfrc_rx_last_bits,
+    output wire [  7:0] mfrc_rx_error,
 
     // spi bus output
-    // names according to challenge spec
     output wire spi_sclk,
     output wire spi_mosi,
     input wire spi_miso,
@@ -72,20 +84,32 @@ module spi_top (
       .clk(clk),
       .rst(rst),
 
-      // mfrc_core transceive API
-      .trx_valid(mfrc_trx_valid),
-      .trx_ready(mfrc_trx_ready),
-      .trx_tx_len(mfrc_trx_tx_len),
-      .trx_tx_data(mfrc_trx_tx_data),
-      .trx_tx_last_bits(mfrc_trx_tx_last_bits),
-      .trx_timeout_cycles(mfrc_trx_timeout_cycles),
+      // command inputs
+      .cmd_init(mfrc_cmd_init),
+      .cmd_poll(mfrc_cmd_poll),
 
-      .trx_done(mfrc_trx_done),
-      .trx_ok(mfrc_trx_ok),
-      .trx_rx_len(mfrc_trx_rx_len),
-      .trx_rx_data(mfrc_trx_rx_data),
-      .trx_rx_last_bits(mfrc_trx_rx_last_bits),
-      .trx_error(mfrc_trx_error),
+      // status outputs
+      .ready(mfrc_ready),
+      .init_done(mfrc_init_done),
+      .card_present(mfrc_card_present),
+      .atqa(mfrc_atqa),
+      .status(mfrc_status),
+
+      // TX interface
+      .tx_valid(mfrc_tx_valid),
+      .tx_ready(mfrc_tx_ready),
+      .tx_len(mfrc_tx_len),
+      .tx_data(mfrc_tx_data),
+      .tx_last_bits(mfrc_tx_last_bits),
+      .tx_timeout(mfrc_tx_timeout),
+
+      // RX interface
+      .rx_valid(mfrc_rx_valid),
+      .rx_ok(mfrc_rx_ok),
+      .rx_len(mfrc_rx_len),
+      .rx_data(mfrc_rx_data),
+      .rx_last_bits(mfrc_rx_last_bits),
+      .rx_error(mfrc_rx_error),
 
       // connection to spi_arb (Client B)
       .spi_go(m_spi_go),

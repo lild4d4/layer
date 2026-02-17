@@ -1,5 +1,5 @@
 from pathlib import Path
-from cocotb.triggers import RisingEdge
+from cocotb.triggers import RisingEdge, Timer
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -8,8 +8,8 @@ from helpers import build_spi_bus
 
 
 async def mfrc_setup(dut):
+    """Attach MFRC522 mock to cs_0 (MFRC522 chip select)."""
     mfrc = Mfrc522SpiSlave(build_spi_bus(dut, 0))
-
     return mfrc
 
 
@@ -31,42 +31,66 @@ def _int_to_bytes(val: int, count: int) -> list[int]:
     return result
 
 
+async def mfrc_wait_for_init(dut, timeout_us: int = 100000) -> bool:
+    """
+    Wait for init_done to go high.
+    Returns True if init completed, False on timeout.
+    """
+    for _ in range(timeout_us):
+        await RisingEdge(dut.clk)
+        if dut.mfrc_init_done.value == 1:
+            return True
+    return False
+
+
+async def mfrc_wait_for_card(dut, timeout_us: int = 100000) -> bool:
+    """
+    Wait for card_present to go high.
+    Returns True if card detected, False on timeout.
+    """
+    for _ in range(timeout_us):
+        await RisingEdge(dut.clk)
+        if dut.mfrc_card_present.value == 1:
+            return True
+    return False
+
+
 async def mfrc_transceive(
     dut, tx_bytes: list[int], tx_last_bits: int = 0, timeout_cycles: int = 5000
 ) -> dict:
     """Execute transceive, return {ok, rx_len, rx_data, rx_last_bits, error}."""
     for _ in range(10):
-        if dut.mfrc_trx_ready.value == 1:
+        if dut.mfrc_tx_ready.value == 1:
             break
         await RisingEdge(dut.clk)
 
-    dut.mfrc_trx_tx_len.value = len(tx_bytes) - 1
-    dut.mfrc_trx_tx_data.value = _bytes_to_int(tx_bytes)
-    dut.mfrc_trx_tx_last_bits.value = tx_last_bits
-    dut.mfrc_trx_timeout_cycles.value = timeout_cycles
-    dut.mfrc_trx_valid.value = 1
+    dut.mfrc_tx_len.value = len(tx_bytes) - 1
+    dut.mfrc_tx_data.value = _bytes_to_int(tx_bytes)
+    dut.mfrc_tx_last_bits.value = tx_last_bits
+    dut.mfrc_tx_timeout.value = timeout_cycles
+    dut.mfrc_tx_valid.value = 1
     await RisingEdge(dut.clk)
-    dut.mfrc_trx_valid.value = 0
+    dut.mfrc_tx_valid.value = 0
 
     clk_budget = timeout_cycles * 60 + 10_000
     for _ in range(clk_budget):
         await RisingEdge(dut.clk)
-        if dut.mfrc_trx_done.value == 1:
+        if dut.mfrc_rx_valid.value == 1:
             break
     else:
-        raise Exception("Timed out waiting for mfrc_trx_done")
+        raise Exception("Timed out waiting for mfrc_rx_valid")
 
-    rx_len_enc = int(dut.mfrc_trx_rx_len.value)
+    rx_len_enc = int(dut.mfrc_rx_len.value)
     rx_count = rx_len_enc + 1
-    rx_data_int = int(dut.mfrc_trx_rx_data.value)
+    rx_data_int = int(dut.mfrc_rx_data.value)
     rx_bytes = _int_to_bytes(rx_data_int, rx_count)
 
     return {
-        "ok": bool(dut.mfrc_trx_ok.value),
+        "ok": bool(dut.mfrc_rx_ok.value),
         "rx_len": rx_count,
         "rx_data": rx_bytes,
-        "rx_last_bits": int(dut.mfrc_trx_rx_last_bits.value),
-        "error": int(dut.mfrc_trx_error.value),
+        "rx_last_bits": int(dut.mfrc_rx_last_bits.value),
+        "error": int(dut.mfrc_rx_error.value),
     }
 
 
