@@ -171,7 +171,7 @@ module mfrc_reg_arb (
       end
 
       // Grant: latch winner's data and mark busy
-      if (m_req_valid && !m_req_ready) begin
+      if (m_req_valid && !busy) begin
         busy       <= 1'b1;
         grant_hold <= grant_pick;
         if (init_done) begin

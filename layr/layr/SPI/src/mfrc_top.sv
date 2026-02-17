@@ -51,6 +51,10 @@ module mfrc_top (
     output wire [  5:0] spi_r_len,
     output wire         spi_go
 );
+  // RESET CYCLES
+  // TODO: INCREASE THIS TO 50ms ON REAL HARDWARE!
+  localparam logic [31:0] RESET_CYCLES = 32'd5_000;
+
 
   // =====================================================================
   // MFRC522 register addresses (6-bit, as used by mfrc_reg_if)
@@ -388,13 +392,14 @@ module mfrc_top (
 
         S_WAIT_RESET: begin
           if (fsm_resp_valid) begin
-            wait_cnt <= 32'd5_000_000;
+            wait_cnt <= RESET_CYCLES;
           end else if (wait_cnt > 32'd0) begin
-            wait_cnt <= wait_cnt - 32'd1;
             if (wait_cnt == 32'd1) begin
               state    <= S_INIT_WRITE;
               init_idx <= 4'd0;
             end
+
+            wait_cnt <= wait_cnt - 32'd1;
           end
         end
 

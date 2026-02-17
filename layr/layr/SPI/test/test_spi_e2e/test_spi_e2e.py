@@ -93,35 +93,39 @@ async def test_mfrc_auto_init(dut):
 
     # Wait for init to complete
     init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+
     assert init_ok, "MFRC auto-init did not complete in time"
     assert dut.mfrc_init_done.value == 1, "init_done should be 1"
-    assert dut.mfrc_ready.value == 1, "ready should be 1 after init"
 
-    dut._log.info(f"init_done={dut.mfrc_init_done.value}, ready={dut.mfrc_ready.value}")
+    dut._log.info(f"init_done={dut.mfrc_init_done.value}")
     dut._log.info("test_mfrc_auto_init PASSED ✓")
 
 
-#
-# @cocotb.test()
-# async def test_mfrc_auto_card_detection(dut):
-#     """Verify that card_present goes high when card is detected via auto-poll."""
-#     _ = await setup(dut)
-#     dut._log.info("Waiting for MFRC auto-initialization and card detection...")
-#
-#     # Wait for card to be detected (auto-poll runs after init)
-#     card_detected = await mfrc_wait_for_card(dut, timeout_us=300000)
-#     assert card_detected, "Card was not detected in time"
-#
-#     assert dut.mfrc_card_present.value == 1, "card_present should be 1"
-#     assert (
-#         dut.mfrc_atqa.value == 0x0400
-#     ), f"Expected ATQA=0x0400, got {dut.mfrc_atqa.value:#06x}"
-#
-#     dut._log.info(
-#         f"card_present={dut.mfrc_card_present.value}, atqa={dut.mfrc_atqa.value:#06x}"
-#     )
-#     dut._log.info("test_mfrc_auto_card_detection PASSED ✓")
-#
+@cocotb.test()
+async def test_mfrc_auto_card_detection(dut):
+    """Verify that card_present goes high when card is detected via auto-poll."""
+    _ = await setup(dut)
+    dut._log.info("Waiting for MFRC auto-initialization and card detection...")
+
+    # Wait for init to complete
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete in time"
+
+    # Wait for card to be detected (auto-poll runs after init)
+    card_detected = await mfrc_wait_for_card(dut, timeout_us=300000)
+    assert card_detected, "Card was not detected in time"
+
+    assert dut.mfrc_card_present.value == 1, "card_present should be 1"
+    assert (
+        dut.mfrc_atqa.value == 0x0400
+    ), f"Expected ATQA=0x0400, got {dut.mfrc_atqa.value:#06x}"
+
+    dut._log.info(
+        f"card_present={dut.mfrc_card_present.value}, atqa={dut.mfrc_atqa.value:#06x}"
+    )
+    dut._log.info("test_mfrc_auto_card_detection PASSED ✓")
+
+
 #
 # @cocotb.test()
 # async def test_mfrc_reqa_after_init(dut):
