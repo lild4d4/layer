@@ -21,12 +21,17 @@ spi.configure('ftdi://ftdi:232h/1')
 # Get a SPI port (CS0)
 slave = spi.get_port(cs=0, freq=1E6, mode=0)  # mode=0 -> CPOL=0, CPHA=0
 
-# Read 8 bytes from the SPI device
-read_data = slave.read(8)
+try:
+    prev_data = None
+    while True:
+        read_data = slave.read(8)
+        if read_data != prev_data:
+            prev_data = read_data
+            print("Data read:", read_data)
 
-print("Data read:", read_data)
+except KeyboardInterrupt:
+    print("\nCtrl+C detected. Shutting down...")
 
-# Close the connection
-spi.terminate()
-
-
+finally:
+    spi.terminate()
+    print("SPI terminated cleanly.")

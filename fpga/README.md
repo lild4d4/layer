@@ -19,6 +19,11 @@ done
 ```
 
 ```sh
+echo 'export F4PGA_INSTALL_DIR=~/opt/f4pga' >> ~/.bashrc
+echo 'export FPGA_FAM=xc7' >> ~/.bashrc
+```
+
+```sh
 conda env create -f environment.yaml
 
 conda activate xc7
