@@ -7,7 +7,7 @@ module test_spi_ctrl_top(
     // SPI bus
     (* MARK_DEBUG = "TRUE" *) output wire       sclk,
     (* MARK_DEBUG = "TRUE" *) output wire       mosi,
-    input  wire       miso,
+    (* MARK_DEBUG = "TRUE" *) input  wire       miso,
     (* MARK_DEBUG = "TRUE" *) output wire       cs0,
     (* MARK_DEBUG = "TRUE" *) output wire       cs1,
     (* MARK_DEBUG = "TRUE" *) output logic [7:0] last_read
