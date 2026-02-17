@@ -18,6 +18,14 @@ module auth_challenge(
     output reg [127:0] session_key_o
 );
 
+enum {
+    IDLE,
+    DECRYPT,
+    GET_RANDOM,
+    ENCRYPT_CHALLENGE,
+    ENCRYPT_SESSION_KEY
+} state, next_state;
+
 wire random_valid;
 wire random_ready;
 wire aes_handler_valid;
@@ -57,14 +65,6 @@ auth_random u_random(
     .valid(random_valid),
     .ready(random_ready)
 );
-
-enum {
-    IDLE,
-    DECRYPT,
-    GET_RANDOM,
-    ENCRYPT_CHALLENGE,
-    ENCRYPT_SESSION_KEY
-} state, next_state;
 
 always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
