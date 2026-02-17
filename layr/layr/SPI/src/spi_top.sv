@@ -18,7 +18,6 @@ module spi_top (
     output wire        mfrc_init_done,     // 1 = init complete
     output wire        mfrc_card_present,  // 1 = card detected
     output wire [15:0] mfrc_atqa,          // ATQA response
-    output wire [ 7:0] mfrc_status,        // 0=OK, non-zero=error
 
     // mfrc TX interface (to card)
     input  wire         mfrc_tx_valid,
@@ -26,15 +25,12 @@ module spi_top (
     input  wire [  4:0] mfrc_tx_len,
     input  wire [255:0] mfrc_tx_data,
     input  wire [  2:0] mfrc_tx_last_bits,
-    input  wire [ 31:0] mfrc_tx_timeout,
 
     // mfrc RX interface (from card)
     output wire         mfrc_rx_valid,
-    output wire         mfrc_rx_ok,
     output wire [  4:0] mfrc_rx_len,
     output wire [255:0] mfrc_rx_data,
     output wire [  2:0] mfrc_rx_last_bits,
-    output wire [  7:0] mfrc_rx_error,
 
     // spi bus output
     output wire spi_sclk,
@@ -93,7 +89,6 @@ module spi_top (
       .init_done(mfrc_init_done),
       .card_present(mfrc_card_present),
       .atqa(mfrc_atqa),
-      .status(mfrc_status),
 
       // TX interface
       .tx_valid(mfrc_tx_valid),
@@ -101,15 +96,12 @@ module spi_top (
       .tx_len(mfrc_tx_len),
       .tx_data(mfrc_tx_data),
       .tx_last_bits(mfrc_tx_last_bits),
-      .tx_timeout(mfrc_tx_timeout),
 
       // RX interface
       .rx_valid(mfrc_rx_valid),
-      .rx_ok(mfrc_rx_ok),
       .rx_len(mfrc_rx_len),
       .rx_data(mfrc_rx_data),
       .rx_last_bits(mfrc_rx_last_bits),
-      .rx_error(mfrc_rx_error),
 
       // connection to spi_arb (Client B)
       .spi_go(m_spi_go),

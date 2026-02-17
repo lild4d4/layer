@@ -24,23 +24,19 @@ module mfrc_top (
     output wire        init_done,     // 1 = initialization complete
     output wire        card_present,  // 1 = card detected
     output wire [15:0] atqa,          // ATQA response (2 bytes)
-    output wire [ 7:0] status,        // 0=OK, non-zero=error
 
     // ── TX interface (to card) ──
     input  wire         tx_valid,
     output wire         tx_ready,
-    input  wire [  4:0] tx_len,        // 0..31 → 1..32 bytes
-    input  wire [255:0] tx_data,       // byte0 at [255:248]
-    input  wire [  2:0] tx_last_bits,  // 0 for full bytes, 7 for REQA/WUPA
-    input  wire [ 31:0] tx_timeout,    // timeout in SPI cycles
+    input  wire [  4:0] tx_len,       // 0..31 → 1..32 bytes
+    input  wire [255:0] tx_data,      // byte0 at [255:248]
+    input  wire [  2:0] tx_last_bits, // 0 for full bytes, 7 for REQA/WUPA
 
     // ── RX interface (from card) ──
-    output wire         rx_valid,      // pulse when rx_data is valid
-    output wire         rx_ok,         // 1 = successful transfer
-    output wire [  4:0] rx_len,        // bytes received
-    output wire [255:0] rx_data,       // byte0 at [255:248]
+    output wire         rx_valid,     // pulse when rx_data is valid
+    output wire [  4:0] rx_len,       // bytes received
+    output wire [255:0] rx_data,      // byte0 at [255:248]
     output wire [  2:0] rx_last_bits,
-    output wire [  7:0] rx_error,
 
     // ── SPI signals (to spi_arb) ──
     input  wire         spi_done,
@@ -126,14 +122,11 @@ module mfrc_top (
   wire [  4:0] trx_tx_len;
   wire [255:0] trx_tx_data;
   wire [  2:0] trx_tx_last_bits;
-  wire [ 31:0] trx_timeout_cycles;
 
   wire         trx_done;
-  wire         trx_ok;
   wire [  4:0] trx_rx_len;
   wire [255:0] trx_rx_data;
   wire [  2:0] trx_rx_last_bits;
-  wire [  7:0] trx_error;
 
   // FSM register request signals (client A to arbiter)
   reg          fsm_req_valid;
@@ -163,7 +156,6 @@ module mfrc_top (
   reg          init_done_r;
   reg          card_present_r;
   reg  [ 15:0] atqa_r;
-  reg  [  7:0] status_r;
   reg          ready_r;
   reg          rx_valid_r;
 
@@ -219,9 +211,7 @@ module mfrc_top (
       .m_req_wdata(reg_req_wdata),
       .m_resp_valid(reg_resp_valid),
       .m_resp_rdata(reg_resp_rdata),
-      .m_resp_ok(reg_resp_ok),
-
-      .init_done(init_done_sync)
+      .m_resp_ok(reg_resp_ok)
   );
 
   // =====================================================================
@@ -236,14 +226,11 @@ module mfrc_top (
       .trx_tx_len(trx_tx_len),
       .trx_tx_data(trx_tx_data),
       .trx_tx_last_bits(trx_tx_last_bits),
-      .trx_timeout_cycles(trx_timeout_cycles),
 
       .trx_done(trx_done),
-      .trx_ok(trx_ok),
       .trx_rx_len(trx_rx_len),
       .trx_rx_data(trx_rx_data),
       .trx_rx_last_bits(trx_rx_last_bits),
-      .trx_error(trx_error),
 
       .reg_req_valid(core_req_valid),
       .reg_req_ready(core_req_ready),
@@ -281,7 +268,7 @@ module mfrc_top (
       .spi_w_len(spi_w_len),
       .spi_r_len(spi_r_len),
       .spi_tx_data(spi_tx_data),
-      .spi_rx_data(256'd0)  // Not used - we use reg interface only
+      .spi_rx_data(spi_rx_data)
   );
 
   // =====================================================================
@@ -299,13 +286,11 @@ module mfrc_top (
   reg  [  4:0] trx_len_r;
   reg  [255:0] trx_data_r;
   reg  [  2:0] trx_last_r;
-  reg  [ 31:0] trx_timeout_r;
 
   assign trx_valid = trx_v;
   assign trx_tx_len = trx_len_r;
   assign trx_tx_data = trx_data_r;
   assign trx_tx_last_bits = trx_last_r;
-  assign trx_timeout_cycles = trx_timeout_r;
 
   // Sync init_done to arbiter (avoid combinational loop)
   always @(posedge clk) begin
@@ -316,14 +301,11 @@ module mfrc_top (
   assign init_done    = init_done_r;
   assign card_present = card_present_r;
   assign atqa         = atqa_r;
-  assign status       = status_r;
 
   assign rx_valid     = rx_valid_r;
-  assign rx_ok        = trx_ok;
   assign rx_len       = trx_rx_len;
   assign rx_data      = trx_rx_data;
   assign rx_last_bits = trx_rx_last_bits;
-  assign rx_error     = trx_error;
 
   assign tx_ready     = trx_ready;
 
@@ -336,7 +318,6 @@ module mfrc_top (
       init_done_r    <= 1'b0;
       card_present_r <= 1'b0;
       atqa_r         <= 16'd0;
-      status_r       <= 8'd0;
       init_idx       <= 4'd0;
       wait_cnt       <= 32'd0;
       trx_v          <= 1'b0;
@@ -359,23 +340,20 @@ module mfrc_top (
           if (cmd_init_pulse || !init_done_r) begin
             state       <= S_SOFT_RESET;
             ready_r     <= 1'b0;
-            status_r    <= 8'd0;
             init_idx    <= 4'd0;
             init_done_r <= 1'b0;
           end else if (cmd_poll_pulse && init_done_r) begin
-            state         <= S_POLL_SETUP;
-            ready_r       <= 1'b0;
-            trx_len_r     <= 5'd1;
-            trx_data_r    <= {PICC_REQA, 248'd0};
-            trx_last_r    <= 3'd7;
-            trx_timeout_r <= 32'd2000;
+            state      <= S_POLL_SETUP;
+            ready_r    <= 1'b0;
+            trx_len_r  <= 5'd1;
+            trx_data_r <= {PICC_REQA, 248'd0};
+            trx_last_r <= 3'd7;
           end else if (init_done_r && !card_present_r) begin
-            state         <= S_POLL_SETUP;
-            ready_r       <= 1'b0;
-            trx_len_r     <= 5'd1;
-            trx_data_r    <= {PICC_REQA, 248'd0};
-            trx_last_r    <= 3'd7;
-            trx_timeout_r <= 32'd2000;
+            state      <= S_POLL_SETUP;
+            ready_r    <= 1'b0;
+            trx_len_r  <= 5'd1;
+            trx_data_r <= {PICC_REQA, 248'd0};
+            trx_last_r <= 3'd7;
           end
         end
 
@@ -452,7 +430,7 @@ module mfrc_top (
         end
 
         S_POLL_RESULT: begin
-          if (trx_ok && trx_rx_len == 5'd2) begin
+          if (trx_rx_len == 5'd2) begin
             card_present_r <= 1'b1;
             atqa_r[7:0] <= trx_rx_data[255:248];
             atqa_r[15:8] <= trx_rx_data[247:240];
@@ -460,8 +438,7 @@ module mfrc_top (
             card_present_r <= 1'b0;
             atqa_r         <= 16'd0;
           end
-          status_r <= trx_error;
-          state    <= S_IDLE;
+          state <= S_IDLE;
         end
 
         default: state <= S_IDLE;

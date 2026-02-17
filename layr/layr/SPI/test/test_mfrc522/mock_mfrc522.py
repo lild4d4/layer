@@ -156,6 +156,9 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         if not self._config.cpha and tx_word is not None:
             msb = bool(tx_word & (1 << (num_bits - 1)))
             self._miso.value = int(msb)
+            cocotb.log.debug(
+                f"MFRC522._shift: pre-driving MISO with MSB={msb}, tx_word=0x{tx_word:02x}"
+            )
             shifted_tx = (tx_word << 1) & ((1 << num_bits) - 1)
             return await super()._shift(num_bits, tx_word=shifted_tx)
         return await super()._shift(num_bits, tx_word=tx_word)
@@ -185,7 +188,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         self._regs[self.REG_COMMAND] = 0x20
 
         # Interrupt enable registers
-        self._regs[self.REG_COM_IEN] = 0x80  # IRqInv=1, all enables cleared
+        self._regs[self.REG_COM_IEN] = 0x80 | 0x20  # IRqInv + RxIEn
         self._regs[self.REG_DIV_IEN] = 0x00
 
         # IRQ and status registers
@@ -264,6 +267,9 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         # ErrIRq is set when any error bit in ErrorReg is set (and stays set until SW clears it).
         if self._regs[self.REG_ERROR] != 0:
             self._regs[self.REG_COM_IRQ] |= self.COMIRQ_ERR
+            cocotb.log.warning(
+                f"MFRC522: ErrorReg set to {self._regs[self.REG_ERROR]:#04x}"
+            )
 
         self._update_status1_irq()
 
@@ -272,8 +278,10 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             # BufferOvfl is in ErrorReg and can only be cleared by FIFOLevelReg.FlushBuffer.
             self._regs[self.REG_ERROR] |= self.ERR_BUFFER_OVFL  # BufferOvfl
             self._regs[self.REG_COM_IRQ] |= self.COMIRQ_ERR
+            cocotb.log.warning("MFRC522: FIFO overflow!")
             return
         self._fifo.append(b & 0xFF)
+        cocotb.log.info(f"MFRC522: FIFO push {b:#04x}, level now {len(self._fifo)}")
         self._update_alerts_and_irq()
 
     def _fifo_pop(self) -> int:
@@ -281,6 +289,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             self._update_alerts_and_irq()
             return 0x00
         b = self._fifo.popleft()
+        cocotb.log.info(f"MFRC522: FIFO pop {b:#04x}, level now {len(self._fifo)}")
         self._update_alerts_and_irq()
         return b
 
@@ -288,43 +297,73 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         addr &= 0x3F
 
         if addr == self.REG_FIFO_DATA:
-            return self._fifo_pop()
+            val = self._fifo_pop()
+            cocotb.log.info(
+                f"MFRC522: READ FIFO_DATA -> {val:#04x}, fifo_level={len(self._fifo)}"
+            )
+            return val
 
         if addr == self.REG_FIFO_LEVEL:
-            # bit7 FlushBuffer reads as 0; bits6..0 indicate FIFO length.
-            return len(self._fifo) & 0x7F
+            val = len(self._fifo) & 0x7F
+            cocotb.log.info(f"MFRC522: READ FIFO_LEVEL -> {val:#04x}")
+            return val
 
         if addr == self.REG_STATUS1:
             # Keep Hi/LoAlert and IRq up to date before exposing the shadow value.
             self._update_alerts_and_irq()
-            return self._regs[addr] & 0x7B  # mask reserved bits (7 and 2)
+            val = self._regs[addr] & 0x7B  # mask reserved bits (7 and 2)
+            cocotb.log.info(f"MFRC522: READ STATUS1 -> {val:#04x}")
+            return val
 
         if addr == self.REG_COM_IRQ:
             # bit7 Set1 is write-only; return only 0..6.
-            return self._regs[addr] & 0x7F
+            val = self._regs[addr] & 0x7F
+            cocotb.log.debug(
+                f"MFRC522: READ COM_IRQ -> {val:#04x} (RxIRq={bool(val & 0x20)}, TimerIRq={bool(val & 0x01)}, IdleIRq={bool(val & 0x10)})"
+            )
+            return val
 
         if addr == self.REG_DIV_IRQ:
             # bit7 Set2 is write-only; return only 0..6.
-            return self._regs[addr] & 0x7F
+            val = self._regs[addr] & 0x7F
+            cocotb.log.info(f"MFRC522: READ DIV_IRQ -> {val:#04x}")
+            return val
+
+        if addr == self.REG_ERROR:
+            val = self._regs[addr] & 0xFF
+            cocotb.log.info(f"MFRC522: READ ERROR -> {val:#04x}")
+            return val
 
         if addr == self.REG_BIT_FRAMING:
             # bit7 StartSend is write-only (reads as 0).
-            return self._regs[addr] & 0x7F
+            val = self._regs[addr] & 0x7F
+            cocotb.log.info(f"MFRC522: READ BIT_FRAMING -> {val:#04x}")
+            return val
 
         if addr == self.REG_CONTROL:
             # bits7..6 are write-only (read as 0).
-            return self._regs[addr] & 0x3F
+            val = self._regs[addr] & 0x3F
+            cocotb.log.info(f"MFRC522: READ CONTROL -> {val:#04x}")
+            return val
 
         if addr == self.REG_WATER_LEVEL:
-            return self._regs[addr] & 0x3F
+            val = self._regs[addr] & 0x3F
+            cocotb.log.info(f"MFRC522: READ WATER_LEVEL -> {val:#04x}")
+            return val
 
         if addr in (self.REG_CRC_RESULT_MSB, self.REG_CRC_RESULT_LSB):
-            return self._regs[addr] & 0xFF
+            val = self._regs[addr] & 0xFF
+            cocotb.log.info(f"MFRC522: READ CRC_RESULT -> {val:#04x}")
+            return val
 
         if addr == self.REG_VERSION:
-            return self._regs[addr] & 0xFF
+            val = self._regs[addr] & 0xFF
+            cocotb.log.info(f"MFRC522: READ VERSION -> {val:#04x}")
+            return val
 
-        return self._regs[addr] & 0xFF
+        val = self._regs[addr] & 0xFF
+        cocotb.log.info(f"MFRC522: READ reg[{addr:#02x}] -> {val:#04x}")
+        return val
 
     def _unread_reg(self, addr: int, value: int) -> None:
         """Undo a destructive _read_reg for FIFO registers.
@@ -366,7 +405,18 @@ class Mfrc522SpiSlave(SpiSlaveBase):
 
             self._regs[addr] = data
 
+            cmd_names = {
+                0x00: "IDLE",
+                0x03: "CALCCRC",
+                0x07: "NO_CMD_CHANGE",
+                0x0C: "TRANSCEIVE",
+                0x0F: "SOFTRESET",
+            }
+            cmd_name = cmd_names.get(cmd, f"CMD_{cmd:#x}")
+            cocotb.log.info(f"MFRC522: CommandReg set to {cmd_name} (0x{data:#04x})")
+
             if cmd == self.CMD_SOFTRESET:
+                cocotb.log.info("MFRC522: CMD_SOFTRESET - resetting registers")
                 self._reset_regs()
                 self._initialized = True
                 if self._simulate_init_delay:
@@ -402,13 +452,18 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             if (data & 0x03) == 0x03:
                 self._antenna_on = True
                 self._regs[addr] = data
+                cocotb.log.info("MFRC522: TxControlReg - antennas ENABLED")
             else:
                 self._antenna_on = False
                 self._regs[addr] = data
+                cocotb.log.info(
+                    f"MFRC522: TxControlReg - antennas DISABLED (data={data:#04x})"
+                )
             return
 
         if addr == self.REG_FIFO_DATA:
             self._fifo_push(data)
+            cocotb.log.info(f"MFRC522: FIFODataReg write {data:#04x}")
             return
 
         if addr == self.REG_FIFO_LEVEL:
@@ -455,10 +510,12 @@ class Mfrc522SpiSlave(SpiSlaveBase):
 
     def _maybe_start_transceive(self) -> None:
         cmd = self._regs[self.REG_COMMAND] & 0x0F
-        start_send = bool(
-            self._regs[self.REG_BIT_FRAMING] & 0x80
-        )  # StartSend in BitFramingReg :contentReference[oaicite:41]{index=41}
+        start_send = bool(self._regs[self.REG_BIT_FRAMING] & 0x80)
+        cocotb.log.info(
+            f"_maybe_start_transceive: cmd=0x{cmd:02x}, start_send={start_send}"
+        )
         if cmd == self.CMD_TRANSCEIVE and start_send:
+            cocotb.log.info("Starting transceive!")
             cocotb.start_soon(self._do_transceive())
 
     async def _do_transceive(self) -> None:
@@ -471,15 +528,21 @@ class Mfrc522SpiSlave(SpiSlaveBase):
 
         Only responds when chip is initialized AND antenna is enabled.
         """
-        await Timer(50, unit="ns")
+        # await Timer(50, unit="ns")
 
         # Check if MFRC522 is initialized and antenna is on
         if not self._initialized or not self._antenna_on:
             # No response - set a timeout-like error
+            cocotb.log.warning(
+                f"MFRC522: TRANSCEIVE ignored - not initialized={self._initialized}, "
+                f"antenna_on={self._antenna_on}"
+            )
             self._regs[self.REG_ERROR] |= self.ERR_PROTOCOL
             self._regs[self.REG_COM_IRQ] |= self.COMIRQ_TIMER
             self._regs[self.REG_BIT_FRAMING] &= ~0x80
             return
+
+        cocotb.log.info(f"MFRC522: TRANSCEIVE processing FIFO={list(self._fifo)}")
 
         req = bytes(self._fifo)
         self._fifo.clear()
@@ -487,7 +550,9 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         resp: bytes = b""
         rx_last_bits: int = 0  # ControlReg[2:0]
 
-        if req in (b"\x26", b"\x52"):
+        req_stripped = req.rstrip(b"\x00")
+
+        if req_stripped in (b"\x26", b"\x52"):
             resp = b"\x04\x00"
 
         elif req == b"\x93\x20":
@@ -515,6 +580,9 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         for b in resp:
             self._fifo_push(b)
 
+        if resp:
+            cocotb.log.info(f"MFRC522: TRANSCEIVE responding with {resp.hex()}")
+
         # Update ControlReg RxLastBits (bits 2:0)
         self._regs[self.REG_CONTROL] = (self._regs[self.REG_CONTROL] & 0xF8) | (
             rx_last_bits & 0x07
@@ -523,6 +591,9 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         # IRQs: set RxIRq only when we actually have a response.
         if resp:
             self._regs[self.REG_COM_IRQ] |= self.COMIRQ_RX | self.COMIRQ_IDLE
+            cocotb.log.info(
+                f"MFRC522: Set RxIRq+Idle in ComIrqReg, ComIrqReg now={self._regs[self.REG_COM_IRQ]:#04x}"
+            )
         else:
             self._regs[self.REG_COM_IRQ] |= self.COMIRQ_IDLE
 
@@ -586,7 +657,9 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         """
         # 50ms @ 100MHz = 5,000,000 cycles
         # For faster tests, we use a shorter delay but still meaningful
+        cocotb.log.info("MFRC522: waiting for oscillator startup (50ms simulated)...")
         await Timer(50_000, unit="ns")  # 50us for test speed
+        cocotb.log.info("MFRC522: oscillator startup complete, antenna ready to enable")
         # Antenna will be enabled by the init sequence writing to TX_CONTROL
 
     @staticmethod
@@ -621,6 +694,10 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         """
         from cocotb.triggers import RisingEdge, FallingEdge, First
 
+        cocotb.log.debug(
+            f"MFRC522._shift_byte_or_end: starting shift with tx=0x{tx:02x}"
+        )
+
         # Create a fresh frame_end trigger each call — cocotb 2.x triggers
         # may not be reusable after being cancelled by First().
         if self._config.cs_active_low:
@@ -631,9 +708,15 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         task = cocotb.start_soon(self._shift(8, tx_word=(tx & 0xFF)))
         done = await First(task, fe)
         if done is fe:
+            cocotb.log.debug(
+                f"MFRC522._shift_byte_or_end: frame ended before shift completed"
+            )
             task.cancel()
             return None
         rx = task.result()
+        cocotb.log.debug(
+            f"MFRC522._shift_byte_or_end: shift completed, rx=0x{int(rx):02x}"
+        )
         return int(rx) & 0xFF
 
     async def _transaction(self, frame_start, frame_end):
@@ -649,6 +732,9 @@ class Mfrc522SpiSlave(SpiSlaveBase):
 
         self._last_frame.append(addr_byte)
         is_read, addr = self._decode_addr_byte(addr_byte)
+        cocotb.log.debug(
+            f"MFRC522: decoded addr_byte=0x{addr_byte:02x}, is_read={is_read}, addr=0x{addr:02x}"
+        )
 
         if is_read:
             # Read transaction: for each byte the master clocks in,
@@ -664,10 +750,17 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             # back would insert a phantom byte).
             while True:
                 fifo_len_before = len(self._fifo)
+                cocotb.log.debug(f"MFRC522: about to read register 0x{addr:02x}")
                 tx = self._read_reg(addr)
+                cocotb.log.debug(
+                    f"MFRC522: read register 0x{addr:02x} -> 0x{tx:02x}, about to shift out on MISO"
+                )
                 rx = await self._shift_byte_or_end(frame_end, tx=tx)
                 if rx is None:
                     # Frame ended — the master never clocked this byte in.
+                    cocotb.log.debug(
+                        f"MFRC522: frame ended during read of reg 0x{addr:02x}"
+                    )
                     # Undo the destructive read only if we actually popped.
                     if (addr & 0x3F) == self.REG_FIFO_DATA and len(
                         self._fifo

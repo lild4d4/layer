@@ -67,7 +67,6 @@ async def mfrc_transceive(
     dut.mfrc_tx_len.value = len(tx_bytes) - 1
     dut.mfrc_tx_data.value = _bytes_to_int(tx_bytes)
     dut.mfrc_tx_last_bits.value = tx_last_bits
-    dut.mfrc_tx_timeout.value = timeout_cycles
     dut.mfrc_tx_valid.value = 1
     await RisingEdge(dut.clk)
     dut.mfrc_tx_valid.value = 0
