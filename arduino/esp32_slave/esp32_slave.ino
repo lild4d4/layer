@@ -51,16 +51,9 @@ uint8_t print = 0;
 void loop()
 {
   uint8_t rx[XFER_BYTES];
-  uint8_t tx[XFER_BYTES];
+  uint8_t tx[XFER_BYTES] = { 0x00, 0x00, 0x00, 0x00 , 0xDE, 0xAD, 0xBE, 0xEF};;
 
   memset(rx, 0, sizeof(rx));
-  // Fill TX with repeating DE AD BE EF
-  for (int i = 0; i < XFER_BYTES; i += 4) {
-    tx[i + 0] = 0xDE;
-    if (i + 1 < XFER_BYTES) tx[i + 1] = 0xAD;
-    if (i + 2 < XFER_BYTES) tx[i + 2] = 0xBE;
-    if (i + 3 < XFER_BYTES) tx[i + 3] = 0xEF;
-  }
 
   spi_slave_transaction_t t = {};
   t.length = 8 * XFER_BYTES;
@@ -75,7 +68,7 @@ void loop()
 
 
   print++;
-  // if (print != 255) return;
+  if (print != 255) return;
   print = 0;
   // Print what we got (first 8 bytes max)
   // Serial.printf("RX:");
@@ -86,7 +79,7 @@ void loop()
   // Check first 4 bytes like your Uno code
   if (XFER_BYTES >= 4 &&
       rx[0] == 0xDE && rx[1] == 0xAD && rx[2] == 0xBE && rx[3] == 0xEF) {
-    // Serial.println("  BEEF");
+    Serial.println("  BEEF");
   } else {
     Serial.println("ERROR");
   }

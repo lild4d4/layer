@@ -173,6 +173,7 @@ def test_eeprom_spi_e2e_runner():
         src_dir / "eeprom_spi.sv",
         src_dir / "spi_master.sv",
         src_dir / "spi_ctrl.sv",
+        src_dir / "clock_divider.sv",
         this_dir / "test_eeprom_spi_tb.sv",
     ]
 

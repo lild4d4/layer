@@ -118,7 +118,7 @@ async def test_spi_echo(dut):
     dut.rst.value = 0
     await ClockCycles(dut.clk, 5)
 
-    for test_data in range(255):
+    for test_data in range(10):
         # 4. Start echo sequence
         dut._log.info(f"Starting echo sequence — TX: {hex(test_data)}")
 

@@ -343,6 +343,7 @@ def test_mfrc_reg_if_runner():
     sources = [
         src / "spi_master.sv",
         src / "spi_ctrl.sv",
+        src / "clock_divider.sv",
         src / "mfrc_reg_if.sv",
         test_dir / "test_mfrc_reg_if_top.sv",
     ]
