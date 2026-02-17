@@ -52,8 +52,10 @@ async def auth_challenge__decrypt_input_cipher(dut):
 
     dut.operation_i.value = 0
     dut.data_i.value = int.from_bytes(ciphertext)
-    dut.u_auth_challenge.input_key.value = int.from_bytes(key);
     dut.start_i.value = 1
+    dut.eeprom_busy.value = 0
+    dut.eeprom_done.value = 1
+    dut.eeprom_buffer.value = int.from_bytes(key);
 
     while True:
         await RisingEdge(dut.clk)
@@ -79,8 +81,10 @@ async def auth_challenge__full_flow(dut):
 
     dut.operation_i.value = 0
     dut.data_i.value = int.from_bytes(ciphertext)
-    dut.u_auth_challenge.input_key.value = int.from_bytes(key);
     dut.start_i.value = 1
+    dut.eeprom_busy.value = 0
+    dut.eeprom_done.value = 1
+    dut.eeprom_buffer.value = int.from_bytes(key);
 
     while True:
         await RisingEdge(dut.clk)
@@ -93,8 +97,6 @@ async def auth_challenge__full_flow(dut):
             challenge = dut.data_o.value
             await RisingEdge(dut.clk)
             break
-    dut._log.info(f"{hex(int.from_bytes(rt + rc))}")
-    dut._log.info(f"{hex(int.from_bytes(rc + rt))}")
 
     challenge_raw = rt + rc
     session_key_raw = rc + rt
@@ -103,6 +105,124 @@ async def auth_challenge__full_flow(dut):
 
     assert dut.data_o.value == int.from_bytes(challenge), f"challenge value mismatch: {hex(dut.data_o.value)} != {hex(int.from_bytes(challenge))}"
     assert dut.u_auth_challenge.session_key.value == int.from_bytes(session_key), f"session key mismatch: {dut.u_auth_challenge.session_key.value} != {hex(int.from_bytes(session_key))}"
+
+
+@cocotb.test()
+async def auth_verify_id__valid_id(dut):
+    session_key = b'\xff\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c'
+    card_b_id = b'\xd0\xd2\x3f\x18\x25\x1c\x60\x87\x56\x6d\xe7\xb7\xde\xab\x77\x74'
+    cipher = AES.new(session_key, AES.MODE_ECB)
+    ciphertext = cipher.encrypt(card_b_id)
+
+    await start_clock(dut)
+    await reset_dut(dut)
+
+    dut.operation_i.value = 1
+    dut.data_i.value = int.from_bytes(ciphertext)
+    dut.session_key.value = int.from_bytes(session_key)
+    dut.start_i.value = 1
+    dut.eeprom_busy.value = 1
+    dut.eeprom_done.value = 0
+    dut.u_auth_verify_id.eeprom_start.value = 0
+
+    id_validated = 0
+    id_validated_output = 0
+    while True:
+        await RisingEdge(dut.clk)
+
+        # Get key after reset
+        if dut.state.value == 1:
+            dut._log.info("ok")
+            dut.eeprom_done.value = 1
+            await RisingEdge(dut.clk)
+            dut.eeprom_done.value = 0
+
+        if dut.u_auth_verify_id.state.value == 2:
+            # Wait two cycles while eeprom is still "busy"
+            for _ in range(2): await RisingEdge(dut.clk)
+            dut.eeprom_busy.value = 0
+
+            await RisingEdge(dut.clk)
+            assert int(dut.eeprom_start.value) == 1, "Did not started EEPROM"
+
+            await RisingEdge(dut.clk)
+            dut.eeprom_busy.value = 1
+
+            # Wait another few cycles, then provide a result
+            for _ in range(3): await RisingEdge(dut.clk)
+            dut.eeprom_buffer.value = int.from_bytes(card_b_id)
+            dut.eeprom_busy.value = 0
+            dut.eeprom_done.value = 1
+            await RisingEdge(dut.clk)
+
+        if dut.valid_o.value == 1:
+            dut.start_i.value = 0
+            id_validated = dut.u_auth_verify_id.id_valid.value
+            id_validated_output = dut.data_o.value[0]
+            await RisingEdge(dut.clk)
+            break
+
+    assert id_validated == 1, "Valid ID was marked as invalid."
+    assert id_validated_output == 1, "Valid status was not correctly output."
+
+
+@cocotb.test()
+async def auth_verify_id__invalid_id(dut):
+    session_key = b'\xff\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c'
+    card_b_id = b'\xd0\xd2\x3f\x18\x25\x1c\x60\x87\x56\x6d\xe7\xb7\xde\xab\x77\x74'
+    cipher = AES.new(session_key, AES.MODE_ECB)
+    ciphertext = cipher.encrypt(card_b_id)
+
+    await start_clock(dut)
+    await reset_dut(dut)
+
+    dut.operation_i.value = 1
+    dut.data_i.value = int.from_bytes(ciphertext)
+    dut.session_key.value = int.from_bytes(session_key)
+    dut.start_i.value = 1
+    dut.eeprom_busy.value = 1
+    dut.eeprom_done.value = 0
+    dut.u_auth_verify_id.eeprom_start.value = 0
+
+    id_validated = 0
+    id_validated_output = 0
+    while True:
+        await RisingEdge(dut.clk)
+
+        # Get key after reset
+        if dut.state.value == 1:
+            dut._log.info("ok")
+            dut.eeprom_done.value = 1
+            await RisingEdge(dut.clk)
+            dut.eeprom_done.value = 0
+
+        if dut.u_auth_verify_id.state.value == 2:
+            # Wait two cycles while eeprom is still "busy"
+            for _ in range(2): await RisingEdge(dut.clk)
+            dut.eeprom_busy.value = 0
+
+            await RisingEdge(dut.clk)
+            assert int(dut.eeprom_start.value) == 1, "Did not request ID from eeprom"
+
+            await RisingEdge(dut.clk)
+            dut.eeprom_busy.value = 1
+
+            # Wait another few cycles, then provide a result
+            for _ in range(3): await RisingEdge(dut.clk)
+            dut.eeprom_buffer.value = int.from_bytes(card_b_id[:15] + b'\xff')
+            dut.eeprom_busy.value = 0
+            dut.eeprom_done.value = 1
+            await RisingEdge(dut.clk)
+
+        if dut.valid_o.value == 1:
+            dut.start_i.value = 0
+            id_validated = dut.u_auth_verify_id.id_valid.value
+            id_validated_output = dut.data_o.value[0]
+            await RisingEdge(dut.clk)
+            break
+
+    assert id_validated == 0, "Valid ID was marked as invalid."
+    assert id_validated_output == 0, "Valid status was not correctly output."
 
 
 def test_auth():

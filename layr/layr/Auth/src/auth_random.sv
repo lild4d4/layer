@@ -56,6 +56,6 @@ always_ff @(posedge clk or posedge rst) begin
         counter <= counter + 5'b1;
         state <= multi_shift(state);
     end
-end 
+end
 
 endmodule
