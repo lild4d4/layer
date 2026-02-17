@@ -77,6 +77,9 @@ TReloadRegL = 0x2D << 1
 TCounterValueRegH = 0x2E << 1  # shows the 16-bit timer value
 TCounterValueRegL = 0x2F << 1
 
+# Page 3: Test registers / additional configuration
+VersionReg = 0x37 << 1  # shows the software version
+
 # Commands sent to the PICC.
 # The commands used by the PCD to manage communication with several PICCs (ISO 14443-3, Type A, section 6.4)
 PICC_CMD_REQA = 0x26  # REQuest command, Type A. Invites PICCs in state IDLE to go to READY and prepare for anticollision or selection. 7 bit frame.
@@ -138,21 +141,7 @@ class MFRC522:
         self.slave = self.spi.get_port(cs=0, freq=SPI_FREQ, mode=0)
 
     def read_version_string(self):
-        # MFRC522 Version Register
-        VERSION_REG = 0x37
-
-        # Construct read address byte
-        # Format: 1AAAAAA0
-        addr = (VERSION_REG << 1) | 0x80
-
-        # Perform transaction
-        # Send address, read 1 byte back
-        response = self.slave.exchange([addr], 1)
-
-        version = response[0]
-        for b in bytes(response):
-            print(b)
-
+        version = self.read_register(VersionReg)
         print(f"MFRC522 Version register: 0x{version:02X}")
 
         # Known values:
@@ -167,24 +156,23 @@ class MFRC522:
             print("Unknown version value")
 
     def write_register(self, reg, value):
-        self.slave.exchange([reg], 0)
-        for b in value:
-            self.slave.exchange([b], 0)
+        if isinstance(value, bytes):
+            data = [reg] + list(value)
+        else:
+            data = [reg, value]
+
+        self.slave.exchange(data)
 
     def read_register(self, reg):
-        self.slave.exchange(
-            [0x80 | reg], 0
-        )  # MSB == 1 is for reading. LSB is not used in address. Datasheet section 8.1.2.3.
-        return self.slave.exchange([0], 1)[
+        # MSB == 1 is for reading. LSB is not used in address. Datasheet section 8.1.2.3.
+        return self.slave.exchange([0x80 | reg], 1)[
             0
         ]  # Read the value back. Send 0 to stop reading.
 
     def read_register_bytes(self, reg, length):
-        self.slave.exchange(
-            [0x80 | reg], 0
-        )  # MSB == 1 is for reading. LSB is not used in address. Datasheet section 8.1.2.3.
+        # MSB == 1 is for reading. LSB is not used in address. Datasheet section 8.1.2.3.
         return self.slave.exchange(
-            [0], length
+            [0x80 | reg], length
         )  # Read the value back. Send 0 to stop reading.
 
     def clear_register_bit_mask(self, reg, mask):
@@ -200,7 +188,12 @@ class MFRC522:
         if (value & 0x03) != 0x03:
             self.write_register(TxControlReg, value | 0x03)
 
+    def pcd_reset(self):
+        self.write_register(CommandReg, PCD_SoftReset)
+        time.sleep(0.05)
+
     def pdc_init(self):
+        self.pcd_reset()
         # Reset baud rates
         self.write_register(TxModeReg, 0x00)
         self.write_register(RxModeReg, 0x00)
@@ -228,6 +221,7 @@ class MFRC522:
             ModeReg, 0x3D
         )  # Default 0x3F. Set the preset value for the CRC coprocessor for the CalcCRC command to 0x6363 (ISO 14443-3 part 6.2.4)
         self.antenna_on()  # Enable the antenna driver pins TX1 and TX2 (they were disabled by the reset)
+        print("pdc initialized")
 
     def transceive(
         self,
@@ -235,8 +229,8 @@ class MFRC522:
     ):
         # Transceive the data, store the reply in cmdBuffer[]
         waitIRq = 0x30  # RxIRq and IdleIRq
-        (result_status, result) = self.communicate_with_picc(
-            PCD_Transceive, waitIRq, sendData, True, 0
+        (result_status, result, valid_bits) = self.communicate_with_picc(
+            PCD_Transceive, sendData, True, 0, waitIRq=waitIRq
         )
         if result_status != "STATUS_OK":
             return result_status
@@ -246,10 +240,10 @@ class MFRC522:
     def communicate_with_picc(
         self,
         command,  # The command to execute. One of the PCD_Command enums.
-        waitIRq,  # The bits in the ComIrqReg register that signals successful completion of the command.
         sendData,  # Pointer to the data to transfer to the FIFO.
         retrieveBackData,  # Expected retrieve the data
         validBits,  # In/Out: The number of valid bits in the last byte. 0 for 8 valid bits.
+        waitIRq=0x30,  # The bits in the ComIrqReg register that signals successful completion of the command.
     ):
         # Prepare values for BitFramingReg
         txLastBits = validBits if validBits else 0
@@ -274,31 +268,35 @@ class MFRC522:
         # When they are set in the ComIrqReg register, then the command is
         # considered complete. If the command is not indicated as complete in
         # ~36ms, then consider the command as timed out.
-        deadline = int(time.time() * 1000) + 36
+        deadline = millis() + 36
         completed = False
 
         while True:
             n = self.read_register(
                 ComIrqReg
             )  # ComIrqReg[7..0] bits are: Set1 TxIRq RxIRq IdleIRq HiAlertIRq LoAlertIRq ErrIRq TimerIRq
+            # expected.                                 1       1         0          0       0       0
+            # got                                 1     1       0         0          1       0       0
+            # print("ComIrqReg:", n, waitIRq, n & waitIRq)
             if n & waitIRq:  # One of the interrupts that signal success has been set.
+                print("recieved successfully")
                 completed = True
                 break
             if n & 0x01:  # Timer interrupt - nothing received in 25ms
-                return ("STATUS_TIMEOUT", None)
-            if millis() < deadline:
+                return ("STATUS_TIMEOUT", None, 0)
+            if millis() > deadline:
                 break
 
         # 36ms and nothing happened. Communication with the MFRC522 might be down.
         if not completed:
-            return ("STATUS_TIMEOUT", None)
+            return ("STATUS_TIMEOUT", None, 0)
 
         # Stop now if any errors except collisions were detected.
         errorRegValue = self.read_register(
             ErrorReg
         )  # ErrorReg[7..0] bits are: WrErr TempErr reserved BufferOvfl CollErr CRCErr ParityErr ProtocolErr
         if errorRegValue & 0x13:  # BufferOvfl ParityErr ProtocolErr
-            return ("STATUS_ERROR", None)
+            return ("STATUS_ERROR", None, 0)
 
         _validBits = 0
 
@@ -306,24 +304,55 @@ class MFRC522:
         backData = None
         if retrieveBackData:
             n = self.read_register(FIFOLevelReg)  # Number of bytes in the FIFO
+            print("back data lenght", n)
             backData = self.read_register_bytes(
                 FIFODataReg, n
             )  # Get received data from FIFO
             _validBits = (
                 self.read_register(ControlReg) & 0x07
             )  # RxLastBits[2:0] indicates the number of valid bits in the last received byte. If this value is 000b, the whole byte is valid.
-            if validBits:
-                validBits = _validBits
 
         # Tell about collisions
         if errorRegValue & 0x08:
-            return ("STATUS_COLLISION", None)
+            return ("STATUS_COLLISION", None, _validBits)
 
         # Tell about collisions
         if errorRegValue & 0x08:  # CollErr
-            return ("STATUS_COLLISION", None)
+            return ("STATUS_COLLISION", None, _validBits)
 
-        return ("STATUS_OK", backData)
+        return ("STATUS_OK", backData, _validBits)
+
+    def is_new_card_present(self):
+        # Reset baud rates
+        self.write_register(TxModeReg, 0x00)
+        self.write_register(RxModeReg, 0x00)
+        # Reset ModWidthReg
+        self.write_register(ModWidthReg, 0x26)
+
+        status, _, _ = self.req_a()
+        print("status new card present:", status)
+        return status == "STATUS_OK" or status == "STATUS_COLLISION"
+
+    def req_a(self):
+        "check card in field"
+        self.clear_register_bit_mask(
+            CollReg, 0x80
+        )  # ValuesAfterColl=1 => Bits received after collision are cleared.
+        validBits = 7  # For REQA and WUPA we need the short frame format - transmit only 7 bits of the last (and only) byte. TxLastBits = BitFramingReg[2..0]
+        (status, back_data, validBits) = self.communicate_with_picc(
+            command=PCD_Transceive,
+            sendData=bytes([PICC_CMD_REQA]),
+            retrieveBackData=True,
+            validBits=validBits,
+        )
+        if status != "STATUS_OK":
+            return (status, None, 0)
+
+        # ATQA is 2 bytes, and the last received byte must be fully valid.
+        if back_data is None or len(back_data) != 2 or validBits != 0:
+            return ("STATUS_ERROR", back_data, validBits)
+
+        return ("STATUS_OK", back_data, validBits)
 
 
 def main():
@@ -331,7 +360,14 @@ def main():
     try:
         mfrc.pdc_init()
         mfrc.read_version_string()
-        mfrc.transceive([])
+
+        while not mfrc.is_new_card_present():
+            time.sleep(1)
+        print("new card present")
+
+        mfrc.transceive(
+            bytes([0x00, 0xA4, 0x04, 0x00, 0x06, 0xF0, 0x00, 0x00, 0x0C, 0xDC, 0x00])
+        )
     except KeyboardInterrupt:
         print("finished running tests")
     finally:
@@ -340,21 +376,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-"""
-    def req_a(self):
-        "check card in field"
-        self.clear_register_bit_mask(CollReg, 0x80)		# ValuesAfterColl=1 => Bits received after collision are cleared.
-        validBits = 7									# For REQA and WUPA we need the short frame format - transmit only 7 bits of the last (and only) byte. TxLastBits = BitFramingReg[2..0]
-        status = self.communicate_with_picc(PCD_Transceive, 1, bufferATQA, bufferSize, &validBits)
-        if (status != "STATUS_OK"):
-            print("got status: ", status)
-            return False
-
-        
-        if (*bufferSize != 2 or validBits != 0):
-            print("error")
-            return False
-        return True
-"""
