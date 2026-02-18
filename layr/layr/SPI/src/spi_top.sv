@@ -9,10 +9,6 @@ module spi_top (
     input wire eeprom_get_key,  // get_key = 1, get_id = 0
     output wire [127:0] eeprom_rbuffer,
 
-    // mfrc command inputs
-    input wire mfrc_cmd_init,  // pulse to re-run initialization
-    input wire mfrc_cmd_poll,  // pulse for manual poll
-
     // mfrc status outputs
     output wire        mfrc_ready,         // 1 = idle/ready
     output wire        mfrc_init_done,     // 1 = init complete
@@ -79,10 +75,6 @@ module spi_top (
   mfrc_top u_mfrc_top (
       .clk(clk),
       .rst(rst),
-
-      // command inputs
-      .cmd_init(mfrc_cmd_init),
-      .cmd_poll(mfrc_cmd_poll),
 
       // status outputs
       .ready(mfrc_ready),

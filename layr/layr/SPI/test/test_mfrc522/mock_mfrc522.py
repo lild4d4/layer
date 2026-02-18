@@ -281,7 +281,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             cocotb.log.warning("MFRC522: FIFO overflow!")
             return
         self._fifo.append(b & 0xFF)
-        cocotb.log.info(f"MFRC522: FIFO push {b:#04x}, level now {len(self._fifo)}")
+        cocotb.log.debug(f"MFRC522: FIFO push {b:#04x}, level now {len(self._fifo)}")
         self._update_alerts_and_irq()
 
     def _fifo_pop(self) -> int:
@@ -289,7 +289,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             self._update_alerts_and_irq()
             return 0x00
         b = self._fifo.popleft()
-        cocotb.log.info(f"MFRC522: FIFO pop {b:#04x}, level now {len(self._fifo)}")
+        cocotb.log.debug(f"MFRC522: FIFO pop {b:#04x}, level now {len(self._fifo)}")
         self._update_alerts_and_irq()
         return b
 
@@ -298,21 +298,21 @@ class Mfrc522SpiSlave(SpiSlaveBase):
 
         if addr == self.REG_FIFO_DATA:
             val = self._fifo_pop()
-            cocotb.log.info(
+            cocotb.log.debug(
                 f"MFRC522: READ FIFO_DATA -> {val:#04x}, fifo_level={len(self._fifo)}"
             )
             return val
 
         if addr == self.REG_FIFO_LEVEL:
             val = len(self._fifo) & 0x7F
-            cocotb.log.info(f"MFRC522: READ FIFO_LEVEL -> {val:#04x}")
+            cocotb.log.debug(f"MFRC522: READ FIFO_LEVEL -> {val:#04x}")
             return val
 
         if addr == self.REG_STATUS1:
             # Keep Hi/LoAlert and IRq up to date before exposing the shadow value.
             self._update_alerts_and_irq()
             val = self._regs[addr] & 0x7B  # mask reserved bits (7 and 2)
-            cocotb.log.info(f"MFRC522: READ STATUS1 -> {val:#04x}")
+            cocotb.log.debug(f"MFRC522: READ STATUS1 -> {val:#04x}")
             return val
 
         if addr == self.REG_COM_IRQ:
@@ -326,43 +326,43 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         if addr == self.REG_DIV_IRQ:
             # bit7 Set2 is write-only; return only 0..6.
             val = self._regs[addr] & 0x7F
-            cocotb.log.info(f"MFRC522: READ DIV_IRQ -> {val:#04x}")
+            cocotb.log.debug(f"MFRC522: READ DIV_IRQ -> {val:#04x}")
             return val
 
         if addr == self.REG_ERROR:
             val = self._regs[addr] & 0xFF
-            cocotb.log.info(f"MFRC522: READ ERROR -> {val:#04x}")
+            cocotb.log.debug(f"MFRC522: READ ERROR -> {val:#04x}")
             return val
 
         if addr == self.REG_BIT_FRAMING:
             # bit7 StartSend is write-only (reads as 0).
             val = self._regs[addr] & 0x7F
-            cocotb.log.info(f"MFRC522: READ BIT_FRAMING -> {val:#04x}")
+            cocotb.log.debug(f"MFRC522: READ BIT_FRAMING -> {val:#04x}")
             return val
 
         if addr == self.REG_CONTROL:
             # bits7..6 are write-only (read as 0).
             val = self._regs[addr] & 0x3F
-            cocotb.log.info(f"MFRC522: READ CONTROL -> {val:#04x}")
+            cocotb.log.debug(f"MFRC522: READ CONTROL -> {val:#04x}")
             return val
 
         if addr == self.REG_WATER_LEVEL:
             val = self._regs[addr] & 0x3F
-            cocotb.log.info(f"MFRC522: READ WATER_LEVEL -> {val:#04x}")
+            cocotb.log.debug(f"MFRC522: READ WATER_LEVEL -> {val:#04x}")
             return val
 
         if addr in (self.REG_CRC_RESULT_MSB, self.REG_CRC_RESULT_LSB):
             val = self._regs[addr] & 0xFF
-            cocotb.log.info(f"MFRC522: READ CRC_RESULT -> {val:#04x}")
+            cocotb.log.debug(f"MFRC522: READ CRC_RESULT -> {val:#04x}")
             return val
 
         if addr == self.REG_VERSION:
             val = self._regs[addr] & 0xFF
-            cocotb.log.info(f"MFRC522: READ VERSION -> {val:#04x}")
+            cocotb.log.debug(f"MFRC522: READ VERSION -> {val:#04x}")
             return val
 
         val = self._regs[addr] & 0xFF
-        cocotb.log.info(f"MFRC522: READ reg[{addr:#02x}] -> {val:#04x}")
+        cocotb.log.debug(f"MFRC522: READ reg[{addr:#02x}] -> {val:#04x}")
         return val
 
     def _unread_reg(self, addr: int, value: int) -> None:
@@ -413,7 +413,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
                 0x0F: "SOFTRESET",
             }
             cmd_name = cmd_names.get(cmd, f"CMD_{cmd:#x}")
-            cocotb.log.info(f"MFRC522: CommandReg set to {cmd_name} (0x{data:#04x})")
+            cocotb.log.debug(f"MFRC522: CommandReg set to {cmd_name} (0x{data:#04x})")
 
             if cmd == self.CMD_SOFTRESET:
                 cocotb.log.info("MFRC522: CMD_SOFTRESET - resetting registers")
@@ -463,7 +463,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
 
         if addr == self.REG_FIFO_DATA:
             self._fifo_push(data)
-            cocotb.log.info(f"MFRC522: FIFODataReg write {data:#04x}")
+            cocotb.log.debug(f"MFRC522: FIFODataReg write {data:#04x}")
             return
 
         if addr == self.REG_FIFO_LEVEL:
@@ -511,11 +511,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
     def _maybe_start_transceive(self) -> None:
         cmd = self._regs[self.REG_COMMAND] & 0x0F
         start_send = bool(self._regs[self.REG_BIT_FRAMING] & 0x80)
-        cocotb.log.info(
-            f"_maybe_start_transceive: cmd=0x{cmd:02x}, start_send={start_send}"
-        )
         if cmd == self.CMD_TRANSCEIVE and start_send:
-            cocotb.log.info("Starting transceive!")
             cocotb.start_soon(self._do_transceive())
 
     async def _do_transceive(self) -> None:
@@ -542,7 +538,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             self._regs[self.REG_BIT_FRAMING] &= ~0x80
             return
 
-        cocotb.log.info(f"MFRC522: TRANSCEIVE processing FIFO={list(self._fifo)}")
+        cocotb.log.debug(f"MFRC522: TRANSCEIVE processing FIFO={list(self._fifo)}")
 
         req = bytes(self._fifo)
         self._fifo.clear()
@@ -581,7 +577,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             self._fifo_push(b)
 
         if resp:
-            cocotb.log.info(f"MFRC522: TRANSCEIVE responding with {resp.hex()}")
+            cocotb.log.debug(f"MFRC522: TRANSCEIVE responding with {resp.hex()}")
 
         # Update ControlReg RxLastBits (bits 2:0)
         self._regs[self.REG_CONTROL] = (self._regs[self.REG_CONTROL] & 0xF8) | (
@@ -591,7 +587,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         # IRQs: set RxIRq only when we actually have a response.
         if resp:
             self._regs[self.REG_COM_IRQ] |= self.COMIRQ_RX | self.COMIRQ_IDLE
-            cocotb.log.info(
+            cocotb.log.debug(
                 f"MFRC522: Set RxIRq+Idle in ComIrqReg, ComIrqReg now={self._regs[self.REG_COM_IRQ]:#04x}"
             )
         else:

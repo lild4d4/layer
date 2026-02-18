@@ -50,49 +50,56 @@ module mfrc_core (
 );
 
   // ── Register addresses ──
-  localparam [5:0] REG_COMMAND    = 6'h01,
-                   REG_COM_IRQ    = 6'h04,
-                   REG_FIFO_DATA  = 6'h09,
-                   REG_FIFO_LEVEL = 6'h0A,
-                   REG_CONTROL    = 6'h0C,
-                   REG_BIT_FRAMING= 6'h0D;
+  typedef enum logic [5:0] {
+    REG_COMMAND     = 6'h01,
+    REG_COM_IRQ     = 6'h04,
+    REG_FIFO_DATA   = 6'h09,
+    REG_FIFO_LEVEL  = 6'h0A,
+    REG_CONTROL     = 6'h0C,
+    REG_BIT_FRAMING = 6'h0D
+  } mfrc522_reg_t;
 
   // ── Constants ──
-  localparam [7:0] CMD_TRANSCEIVE = 8'h0C, CMD_IDLE = 8'h00, FIFO_FLUSH = 8'h80, IRQ_RX = 8'h20;
+  typedef enum logic [7:0] {
+    CMD_IDLE       = 8'h00,
+    CMD_TRANSCEIVE = 8'h0C,
+    IRQ_RX         = 8'h20,
+    FIFO_FLUSH     = 8'h80
+  } mfrc522_const_t;
 
   // ── FSM states (fully linear) ──
-  localparam [4:0]
-    S_IDLE          = 5'd0,
-    S_FLUSH_ISSUE   = 5'd1,
-    S_FLUSH_WAIT    = 5'd2,
-    S_BITFR_ISSUE   = 5'd3,
-    S_BITFR_WAIT    = 5'd4,
-    S_FIFOWR_ISSUE  = 5'd5,
-    S_FIFOWR_WAIT   = 5'd6,
-    S_CMD_ISSUE     = 5'd7,
-    S_CMD_WAIT      = 5'd8,
-    S_START_ISSUE   = 5'd9,
-    S_START_WAIT    = 5'd10,
-    S_POLL_ISSUE    = 5'd11,
-    S_POLL_WAIT     = 5'd12,
-    S_IDLE_CMD_ISSUE= 5'd13,
-    S_IDLE_CMD_WAIT = 5'd14,
-  // After Idle cmd: read back results
-  S_RDLVL_ISSUE   = 5'd15,
-    S_RDLVL_WAIT    = 5'd16,
-    S_RDFIFO_ISSUE  = 5'd17,
-    S_RDFIFO_WAIT   = 5'd18,
-    S_RDCTRL_ISSUE  = 5'd19,
-    S_RDCTRL_WAIT   = 5'd20,
-    S_DONE          = 5'd21;
+  typedef enum logic [4:0] {
+    S_IDLE           = 5'd0,
+    S_FLUSH_ISSUE    = 5'd1,
+    S_FLUSH_WAIT     = 5'd2,
+    S_BITFR_ISSUE    = 5'd3,
+    S_BITFR_WAIT     = 5'd4,
+    S_FIFOWR_ISSUE   = 5'd5,
+    S_FIFOWR_WAIT    = 5'd6,
+    S_CMD_ISSUE      = 5'd7,
+    S_CMD_WAIT       = 5'd8,
+    S_START_ISSUE    = 5'd9,
+    S_START_WAIT     = 5'd10,
+    S_POLL_ISSUE     = 5'd11,
+    S_POLL_WAIT      = 5'd12,
+    S_IDLE_CMD_ISSUE = 5'd13,
+    S_IDLE_CMD_WAIT  = 5'd14,
+    S_RDLVL_ISSUE    = 5'd15,
+    S_RDLVL_WAIT     = 5'd16,
+    S_RDFIFO_ISSUE   = 5'd17,
+    S_RDFIFO_WAIT    = 5'd18,
+    S_RDCTRL_ISSUE   = 5'd19,
+    S_RDCTRL_WAIT    = 5'd20,
+    S_DONE           = 5'd21
+  } state_t;
 
-  reg [  4:0] state;
+  state_t state;
 
   // Latched request
-  reg [  4:0] lat_tx_len;
+  reg [4:0] lat_tx_len;
   reg [255:0] lat_tx_data;
-  reg [  2:0] lat_tx_last_bits;
-  reg [  5:0] fifo_level;
+  reg [2:0] lat_tx_last_bits;
+  reg [5:0] fifo_level;
 
   assign trx_ready = (state == S_IDLE);
 

@@ -1,23 +1,17 @@
 // mfrc_top – MFRC522 top-level wrapper
 //
 // Provides:
-//   - Initialization sequence (soft reset + register writes)
+//   - Initialization sequence (soft reset + register writes, auto-runs on power-up)
 //   - Automatic card polling until card is detected
 //   - Simple TX/RX interface for communication with card
 //
 // Usage:
-//   - Pulses cmd_init to run initialization (auto-runs on power-up)
-//   - Pulses cmd_poll for manual poll
 //   - Read card_present to detect card
 //   - Use tx_* / rx_* for sending/receiving data
 
 module mfrc_top (
     input wire clk,
     input wire rst,
-
-    // ── command inputs ──
-    input wire cmd_init,  // pulse to re-run initialization
-    input wire cmd_poll,  // pulse for manual poll
 
     // ── status outputs ──
     output wire        ready,         // 1 = idle/ready for commands
@@ -55,36 +49,42 @@ module mfrc_top (
   // =====================================================================
   // MFRC522 register addresses (6-bit, as used by mfrc_reg_if)
   // =====================================================================
-  localparam logic [5:0] REG_COMMAND = 6'h01;
-  localparam logic [5:0] REG_TX_MODE = 6'h12;
-  localparam logic [5:0] REG_RX_MODE = 6'h13;
-  localparam logic [5:0] REG_MOD_WIDTH = 6'h24;
-  localparam logic [5:0] REG_T_MODE = 6'h2A;
-  localparam logic [5:0] REG_T_PRESCALER = 6'h2B;
-  localparam logic [5:0] REG_T_RELOAD_H = 6'h2C;
-  localparam logic [5:0] REG_T_RELOAD_L = 6'h2D;
-  localparam logic [5:0] REG_TX_ASK = 6'h15;
-  localparam logic [5:0] REG_MODE = 6'h11;
-  localparam logic [5:0] REG_TX_CONTROL = 6'h14;
+  typedef enum logic [5:0] {
+    REG_COMMAND     = 6'h01,
+    REG_MODE        = 6'h11,
+    REG_TX_MODE     = 6'h12,
+    REG_RX_MODE     = 6'h13,
+    REG_TX_CONTROL  = 6'h14,
+    REG_TX_ASK      = 6'h15,
+    REG_MOD_WIDTH   = 6'h24,
+    REG_T_MODE      = 6'h2A,
+    REG_T_PRESCALER = 6'h2B,
+    REG_T_RELOAD_H  = 6'h2C,
+    REG_T_RELOAD_L  = 6'h2D
+  } mfrc522_reg_t;
 
   // =====================================================================
   // MFRC522 commands
   // =====================================================================
-  localparam logic [7:0] CMD_SOFT_RESET = 8'h0F;
-  localparam logic [7:0] PICC_REQA = 8'h26;  // 7-bit command
+  typedef enum logic [7:0] {
+    CMD_SOFT_RESET = 8'h0F,
+    PICC_REQA      = 8'h26   // 7-bit command
+  } mfrc522_cmd_t;
 
   // =====================================================================
   // State machine states
   // =====================================================================
-  localparam logic [3:0] S_IDLE = 4'd0;
-  localparam logic [3:0] S_SOFT_RESET = 4'd1;
-  localparam logic [3:0] S_WAIT_RESET = 4'd2;
-  localparam logic [3:0] S_INIT_WRITE = 4'd3;
-  localparam logic [3:0] S_INIT_WAIT = 4'd4;
-  localparam logic [3:0] S_ANTENNA_ON = 4'd5;
-  localparam logic [3:0] S_POLL_SETUP = 4'd6;
-  localparam logic [3:0] S_POLL_WAIT = 4'd7;
-  localparam logic [3:0] S_POLL_RESULT = 4'd8;
+  typedef enum logic [3:0] {
+    S_IDLE        = 4'd0,
+    S_SOFT_RESET  = 4'd1,
+    S_WAIT_RESET  = 4'd2,
+    S_INIT_WRITE  = 4'd3,
+    S_INIT_WAIT   = 4'd4,
+    S_ANTENNA_ON  = 4'd5,
+    S_POLL_SETUP  = 4'd6,
+    S_POLL_WAIT   = 4'd7,
+    S_POLL_RESULT = 4'd8
+  } state_t;
 
   // =====================================================================
   // Init sequence data
@@ -162,8 +162,6 @@ module mfrc_top (
   // =====================================================================
   // Instantiate reg_arb (shares reg_if between FSM and mfrc_core)
   // =====================================================================
-  reg          init_done_sync;
-
   // Intermediate wires for mfrc_core register interface
   wire         core_req_valid;
   wire         core_req_ready;
@@ -274,10 +272,7 @@ module mfrc_top (
   // =====================================================================
   // Main FSM (init + polling)
   // =====================================================================
-  reg [3:0] state;
-  reg cmd_init_d1, cmd_poll_d1;
-  wire         cmd_init_pulse = cmd_init && !cmd_init_d1;
-  wire         cmd_poll_pulse = cmd_poll && !cmd_poll_d1;
+  state_t state;
 
   reg  [  3:0] init_idx;
   reg  [ 31:0] wait_cnt;
@@ -291,11 +286,6 @@ module mfrc_top (
   assign trx_tx_len = trx_len_r;
   assign trx_tx_data = trx_data_r;
   assign trx_tx_last_bits = trx_last_r;
-
-  // Sync init_done to arbiter (avoid combinational loop)
-  always @(posedge clk) begin
-    init_done_sync <= init_done_r;
-  end
 
   assign ready        = ready_r;
   assign init_done    = init_done_r;
@@ -312,8 +302,6 @@ module mfrc_top (
   always @(posedge clk or posedge rst) begin
     if (rst) begin
       state          <= S_IDLE;
-      cmd_init_d1    <= 1'b0;
-      cmd_poll_d1    <= 1'b0;
       ready_r        <= 1'b1;
       init_done_r    <= 1'b0;
       card_present_r <= 1'b0;
@@ -324,9 +312,6 @@ module mfrc_top (
       fsm_req_valid  <= 1'b0;
       rx_valid_r     <= 1'b0;
     end else begin
-      cmd_init_d1   <= cmd_init;
-      cmd_poll_d1   <= cmd_poll;
-
       trx_v         <= 1'b0;
       fsm_req_valid <= 1'b0;
       rx_valid_r    <= 1'b0;
@@ -337,18 +322,12 @@ module mfrc_top (
           card_present_r <= 1'b0;
           atqa_r         <= 16'd0;
 
-          if (cmd_init_pulse || !init_done_r) begin
+          if (!init_done_r) begin
             state       <= S_SOFT_RESET;
             ready_r     <= 1'b0;
             init_idx    <= 4'd0;
             init_done_r <= 1'b0;
-          end else if (cmd_poll_pulse && init_done_r) begin
-            state      <= S_POLL_SETUP;
-            ready_r    <= 1'b0;
-            trx_len_r  <= 5'd1;
-            trx_data_r <= {PICC_REQA, 248'd0};
-            trx_last_r <= 3'd7;
-          end else if (init_done_r && !card_present_r) begin
+          end else if (!card_present_r) begin
             state      <= S_POLL_SETUP;
             ready_r    <= 1'b0;
             trx_len_r  <= 5'd1;

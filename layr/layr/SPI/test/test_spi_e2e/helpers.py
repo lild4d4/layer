@@ -31,9 +31,6 @@ async def reset_dut(dut):
     dut.eeprom_start.value = 0
     dut.eeprom_get_key.value = 0
 
-    dut.mfrc_cmd_init.value = 0
-    dut.mfrc_cmd_poll.value = 0
-
     dut.mfrc_tx_valid.value = 0
     dut.mfrc_tx_len.value = 0
     dut.mfrc_tx_data.value = 0
