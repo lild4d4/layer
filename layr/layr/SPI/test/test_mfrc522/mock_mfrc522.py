@@ -12,33 +12,46 @@ class Mfrc522SpiSlave(SpiSlaveBase):
     """
     MFRC522 SPI mock (register + FIFO + minimal command hooks).
 
-    SPI protocol reminder:
-      - First byte is address byte: bit7=R/W, bits6..1=addr, bit0 must be 0. :contentReference[oaicite:6]{index=6}
-      - Write: addr, then data bytes. Read: addr, then dummy bytes while device outputs data. :contentReference[oaicite:7]{index=7}
+    SPI protocol (datasheet section 8.1.2):
+      - First byte is address byte: bit7=R/W (1=read), bits6..1=addr, bit0=0
+      - Write: addr byte, then data bytes
+      - Read: addr byte, then clock out data while sending next addr or 0x00
     """
 
     # --- Register addresses (6-bit address space) ---
-    REG_COMMAND = 0x01  # CommandReg
-    REG_COM_IEN = 0x02  # ComIEnReg
-    REG_DIV_IEN = 0x03  # DivIEnReg
-    REG_COM_IRQ = 0x04  # ComIrqReg
-    REG_DIV_IRQ = 0x05  # DivIrqReg
-    REG_ERROR = 0x06  # ErrorReg
-    REG_STATUS1 = 0x07  # Status1Reg
+    REG_COMMAND = 0x01
+    REG_COM_IEN = 0x02
+    REG_DIV_IEN = 0x03
+    REG_COM_IRQ = 0x04
+    REG_DIV_IRQ = 0x05
+    REG_ERROR = 0x06
+    REG_STATUS1 = 0x07
+    REG_STATUS2 = 0x08
+    REG_FIFO_DATA = 0x09
+    REG_FIFO_LEVEL = 0x0A
+    REG_WATER_LEVEL = 0x0B
+    REG_CONTROL = 0x0C
+    REG_BIT_FRAMING = 0x0D
+    REG_COLL = 0x0E
 
-    REG_FIFO_DATA = 0x09  # FIFODataReg
-    REG_FIFO_LEVEL = 0x0A  # FIFOLevelReg
-    REG_WATER_LEVEL = 0x0B  # WaterLevelReg
-    REG_CONTROL = 0x0C  # ControlReg
-    REG_BIT_FRAMING = 0x0D  # BitFramingReg
+    REG_MODE = 0x11
+    REG_TX_MODE = 0x12
+    REG_RX_MODE = 0x13
+    REG_TX_CONTROL = 0x14
+    REG_TX_ASK = 0x15
+    REG_MOD_WIDTH = 0x24
 
-    REG_MODE = 0x11  # ModeReg
-    REG_TX_CONTROL = 0x14  # TxControlReg
-    REG_CRC_RESULT_MSB = 0x21  # CRCResultReg (higher bits)
-    REG_CRC_RESULT_LSB = 0x22  # CRCResultReg (lower bits)
+    REG_T_MODE = 0x2A
+    REG_T_PRESCALER = 0x2B
+    REG_T_RELOAD_H = 0x2C
+    REG_T_RELOAD_L = 0x2D
 
-    REG_VERSION = 0x37  # VersionReg
-    # --- Bits in ComIrqReg (bit7 is Set1: set/clear selection) ---
+    REG_CRC_RESULT_MSB = 0x21
+    REG_CRC_RESULT_LSB = 0x22
+
+    REG_VERSION = 0x37
+
+    # --- Bits in ComIrqReg ---
     COMIRQ_TIMER = 1 << 0
     COMIRQ_ERR = 1 << 1
     COMIRQ_LOALERT = 1 << 2
@@ -46,11 +59,11 @@ class Mfrc522SpiSlave(SpiSlaveBase):
     COMIRQ_IDLE = 1 << 4
     COMIRQ_RX = 1 << 5
     COMIRQ_TX = 1 << 6
-    COMIRQ_SET1 = 1 << 7  # :contentReference[oaicite:18]{index=18}
+    COMIRQ_SET1 = 1 << 7
 
-    # --- Bits in DivIrqReg (bit7 is Set2) ---
-    DIVIRQ_MFINACT = 1 << 4
+    # --- Bits in DivIrqReg ---
     DIVIRQ_CRCIRq = 1 << 2
+    DIVIRQ_MFINACT = 1 << 4
     DIVIRQ_SET2 = 1 << 7
 
     # --- Bits in ErrorReg ---
@@ -59,7 +72,6 @@ class Mfrc522SpiSlave(SpiSlaveBase):
     ERR_CRC = 1 << 2
     ERR_COLLISION = 1 << 3
     ERR_BUFFER_OVFL = 1 << 4
-    ERR_TEMPCOL = 1 << 5  # reserved/implementation-specific
     ERR_TEMP_ERR = 1 << 6
     ERR_WR_ERR = 1 << 7
 
@@ -71,12 +83,26 @@ class Mfrc522SpiSlave(SpiSlaveBase):
     STATUS1_CRCREADY = 1 << 5
     STATUS1_CRCOK = 1 << 6
 
-    # --- Command codes (CommandReg.Command[3:0]) ---
+    # --- Bits in Status2Reg ---
+    STATUS2_MODEMSTATE_MASK = 0x07
+    STATUS2_MFCRYPTO1ON = 1 << 3
+
+    # --- Bits in CollReg ---
+    COLL_VALUES_AFTER_COLL = 1 << 7
+    COLL_POS_NOT_VALID = 1 << 5
+    COLL_POS_MASK = 0x1F
+
+    # --- Command codes ---
     CMD_IDLE = 0x00
+    CMD_MEM = 0x01
+    CMD_GEN_RANDOM_ID = 0x02
     CMD_CALCCRC = 0x03
+    CMD_TRANSMIT = 0x04
     CMD_NO_CMD_CHANGE = 0x07
+    CMD_RECEIVE = 0x08
     CMD_TRANSCEIVE = 0x0C
-    CMD_SOFTRESET = 0x0F  # :contentReference[oaicite:20]{index=20}
+    CMD_MF_AUTHENT = 0x0E
+    CMD_SOFTRESET = 0x0F
 
     def __init__(self, bus):
         self._config = SpiConfig(
@@ -94,123 +120,125 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         self._fifo: Deque[int] = deque(maxlen=64)
         self._last_frame: List[int] = []
 
+        # Card UID for PICC emulation
         self._uid = bytes((0xDE, 0xAD, 0xBE, 0xEF))
-        self._version = 0x92
+        self._version = 0x92  # MFRC522 v2.0
 
-        # ── Test-injectable overrides ──
-        # If set, _do_transceive will OR this value into ErrorReg
-        # after processing the command, regardless of the response.
+        # Test injection hooks
         self._inject_error: int = 0x00
+        self._inject_timeout: bool = False
 
-        # Track FIFO alert level transitions for edge-latched Hi/LoAlertIRq
+        # FIFO alert edge tracking
         self._prev_hialert: bool = False
         self._prev_loalert: bool = False
 
-        # ── MFRC522 state tracking for realistic behavior ──
-        # The MFRC522 needs to be initialized (soft reset) and have antennas
-        # enabled before it can communicate with cards.
+        # State tracking
         self._initialized: bool = False
         self._antenna_on: bool = False
+        self._transceive_pending: bool = False
 
-        # Flag to control whether to simulate 50ms init delay
-        self._simulate_init_delay: bool = True
+        # Timer state
+        self._timer_running: bool = False
+        self._timer_reload: int = 0x0000
 
         self._reset_regs()
 
     # -------------------------
-    # SPI address helpers
+    # SPI helpers
     # -------------------------
     @staticmethod
     def _decode_addr_byte(addr_byte: int) -> tuple[bool, int]:
-        """Decode MFRC522 SPI address byte.
-
-        Format (datasheet):
-          - bit7: R/W (1=read, 0=write)
-          - bits[6:1]: register address
-          - bit0: must be 0
-
-        Returns (is_read, addr).
-        """
+        """Decode MFRC522 SPI address byte -> (is_read, addr)."""
         is_read = bool(addr_byte & 0x80)
         addr = (addr_byte >> 1) & 0x3F
         return is_read, addr
 
     @staticmethod
     def _looks_like_addr_byte_for_read(byte_val: int) -> bool:
-        """Heuristic: does this byte look like a valid *read* address byte?
-
-        A read address byte has bit7=1 and bit0=0.
-        """
+        """Check if byte looks like a valid read address byte."""
         return (byte_val & 0x81) == 0x80
 
-    # ------------------------------------------------------------------
-    # CPHA=0 fix: pre-drive MISO before the first SCLK rising edge
-    # ------------------------------------------------------------------
+    # -------------------------
+    # CPHA=0 MISO pre-drive
+    # -------------------------
     async def _shift(self, num_bits, tx_word=None):
-        """Override _shift to pre-drive MSB on MISO for CPHA=0.
-
-        For CPHA=0 the first data bit must be valid before the first rising edge.
-        SpiSlaveBase normally drives the first bit on the first falling edge, so we
-        pre-drive it here unconditionally (even if the MSB is 0).
-        """
+        """Override to pre-drive MSB on MISO for CPHA=0."""
         if not self._config.cpha and tx_word is not None:
             msb = bool(tx_word & (1 << (num_bits - 1)))
             self._miso.value = int(msb)
-            cocotb.log.debug(
-                f"MFRC522._shift: pre-driving MISO with MSB={msb}, tx_word=0x{tx_word:02x}"
-            )
             shifted_tx = (tx_word << 1) & ((1 << num_bits) - 1)
             return await super()._shift(num_bits, tx_word=shifted_tx)
         return await super()._shift(num_bits, tx_word=tx_word)
 
     # -------------------------
-    # Public helpers (optional)
+    # Public test helpers
     # -------------------------
     async def get_last_frame(self) -> List[int]:
-        """Returns last MOSI frame bytes after slave goes idle."""
         await self.idle.wait()
         return list(self._last_frame)
 
     def preload_fifo(self, data: Sequence[int]) -> None:
-        """Preload FIFO with bytes (useful for directed tests)."""
+        """Preload FIFO with bytes for testing."""
         for b in data:
             self._fifo_push(b & 0xFF)
 
+    def set_uid(self, uid: bytes) -> None:
+        """Set the card UID for PICC emulation."""
+        self._uid = uid[:4] if len(uid) >= 4 else uid + b"\x00" * (4 - len(uid))
+
     # -------------------------
-    # Internal: register model
+    # Register model
     # -------------------------
     def _reset_regs(self) -> None:
-        # Minimal reset defaults we care about
+        """Reset all registers to power-on defaults (datasheet section 9.3)."""
         self._regs = [0x00] * 64
         self._fifo.clear()
 
-        # CommandReg reset value is 0x20 (RcvOff=1 at reset).
+        # CommandReg: PowerDown=0, RcvOff=1 at reset
         self._regs[self.REG_COMMAND] = 0x20
 
-        # Interrupt enable registers
-        self._regs[self.REG_COM_IEN] = 0x80 | 0x20  # IRqInv + RxIEn
+        # Interrupt registers
+        self._regs[self.REG_COM_IEN] = 0x80  # IRqInv=1
         self._regs[self.REG_DIV_IEN] = 0x00
-
-        # IRQ and status registers
-        self._regs[self.REG_COM_IRQ] = 0x14 & 0x7F  # IdleIRq + LoAlertIRq at reset
+        self._regs[self.REG_COM_IRQ] = 0x14  # IdleIRq + LoAlertIRq
         self._regs[self.REG_DIV_IRQ] = 0x00
         self._regs[self.REG_ERROR] = 0x00
-        self._regs[self.REG_STATUS1] = 0x21  # CRCReady=1, LoAlert=1 at reset
+        self._regs[self.REG_STATUS1] = 0x21  # CRCReady + LoAlert
+        self._regs[self.REG_STATUS2] = 0x00
 
         # FIFO / framing
         self._regs[self.REG_WATER_LEVEL] = 0x08
         self._regs[self.REG_CONTROL] = 0x10
         self._regs[self.REG_BIT_FRAMING] = 0x00
+        self._regs[self.REG_COLL] = 0x80  # ValuesAfterColl=1
 
-        # CRC / mode
+        # TX/RX mode
+        self._regs[self.REG_TX_MODE] = 0x00
+        self._regs[self.REG_RX_MODE] = 0x00
+        self._regs[self.REG_TX_CONTROL] = 0x00  # Antenna off at reset
+        self._regs[self.REG_TX_ASK] = 0x00
+        self._regs[self.REG_MOD_WIDTH] = 0x26
+
+        # Mode / CRC
         self._regs[self.REG_MODE] = 0x3F
         self._regs[self.REG_CRC_RESULT_MSB] = 0xFF
         self._regs[self.REG_CRC_RESULT_LSB] = 0xFF
 
-        # VersionReg returns 0x91/0x92.
+        # Timer
+        self._regs[self.REG_T_MODE] = 0x00
+        self._regs[self.REG_T_PRESCALER] = 0x00
+        self._regs[self.REG_T_RELOAD_H] = 0x00
+        self._regs[self.REG_T_RELOAD_L] = 0x00
+
+        # Version
         self._regs[self.REG_VERSION] = self._version
 
-        # Initialize FIFO alert edge trackers to the post-reset level state.
+        # State
+        self._antenna_on = False
+        self._transceive_pending = False
+        self._timer_running = False
+
+        # Initialize alert edge trackers
         hialert, loalert = self._compute_alerts()
         self._prev_hialert = hialert
         self._prev_loalert = loalert
@@ -218,36 +246,31 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         self._update_alerts_and_irq()
 
     def _compute_alerts(self) -> tuple[bool, bool]:
-        """Compute current HiAlert/LoAlert level bits from FIFO fill and WaterLevel."""
+        """Compute HiAlert/LoAlert from FIFO level and WaterLevel."""
         water = self._regs[self.REG_WATER_LEVEL] & 0x3F
         flen = len(self._fifo)
-
-        # HiAlert when (64 - FIFOlen) <= WaterLevel; LoAlert when FIFOlen <= WaterLevel.
         hialert = (64 - flen) <= water
         loalert = flen <= water
         return hialert, loalert
 
     def _update_status1_irq(self) -> None:
-        """Update Status1Reg.IRq based on *enabled* pending interrupt sources."""
+        """Update Status1Reg.IRq based on enabled pending interrupts."""
         com_en = self._regs[self.REG_COM_IEN] & 0x7F
-        div_en = self._regs[self.REG_DIV_IEN] & (
-            self.DIVIRQ_MFINACT | self.DIVIRQ_CRCIRq
-        )
+        div_en = self._regs[self.REG_DIV_IEN] & 0x14  # MfinActIEn + CRCIEn
 
         com_pending = (self._regs[self.REG_COM_IRQ] & 0x7F) & com_en
         div_pending = (self._regs[self.REG_DIV_IRQ] & 0x7F) & div_en
 
-        any_irq = bool(com_pending | div_pending)
-        if any_irq:
+        if com_pending | div_pending:
             self._regs[self.REG_STATUS1] |= self.STATUS1_IRQ
         else:
             self._regs[self.REG_STATUS1] &= ~self.STATUS1_IRQ
 
     def _update_alerts_and_irq(self) -> None:
-        """Update Status1Reg Hi/LoAlert bits and edge-latch Hi/LoAlertIRq in ComIrqReg."""
+        """Update Status1Reg alerts and edge-latch IRQs."""
         hialert, loalert = self._compute_alerts()
 
-        # Status1Reg HiAlert/LoAlert are read-only dynamic bits; keep them in the shadow reg.
+        # Update Status1Reg level bits
         s1 = self._regs[self.REG_STATUS1]
         s1 &= ~(self.STATUS1_HIALERT | self.STATUS1_LOALERT)
         if hialert:
@@ -256,7 +279,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             s1 |= self.STATUS1_LOALERT
         self._regs[self.REG_STATUS1] = s1
 
-        # Hi/LoAlertIRq are edge-latched (store the event) and cleared only by SW via Set1.
+        # Edge-latch Hi/LoAlertIRq
         if hialert and not self._prev_hialert:
             self._regs[self.REG_COM_IRQ] |= self.COMIRQ_HIALERT
         if loalert and not self._prev_loalert:
@@ -264,116 +287,79 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         self._prev_hialert = hialert
         self._prev_loalert = loalert
 
-        # ErrIRq is set when any error bit in ErrorReg is set (and stays set until SW clears it).
+        # ErrIRq when any error bit set
         if self._regs[self.REG_ERROR] != 0:
             self._regs[self.REG_COM_IRQ] |= self.COMIRQ_ERR
-            cocotb.log.warning(
-                f"MFRC522: ErrorReg set to {self._regs[self.REG_ERROR]:#04x}"
-            )
 
         self._update_status1_irq()
 
     def _fifo_push(self, b: int) -> None:
         if len(self._fifo) >= 64:
-            # BufferOvfl is in ErrorReg and can only be cleared by FIFOLevelReg.FlushBuffer.
-            self._regs[self.REG_ERROR] |= self.ERR_BUFFER_OVFL  # BufferOvfl
+            self._regs[self.REG_ERROR] |= self.ERR_BUFFER_OVFL
             self._regs[self.REG_COM_IRQ] |= self.COMIRQ_ERR
-            cocotb.log.warning("MFRC522: FIFO overflow!")
+            cocotb.log.warning("MFRC522: FIFO overflow")
             return
         self._fifo.append(b & 0xFF)
-        cocotb.log.debug(f"MFRC522: FIFO push {b:#04x}, level now {len(self._fifo)}")
         self._update_alerts_and_irq()
 
     def _fifo_pop(self) -> int:
         if not self._fifo:
-            self._update_alerts_and_irq()
             return 0x00
         b = self._fifo.popleft()
-        cocotb.log.debug(f"MFRC522: FIFO pop {b:#04x}, level now {len(self._fifo)}")
         self._update_alerts_and_irq()
         return b
+
+    def _fifo_flush(self) -> None:
+        """Flush FIFO and clear BufferOvfl error."""
+        self._fifo.clear()
+        self._regs[self.REG_ERROR] &= ~self.ERR_BUFFER_OVFL
+        self._update_alerts_and_irq()
+        cocotb.log.debug("MFRC522: FIFO flushed")
 
     def _read_reg(self, addr: int) -> int:
         addr &= 0x3F
 
         if addr == self.REG_FIFO_DATA:
-            val = self._fifo_pop()
-            cocotb.log.debug(
-                f"MFRC522: READ FIFO_DATA -> {val:#04x}, fifo_level={len(self._fifo)}"
-            )
-            return val
+            return self._fifo_pop()
 
         if addr == self.REG_FIFO_LEVEL:
-            val = len(self._fifo) & 0x7F
-            cocotb.log.debug(f"MFRC522: READ FIFO_LEVEL -> {val:#04x}")
-            return val
+            return len(self._fifo) & 0x7F
 
         if addr == self.REG_STATUS1:
-            # Keep Hi/LoAlert and IRq up to date before exposing the shadow value.
             self._update_alerts_and_irq()
-            val = self._regs[addr] & 0x7B  # mask reserved bits (7 and 2)
-            cocotb.log.debug(f"MFRC522: READ STATUS1 -> {val:#04x}")
-            return val
+            return self._regs[addr] & 0x7B
+
+        if addr == self.REG_STATUS2:
+            return self._regs[addr] & 0x0F
 
         if addr == self.REG_COM_IRQ:
-            # bit7 Set1 is write-only; return only 0..6.
-            val = self._regs[addr] & 0x7F
-            cocotb.log.debug(
-                f"MFRC522: READ COM_IRQ -> {val:#04x} (RxIRq={bool(val & 0x20)}, TimerIRq={bool(val & 0x01)}, IdleIRq={bool(val & 0x10)})"
-            )
-            return val
+            return self._regs[addr] & 0x7F
 
         if addr == self.REG_DIV_IRQ:
-            # bit7 Set2 is write-only; return only 0..6.
-            val = self._regs[addr] & 0x7F
-            cocotb.log.debug(f"MFRC522: READ DIV_IRQ -> {val:#04x}")
-            return val
+            return self._regs[addr] & 0x7F
 
         if addr == self.REG_ERROR:
-            val = self._regs[addr] & 0xFF
-            cocotb.log.debug(f"MFRC522: READ ERROR -> {val:#04x}")
-            return val
+            return self._regs[addr]
 
         if addr == self.REG_BIT_FRAMING:
-            # bit7 StartSend is write-only (reads as 0).
-            val = self._regs[addr] & 0x7F
-            cocotb.log.debug(f"MFRC522: READ BIT_FRAMING -> {val:#04x}")
-            return val
+            # StartSend (bit7) reads as 0
+            return self._regs[addr] & 0x7F
 
         if addr == self.REG_CONTROL:
-            # bits7..6 are write-only (read as 0).
-            val = self._regs[addr] & 0x3F
-            cocotb.log.debug(f"MFRC522: READ CONTROL -> {val:#04x}")
-            return val
+            # TStopNow, TStartNow (bits 7:6) read as 0
+            return self._regs[addr] & 0x3F
+
+        if addr == self.REG_COLL:
+            return self._regs[addr]
 
         if addr == self.REG_WATER_LEVEL:
-            val = self._regs[addr] & 0x3F
-            cocotb.log.debug(f"MFRC522: READ WATER_LEVEL -> {val:#04x}")
-            return val
+            return self._regs[addr] & 0x3F
 
-        if addr in (self.REG_CRC_RESULT_MSB, self.REG_CRC_RESULT_LSB):
-            val = self._regs[addr] & 0xFF
-            cocotb.log.debug(f"MFRC522: READ CRC_RESULT -> {val:#04x}")
-            return val
-
-        if addr == self.REG_VERSION:
-            val = self._regs[addr] & 0xFF
-            cocotb.log.debug(f"MFRC522: READ VERSION -> {val:#04x}")
-            return val
-
-        val = self._regs[addr] & 0xFF
-        cocotb.log.debug(f"MFRC522: READ reg[{addr:#02x}] -> {val:#04x}")
-        return val
+        return self._regs[addr] & 0xFF
 
     def _unread_reg(self, addr: int, value: int) -> None:
-        """Undo a destructive _read_reg for FIFO registers.
-
-        If a byte was pre-fetched from FIFODataReg to prepare MISO but the SPI
-        frame ended before the master actually clocked it in, push the byte back
-        to the front of the FIFO so it isn't lost.
-        """
-        addr &= 0x3F
-        if addr == self.REG_FIFO_DATA:
+        """Undo destructive read for FIFO."""
+        if (addr & 0x3F) == self.REG_FIFO_DATA:
             self._fifo.appendleft(value & 0xFF)
             self._update_alerts_and_irq()
 
@@ -381,11 +367,10 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         addr &= 0x3F
         data &= 0xFF
 
-        # Ignore writes to read-only regs we currently shadow.
+        # Read-only registers
         if addr in (
             self.REG_STATUS1,
             self.REG_ERROR,
-            self.REG_CONTROL,
             self.REG_CRC_RESULT_MSB,
             self.REG_CRC_RESULT_LSB,
             self.REG_VERSION,
@@ -393,40 +378,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             return
 
         if addr == self.REG_COMMAND:
-            cmd = data & 0x0F
-
-            # Command execution clears all error bits except TempErr. BufferOvfl is
-            # only cleared by FlushBuffer, so preserve it as well.
-            if cmd not in (self.CMD_IDLE, getattr(self, "CMD_NO_CMD_CHANGE", 0x07)):
-                preserve = self._regs[self.REG_ERROR] & (
-                    self.ERR_TEMP_ERR | self.ERR_BUFFER_OVFL
-                )
-                self._regs[self.REG_ERROR] = preserve
-
-            self._regs[addr] = data
-
-            cmd_names = {
-                0x00: "IDLE",
-                0x03: "CALCCRC",
-                0x07: "NO_CMD_CHANGE",
-                0x0C: "TRANSCEIVE",
-                0x0F: "SOFTRESET",
-            }
-            cmd_name = cmd_names.get(cmd, f"CMD_{cmd:#x}")
-            cocotb.log.debug(f"MFRC522: CommandReg set to {cmd_name} (0x{data:#04x})")
-
-            if cmd == self.CMD_SOFTRESET:
-                cocotb.log.info("MFRC522: CMD_SOFTRESET - resetting registers")
-                self._reset_regs()
-                self._initialized = True
-                if self._simulate_init_delay:
-                    cocotb.start_soon(self._delayed_antenna_enable())
-                return
-            if cmd == self.CMD_CALCCRC:
-                cocotb.start_soon(self._do_calccrc())
-            if cmd == self.CMD_TRANSCEIVE:
-                self._maybe_start_transceive()
-            self._update_alerts_and_irq()
+            self._handle_command_write(data)
             return
 
         if addr == self.REG_COM_IEN:
@@ -435,59 +387,12 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             return
 
         if addr == self.REG_DIV_IEN:
-            self._regs[addr] = data & (
-                0x80 | 0x10 | 0x04
-            )  # IRQPushPull, MfinActIEn, CRCIEn
+            self._regs[addr] = data & 0x94  # Valid bits only
             self._update_status1_irq()
             return
 
-        if addr == self.REG_MODE:
-            # mask reserved bits (6,4,2)
-            self._regs[addr] = data & (0x80 | 0x20 | 0x08 | 0x03)
-            return
-
-        if addr == self.REG_TX_CONTROL:
-            # TxControlReg bits[1:0] control TX1 and TX2 outputs
-            # 2'b11 enables both antennas
-            if (data & 0x03) == 0x03:
-                self._antenna_on = True
-                self._regs[addr] = data
-                cocotb.log.info("MFRC522: TxControlReg - antennas ENABLED")
-            else:
-                self._antenna_on = False
-                self._regs[addr] = data
-                cocotb.log.info(
-                    f"MFRC522: TxControlReg - antennas DISABLED (data={data:#04x})"
-                )
-            return
-
-        if addr == self.REG_FIFO_DATA:
-            self._fifo_push(data)
-            cocotb.log.debug(f"MFRC522: FIFODataReg write {data:#04x}")
-            return
-
-        if addr == self.REG_FIFO_LEVEL:
-            # Bit7 (FlushBuffer) is W: if set, clears FIFO and also clears BufferOvfl in ErrorReg.
-            if data & 0x80:
-                self._fifo.clear()
-                self._regs[self.REG_ERROR] &= ~self.ERR_BUFFER_OVFL
-            # Lower bits are read-only FIFO level.
-            self._update_alerts_and_irq()
-            return
-
-        if addr == self.REG_WATER_LEVEL:
-            self._regs[addr] = data & 0x3F
-            self._update_alerts_and_irq()
-            return
-
-        if addr == self.REG_BIT_FRAMING:
-            # Bit7 StartSend is write-only trigger; we keep a shadow but reads mask it out.
-            self._regs[addr] = data
-            self._maybe_start_transceive()
-            return
-
         if addr == self.REG_COM_IRQ:
-            # Set1 semantics: if bit7=1, set marked bits; if bit7=0, clear marked bits.
+            # Set1 bit controls set/clear behavior
             marked = data & 0x7F
             if data & self.COMIRQ_SET1:
                 self._regs[addr] |= marked
@@ -505,121 +410,268 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             self._update_status1_irq()
             return
 
-        # Default: store
-        self._regs[addr] = data
-
-    def _maybe_start_transceive(self) -> None:
-        cmd = self._regs[self.REG_COMMAND] & 0x0F
-        start_send = bool(self._regs[self.REG_BIT_FRAMING] & 0x80)
-        if cmd == self.CMD_TRANSCEIVE and start_send:
-            cocotb.start_soon(self._do_transceive())
-
-    async def _do_transceive(self) -> None:
-        """Very small ISO/IEC 14443-A PICC emulation for bring-up.
-
-        Supports:
-          - REQA (0x26) / WUPA (0x52) -> ATQA (0x04 0x00)
-          - ANTICOLL CL1 (0x93 0x20) -> UID0..UID3 + BCC
-          - SELECT   CL1 (0x93 0x70 + UID0..UID3 + BCC + CRC_A) -> SAK + CRC_A
-
-        Only responds when chip is initialized AND antenna is enabled.
-        """
-        # await Timer(50, unit="ns")
-
-        # Check if MFRC522 is initialized and antenna is on
-        if not self._initialized or not self._antenna_on:
-            # No response - set a timeout-like error
-            cocotb.log.warning(
-                f"MFRC522: TRANSCEIVE ignored - not initialized={self._initialized}, "
-                f"antenna_on={self._antenna_on}"
-            )
-            self._regs[self.REG_ERROR] |= self.ERR_PROTOCOL
-            self._regs[self.REG_COM_IRQ] |= self.COMIRQ_TIMER
-            self._regs[self.REG_BIT_FRAMING] &= ~0x80
+        if addr == self.REG_FIFO_DATA:
+            self._fifo_push(data)
             return
 
-        cocotb.log.debug(f"MFRC522: TRANSCEIVE processing FIFO={list(self._fifo)}")
+        if addr == self.REG_FIFO_LEVEL:
+            # Bit7 = FlushBuffer
+            if data & 0x80:
+                self._fifo_flush()
+            return
 
-        req = bytes(self._fifo)
-        self._fifo.clear()
+        if addr == self.REG_WATER_LEVEL:
+            self._regs[addr] = data & 0x3F
+            self._update_alerts_and_irq()
+            return
 
-        resp: bytes = b""
-        rx_last_bits: int = 0  # ControlReg[2:0]
+        if addr == self.REG_BIT_FRAMING:
+            self._regs[addr] = data
+            # StartSend triggers transceive if command is active
+            if data & 0x80:
+                self._maybe_start_transceive()
+            return
 
-        req_stripped = req.rstrip(b"\x00")
+        if addr == self.REG_COLL:
+            # Only ValuesAfterColl (bit7) is writable
+            self._regs[addr] = (self._regs[addr] & 0x3F) | (data & 0x80)
+            return
 
-        if req_stripped in (b"\x26", b"\x52"):
-            resp = b"\x04\x00"
+        if addr == self.REG_TX_CONTROL:
+            old_antenna = self._antenna_on
+            self._antenna_on = (data & 0x03) == 0x03
+            self._regs[addr] = data
+            if self._antenna_on and not old_antenna:
+                cocotb.log.info("MFRC522: Antenna ON")
+            elif not self._antenna_on and old_antenna:
+                cocotb.log.info("MFRC522: Antenna OFF")
+            return
 
-        elif req == b"\x93\x20":
-            uid = self._uid[:4]
-            bcc = uid[0] ^ uid[1] ^ uid[2] ^ uid[3]
-            resp = uid + bytes([bcc])
+        if addr == self.REG_CONTROL:
+            # TStopNow (bit7) and TStartNow (bit6) are triggers
+            if data & 0x80:
+                self._timer_running = False
+            if data & 0x40:
+                self._timer_running = True
+            # Store only persistent bits
+            self._regs[addr] = (self._regs[addr] & 0xC0) | (data & 0x3F)
+            return
 
-        elif len(req) in (7, 9) and req[0] == 0x93 and req[1] == 0x70:
-            uid = self._uid[:4]
-            uid_in = req[2:6]
-            bcc_in = req[6]
-            bcc_ok = bcc_in == (uid_in[0] ^ uid_in[1] ^ uid_in[2] ^ uid_in[3])
-            uid_ok = uid_in == uid
+        if addr == self.REG_T_RELOAD_H:
+            self._regs[addr] = data
+            self._timer_reload = (data << 8) | (self._regs[self.REG_T_RELOAD_L])
+            return
 
-            if uid_ok and bcc_ok:
-                sak = 0x08
-                crc = self._crc_a(bytes([sak]))
-                # CRC_A is transmitted LSB first.
-                resp = bytes([sak, crc & 0xFF, (crc >> 8) & 0xFF])
-            else:
-                # Protocol error: no response. The real chip would time out / set TimerIRq.
-                self._regs[self.REG_ERROR] |= self.ERR_PROTOCOL
+        if addr == self.REG_T_RELOAD_L:
+            self._regs[addr] = data
+            self._timer_reload = (self._regs[self.REG_T_RELOAD_H] << 8) | data
+            return
 
-        # Enqueue response into FIFO
-        for b in resp:
-            self._fifo_push(b)
+        # Default store
+        self._regs[addr] = data
 
-        if resp:
-            cocotb.log.debug(f"MFRC522: TRANSCEIVE responding with {resp.hex()}")
+    def _handle_command_write(self, data: int) -> None:
+        """Handle write to CommandReg."""
+        cmd = data & 0x0F
+        power_down = bool(data & 0x10)
 
-        # Update ControlReg RxLastBits (bits 2:0)
-        self._regs[self.REG_CONTROL] = (self._regs[self.REG_CONTROL] & 0xF8) | (
-            rx_last_bits & 0x07
-        )
-
-        # IRQs: set RxIRq only when we actually have a response.
-        if resp:
-            self._regs[self.REG_COM_IRQ] |= self.COMIRQ_RX | self.COMIRQ_IDLE
-            cocotb.log.debug(
-                f"MFRC522: Set RxIRq+Idle in ComIrqReg, ComIrqReg now={self._regs[self.REG_COM_IRQ]:#04x}"
+        # Clear errors on command start (except TempErr and BufferOvfl)
+        if cmd not in (self.CMD_IDLE, self.CMD_NO_CMD_CHANGE):
+            preserve = self._regs[self.REG_ERROR] & (
+                self.ERR_TEMP_ERR | self.ERR_BUFFER_OVFL
             )
-        else:
+            self._regs[self.REG_ERROR] = preserve
+
+        self._regs[self.REG_COMMAND] = data
+
+        cmd_names = {
+            0x00: "Idle",
+            0x01: "Mem",
+            0x02: "GenerateRandomID",
+            0x03: "CalcCRC",
+            0x04: "Transmit",
+            0x07: "NoCmdChange",
+            0x08: "Receive",
+            0x0C: "Transceive",
+            0x0E: "MFAuthent",
+            0x0F: "SoftReset",
+        }
+        cocotb.log.debug(f"MFRC522: Command = {cmd_names.get(cmd, f'0x{cmd:02X}')}")
+
+        if cmd == self.CMD_SOFTRESET:
+            cocotb.log.info("MFRC522: Soft reset")
+            self._reset_regs()
+            self._initialized = True
+            return
+
+        if cmd == self.CMD_CALCCRC:
+            cocotb.start_soon(self._do_calccrc())
+            return
+
+        if cmd == self.CMD_TRANSCEIVE:
+            self._transceive_pending = True
+            self._maybe_start_transceive()
+            return
+
+        if cmd == self.CMD_IDLE:
+            self._transceive_pending = False
+            # IdleIRq is set when returning to idle
             self._regs[self.REG_COM_IRQ] |= self.COMIRQ_IDLE
-
-        # Optional error injection hook for tests.
-        if self._inject_error:
-            self._regs[self.REG_ERROR] |= self._inject_error
-            self._regs[self.REG_COM_IRQ] |= self.COMIRQ_RX | self.COMIRQ_IDLE
-
-        # Clear StartSend (self-clears in silicon as the state machine progresses)
-        self._regs[self.REG_BIT_FRAMING] &= ~0x80
+            self._update_status1_irq()
+            return
 
         self._update_alerts_and_irq()
 
+    def _maybe_start_transceive(self) -> None:
+        """Start transceive if conditions are met."""
+        cmd = self._regs[self.REG_COMMAND] & 0x0F
+        start_send = bool(self._regs[self.REG_BIT_FRAMING] & 0x80)
+
+        if cmd == self.CMD_TRANSCEIVE and start_send and self._transceive_pending:
+            self._transceive_pending = False
+            cocotb.start_soon(self._do_transceive())
+
+    async def _do_transceive(self) -> None:
+        """ISO/IEC 14443-A PICC emulation for REQA/ANTICOLL/SELECT."""
+
+        # Check preconditions
+        if not self._initialized:
+            cocotb.log.warning("MFRC522: Transceive ignored - not initialized")
+            self._set_timeout()
+            return
+
+        if not self._antenna_on:
+            cocotb.log.warning("MFRC522: Transceive ignored - antenna off")
+            self._set_timeout()
+            return
+
+        # Handle test injection
+        if self._inject_timeout:
+            cocotb.log.info("MFRC522: Injected timeout")
+            self._set_timeout()
+            return
+
+        # Get TX data from FIFO
+        tx_last_bits = self._regs[self.REG_BIT_FRAMING] & 0x07
+        req = bytes(self._fifo)
+        self._fifo.clear()
+
+        cocotb.log.info(
+            f"MFRC522: TX [{len(req)} bytes, {tx_last_bits} last bits]: {req.hex() if req else '(empty)'}"
+        )
+
+        # Process command and generate response
+        resp, rx_last_bits = self._process_picc_command(req, tx_last_bits)
+
+        # Clear StartSend
+        self._regs[self.REG_BIT_FRAMING] &= ~0x80
+
+        if resp:
+            # Load response into FIFO
+            for b in resp:
+                self._fifo_push(b)
+
+            # Update ControlReg RxLastBits
+            self._regs[self.REG_CONTROL] = (self._regs[self.REG_CONTROL] & 0xF8) | (
+                rx_last_bits & 0x07
+            )
+
+            # Set completion IRQs
+            self._regs[self.REG_COM_IRQ] |= self.COMIRQ_RX | self.COMIRQ_IDLE
+
+            cocotb.log.info(f"MFRC522: RX [{len(resp)} bytes]: {resp.hex()}")
+        else:
+            # No response - timeout
+            self._set_timeout()
+
+        # Apply injected errors
+        if self._inject_error:
+            self._regs[self.REG_ERROR] |= self._inject_error
+            self._regs[self.REG_COM_IRQ] |= self.COMIRQ_ERR
+
+        self._update_alerts_and_irq()
+
+    def _process_picc_command(self, req: bytes, tx_last_bits: int) -> tuple[bytes, int]:
+        """
+        Process PICC command and return (response, rx_last_bits).
+
+        Supports:
+          - REQA (0x26) / WUPA (0x52) with 7-bit frame -> ATQA
+          - ANTICOLL CL1 (0x93 0x20) -> UID + BCC
+          - SELECT CL1 (0x93 0x70 ...) -> SAK + CRC
+        """
+        rx_last_bits = 0
+
+        # Strip trailing zeros for all commands
+        req_stripped = req.rstrip(b"\x00")
+
+        # REQA/WUPA: 7-bit command (single byte, may be padded)
+        if tx_last_bits == 7 and len(req_stripped) == 1:
+            if req_stripped[0] in (0x26, 0x52):
+                cmd_name = "REQA" if req_stripped[0] == 0x26 else "WUPA"
+                cocotb.log.debug(f"MFRC522: {cmd_name} received")
+                # ATQA for MIFARE Classic 1K: 0x04 0x00
+                return b"\x04\x00", 0
+
+        # ANTICOLL CL1
+        if req_stripped == b"\x93\x20":
+            uid = self._uid[:4]
+            bcc = uid[0] ^ uid[1] ^ uid[2] ^ uid[3]
+            cocotb.log.debug(f"MFRC522: ANTICOLL CL1, responding with UID")
+            return uid + bytes([bcc]), 0
+
+        # SELECT CL1: 0x93 0x70 + UID(4) + BCC + CRC_A(2) = 9 bytes
+        if (
+            len(req_stripped) >= 7
+            and req_stripped[0] == 0x93
+            and req_stripped[1] == 0x70
+        ):
+            uid = self._uid[:4]
+            uid_in = req_stripped[2:6]
+            bcc_in = req_stripped[6] if len(req_stripped) > 6 else 0
+
+            expected_bcc = uid_in[0] ^ uid_in[1] ^ uid_in[2] ^ uid_in[3]
+
+            if uid_in == uid and bcc_in == expected_bcc:
+                # SAK for MIFARE Classic: 0x08
+                sak = 0x08
+                crc = self._crc_a(bytes([sak]))
+                cocotb.log.debug(f"MFRC522: SELECT CL1 OK, responding with SAK")
+                return bytes([sak, crc & 0xFF, (crc >> 8) & 0xFF]), 0
+            else:
+                cocotb.log.debug(f"MFRC522: SELECT UID mismatch")
+                return b"", 0
+
+        # Unknown command
+        cocotb.log.debug(
+            f"MFRC522: Unknown PICC command: {req.hex() if req else '(empty)'}, tx_last_bits={tx_last_bits}"
+        )
+        return b"", 0
+
+    def _set_timeout(self) -> None:
+        """Set timeout condition (TimerIRq)."""
+        self._regs[self.REG_COM_IRQ] |= self.COMIRQ_TIMER | self.COMIRQ_IDLE
+        self._regs[self.REG_BIT_FRAMING] &= ~0x80
+        self._update_alerts_and_irq()
+
     async def _do_calccrc(self) -> None:
-        """Emulate MFRC522 CalcCRC command over FIFO content."""
-        # During calculation, CRCReady and CRCOk go low.
+        """Emulate CalcCRC command."""
+        # Clear CRCReady during calculation
         self._regs[self.REG_STATUS1] &= ~(self.STATUS1_CRCREADY | self.STATUS1_CRCOK)
-        self._update_status1_irq()
 
-        await Timer(50, unit="ns")
+        await Timer(50, units="ns")
 
+        # Calculate CRC over FIFO contents
         data = bytes(self._fifo)
 
+        # Get preset from ModeReg
         mode = self._regs[self.REG_MODE]
         preset_sel = mode & 0x03
         preset = {
-            0: 0x0000,  # 0000b
-            1: 0x6363,  # 0001b (ISO 14443-A)
-            2: 0xA671,  # 0010b
-            3: 0xFFFF,  # 0011b
+            0: 0x0000,
+            1: 0x6363,  # ISO 14443-A
+            2: 0xA671,
+            3: 0xFFFF,
         }[preset_sel]
 
         crc = self._crc16(data, preset)
@@ -627,7 +679,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         msb = (crc >> 8) & 0xFF
         lsb = crc & 0xFF
 
-        # If MSBFirst is set, CRCResult register values are bit-reversed.
+        # MSBFirst bit reverses output
         if mode & 0x80:
             msb = self._bit_reverse8(msb)
             lsb = self._bit_reverse8(lsb)
@@ -635,28 +687,16 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         self._regs[self.REG_CRC_RESULT_MSB] = msb
         self._regs[self.REG_CRC_RESULT_LSB] = lsb
 
+        # Set completion flags
         self._regs[self.REG_DIV_IRQ] |= self.DIVIRQ_CRCIRq
         self._regs[self.REG_STATUS1] |= self.STATUS1_CRCREADY
+        self._regs[self.REG_COM_IRQ] |= self.COMIRQ_IDLE
+
         if crc == 0:
             self._regs[self.REG_STATUS1] |= self.STATUS1_CRCOK
 
-        # CalcCRC terminates and returns to Idle -> IdleIRq set.
-        self._regs[self.REG_COM_IRQ] |= self.COMIRQ_IDLE
-
         self._update_alerts_and_irq()
-
-    async def _delayed_antenna_enable(self) -> None:
-        """Simulate the 50ms oscillator startup delay after soft reset.
-
-        After soft reset, the MFRC522 needs ~50ms for the crystal oscillator
-        to stabilize before the antenna can be enabled.
-        """
-        # 50ms @ 100MHz = 5,000,000 cycles
-        # For faster tests, we use a shorter delay but still meaningful
-        cocotb.log.info("MFRC522: waiting for oscillator startup (50ms simulated)...")
-        await Timer(50_000, unit="ns")  # 50us for test speed
-        cocotb.log.info("MFRC522: oscillator startup complete, antenna ready to enable")
-        # Antenna will be enabled by the init sequence writing to TX_CONTROL
+        cocotb.log.debug(f"MFRC522: CRC complete = 0x{crc:04X}")
 
     @staticmethod
     def _bit_reverse8(x: int) -> int:
@@ -668,7 +708,7 @@ class Mfrc522SpiSlave(SpiSlaveBase):
 
     @staticmethod
     def _crc16(data: bytes, preset: int) -> int:
-        """CRC coprocessor model (poly x^16 + x^12 + x^5 + 1, LSB-first)."""
+        """CRC-16 with polynomial x^16 + x^12 + x^5 + 1 (LSB-first)."""
         crc = preset & 0xFFFF
         for b in data:
             crc ^= b
@@ -681,21 +721,16 @@ class Mfrc522SpiSlave(SpiSlaveBase):
 
     @classmethod
     def _crc_a(cls, data: bytes) -> int:
+        """ISO 14443-A CRC with preset 0x6363."""
         return cls._crc16(data, 0x6363)
 
+    # -------------------------
+    # SPI transaction handling
+    # -------------------------
     async def _shift_byte_or_end(self, frame_end, tx: int) -> Optional[int]:
-        """
-        Shift one byte while watching for end-of-frame (CS deassert).
-        Returns received byte, or None if frame ended before/at this byte.
-        """
+        """Shift one byte while watching for frame end."""
         from cocotb.triggers import RisingEdge, FallingEdge, First
 
-        cocotb.log.debug(
-            f"MFRC522._shift_byte_or_end: starting shift with tx=0x{tx:02x}"
-        )
-
-        # Create a fresh frame_end trigger each call — cocotb 2.x triggers
-        # may not be reusable after being cancelled by First().
         if self._config.cs_active_low:
             fe = RisingEdge(self._cs)
         else:
@@ -703,24 +738,19 @@ class Mfrc522SpiSlave(SpiSlaveBase):
 
         task = cocotb.start_soon(self._shift(8, tx_word=(tx & 0xFF)))
         done = await First(task, fe)
+
         if done is fe:
-            cocotb.log.debug(
-                f"MFRC522._shift_byte_or_end: frame ended before shift completed"
-            )
             task.cancel()
             return None
-        rx = task.result()
-        cocotb.log.debug(
-            f"MFRC522._shift_byte_or_end: shift completed, rx=0x{int(rx):02x}"
-        )
-        return int(rx) & 0xFF
+
+        return int(task.result()) & 0xFF
 
     async def _transaction(self, frame_start, frame_end):
         await frame_start
         self.idle.clear()
         self._last_frame = []
 
-        # First byte: address byte. MISO during this byte is "X" (don't care).
+        # First byte: address
         addr_byte = await self._shift_byte_or_end(frame_end, tx=0x00)
         if addr_byte is None:
             self.idle.set()
@@ -728,50 +758,29 @@ class Mfrc522SpiSlave(SpiSlaveBase):
 
         self._last_frame.append(addr_byte)
         is_read, addr = self._decode_addr_byte(addr_byte)
-        cocotb.log.debug(
-            f"MFRC522: decoded addr_byte=0x{addr_byte:02x}, is_read={is_read}, addr=0x{addr:02x}"
-        )
 
         if is_read:
-            # Read transaction: for each byte the master clocks in,
-            # we output the current register value on MISO.
-            #
-            # We must pre-read the register value before shifting
-            # because MISO needs to be driven during the shift.
-            # For destructive-read registers (FIFODataReg) this pops
-            # a byte.  If the frame ends before the byte is actually
-            # consumed by the master, we push it back via _unread_reg —
-            # but only if the FIFO actually had content (otherwise
-            # _fifo_pop returned 0x00 without popping, and pushing
-            # back would insert a phantom byte).
+            # Read transaction
             while True:
                 fifo_len_before = len(self._fifo)
-                cocotb.log.debug(f"MFRC522: about to read register 0x{addr:02x}")
                 tx = self._read_reg(addr)
-                cocotb.log.debug(
-                    f"MFRC522: read register 0x{addr:02x} -> 0x{tx:02x}, about to shift out on MISO"
-                )
                 rx = await self._shift_byte_or_end(frame_end, tx=tx)
+
                 if rx is None:
-                    # Frame ended — the master never clocked this byte in.
-                    cocotb.log.debug(
-                        f"MFRC522: frame ended during read of reg 0x{addr:02x}"
-                    )
-                    # Undo the destructive read only if we actually popped.
+                    # Frame ended - undo destructive FIFO read if needed
                     if (addr & 0x3F) == self.REG_FIFO_DATA and len(
                         self._fifo
                     ) < fifo_len_before:
                         self._unread_reg(addr, tx)
                     break
+
                 self._last_frame.append(rx)
 
-                # Accept "address-like" bytes mid-read to support
-                # sequential register reads (addr changes mid-burst).
+                # Support sequential register reads
                 if self._looks_like_addr_byte_for_read(rx):
                     _, addr = self._decode_addr_byte(rx)
-
         else:
-            # Write: subsequent bytes are data for that address.
+            # Write transaction
             while True:
                 data = await self._shift_byte_or_end(frame_end, tx=0x00)
                 if data is None:
@@ -779,7 +788,4 @@ class Mfrc522SpiSlave(SpiSlaveBase):
                 self._last_frame.append(data)
                 self._write_reg(addr, data)
 
-        # CS has already deasserted when _shift_byte_or_end returned None,
-        # so do NOT await frame_end again — that would hang waiting for
-        # the *next* rising edge of CS.
         self.idle.set()
