@@ -99,7 +99,7 @@ module mfrc_core (
     S_DONE           = 5'd25   // Step 13: Done
   } state_t;
 
-  state_t         state;
+  (* MARK_DEBUG = "TRUE" *) state_t         state;
 
   // Latched request
   reg     [  4:0] lat_tx_len;

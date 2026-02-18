@@ -43,7 +43,7 @@ module mfrc_reg_if (
   // ── FSM ──
   localparam S_IDLE = 2'd0, S_ISSUE = 2'd1, S_WAIT = 2'd2, S_RESP = 2'd3;
 
-  reg [  1:0] state;
+  (* MARK_DEBUG = "TRUE" *) reg [  1:0] state;
 
   // Latched request fields
   reg         lat_write;

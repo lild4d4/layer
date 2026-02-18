@@ -45,7 +45,8 @@ module mfrc_top (
 );
   // RESET CYCLES
   // TODO: INCREASE THIS TO 50ms ON REAL HARDWARE!
-  localparam logic [31:0] RESET_CYCLES = 32'd5_000;
+  localparam logic [31:0] RESET_CYCLES = 32'd5_000_000;
+  // 5mil.
 
 
   // =====================================================================
@@ -275,7 +276,7 @@ module mfrc_top (
   // =====================================================================
   // Main FSM (init + polling)
   // =====================================================================
-  state_t         state;
+  (* MARK_DEBUG = "TRUE" *) state_t state;
 
   reg     [  3:0] init_idx;
   reg     [ 31:0] wait_cnt;
@@ -401,10 +402,11 @@ module mfrc_top (
         end
 
         S_POLL_SETUP: begin
-          if (trx_ready) begin
-            trx_v <= 1'b1;
-            state <= S_POLL_WAIT;
-          end
+          //if (trx_ready) begin
+          //  trx_v <= 1'b1;
+          //  state <= S_POLL_WAIT;
+          //end
+          state <= S_POLL_SETUP;
         end
 
         S_POLL_WAIT: begin
