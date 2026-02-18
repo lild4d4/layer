@@ -285,10 +285,11 @@ module mfrc_top (
   reg     [255:0] trx_data_r;
   reg     [  2:0] trx_last_r;
 
-  assign trx_valid        = trx_v;
-  assign trx_tx_len       = trx_len_r;
-  assign trx_tx_data      = trx_data_r;
-  assign trx_tx_last_bits = trx_last_r;
+  // Use external TX signals when tx_valid is asserted, otherwise use internal auto-poll
+  assign trx_valid        = tx_valid || trx_v;
+  assign trx_tx_len       = tx_valid ? tx_len : trx_len_r;
+  assign trx_tx_data      = tx_valid ? tx_data : trx_data_r;
+  assign trx_tx_last_bits = tx_valid ? tx_last_bits : trx_last_r;
 
   assign ready            = ready_r;
   assign init_done        = init_done_r;
@@ -325,7 +326,10 @@ module mfrc_top (
         S_IDLE: begin
           ready_r <= 1'b1;
 
-          if (!init_done_r) begin
+          if (tx_valid && trx_ready) begin
+            state   <= S_POLL_WAIT;
+            ready_r <= 1'b0;
+          end else if (!init_done_r) begin
             state       <= S_SOFT_RESET;
             ready_r     <= 1'b0;
             init_idx    <= 4'd0;
@@ -414,6 +418,8 @@ module mfrc_top (
         end
 
         S_POLL_RESULT: begin
+          rx_valid_r <= 1'b1;
+
           if (trx_rx_len == 5'd2) begin
             card_present_r <= 1'b1;  // One-cycle pulse
             card_found_r <= 1'b1;  // Latched: stops future polling

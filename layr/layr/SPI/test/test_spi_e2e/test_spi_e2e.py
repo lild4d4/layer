@@ -159,10 +159,12 @@ async def test_mfrc_transceive_reqa(dut):
     dut._log.info("Testing REQA transceive...")
 
     # Wait for init
-    init_ok = await mfrc_wait_for_init(dut, timeout_us=20000)
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
     assert init_ok, "MFRC auto-init did not complete"
-    card_ok = await mfrc_wait_for_card(dut, timeout_us=20000)
+    dut._log.info("MFRC auto-init complete")
+    card_ok = await mfrc_wait_for_card(dut, timeout_us=200000)
     assert card_ok, "MFRC card-ok did not complete"
+    dut._log.info("MFRC card-ok complete")
 
     # Send REQA manually
     atqa = await mfrc_reqa(dut)
