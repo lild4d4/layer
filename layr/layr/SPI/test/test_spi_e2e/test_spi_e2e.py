@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge
 from at25010b_helpers import eeprom_setup, eeprom_send_cmd, KEY_A, ID_A
 from mfrc522_helpers import (
     mfrc_setup,
@@ -17,6 +16,15 @@ from helpers import reset_dut
 from cocotb_tools.runner import get_runner
 
 CLK_PERIOD_NS = 10  # 100MHz
+
+
+def dump_hex(mfrc):
+    with open("spi_sent.hex", "w") as f:
+        for b in mfrc.get_spi_bytes_sent():
+            f.write(f"{b:02X}\n")
+    with open("spi_received.hex", "w") as f:
+        for b in mfrc.get_spi_bytes_received():
+            f.write(f"{b:02X}\n")
 
 
 async def setup(dut):
@@ -122,7 +130,7 @@ async def test_mfrc_auto_init(dut):
 @cocotb.test()
 async def test_mfrc_auto_card_detection(dut):
     """Verify that card_present goes high when card is detected via auto-poll."""
-    _ = await setup(dut)
+    _, mfrc = await setup(dut)
     dut._log.info("Waiting for MFRC auto-initialization and card detection...")
 
     # Wait for init to complete
@@ -142,6 +150,8 @@ async def test_mfrc_auto_card_detection(dut):
         f"card_present={dut.mfrc_card_present.value}, atqa={int(dut.mfrc_atqa.value):#06x}"
     )
     dut._log.info("test_mfrc_auto_card_detection PASSED ✓")
+
+    dump_hex(mfrc)
 
 
 # =============================================================================

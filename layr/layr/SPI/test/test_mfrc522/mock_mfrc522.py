@@ -128,6 +128,10 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         self._inject_error: int = 0x00
         self._inject_timeout: bool = False
 
+        # SPI byte tracking
+        self.spi_bytes_sent: List[int] = []  # Bytes sent TO master (MISO)
+        self.spi_bytes_received: List[int] = []  # Bytes received FROM master (MOSI)
+
         # FIFO alert edge tracking
         self._prev_hialert: bool = False
         self._prev_loalert: bool = False
@@ -185,6 +189,19 @@ class Mfrc522SpiSlave(SpiSlaveBase):
     def set_uid(self, uid: bytes) -> None:
         """Set the card UID for PICC emulation."""
         self._uid = uid[:4] if len(uid) >= 4 else uid + b"\x00" * (4 - len(uid))
+
+    def get_spi_bytes_sent(self) -> List[int]:
+        """Get all bytes sent to master (MISO)."""
+        return list(self.spi_bytes_sent)
+
+    def get_spi_bytes_received(self) -> List[int]:
+        """Get all bytes received from master (MOSI)."""
+        return list(self.spi_bytes_received)
+
+    def clear_spi_byte_tracking(self) -> None:
+        """Clear the SPI byte tracking arrays."""
+        self.spi_bytes_sent.clear()
+        self.spi_bytes_received.clear()
 
     # -------------------------
     # Register model
@@ -743,7 +760,13 @@ class Mfrc522SpiSlave(SpiSlaveBase):
             task.cancel()
             return None
 
-        return int(task.result()) & 0xFF
+        rx_byte = int(task.result()) & 0xFF
+
+        # Track SPI bytes
+        self.spi_bytes_sent.append(tx & 0xFF)
+        self.spi_bytes_received.append(rx_byte)
+
+        return rx_byte
 
     async def _transaction(self, frame_start, frame_end):
         await frame_start
