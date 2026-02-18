@@ -36,7 +36,13 @@ module auth(
     //--------------------------------------
     input reg [127:0] data_i,
     output reg [127:0] data_o,
-    output logic valid_o
+    output logic valid_o,
+
+    input logic eeprom_busy,
+    input logic eeprom_done,
+    input logic [127:0] eeprom_buffer,
+    output logic eeprom_start,
+    output logic eeprom_get_key
 );
     logic [7:0] ctr;
     logic reg_operation;

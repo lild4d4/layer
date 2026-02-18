@@ -15,7 +15,13 @@ module layr_auth(
     output logic [127:0] chip_challenge,
 
     output logic id_verified,
-    output logic id_valid
+    output logic id_valid,
+
+    input logic eeprom_busy,
+    input logic eeprom_done,
+    input logic [127:0] eeprom_buffer,
+    output logic eeprom_start,
+    output logic eeprom_get_key
 );
 
 logic start;
@@ -103,7 +109,13 @@ auth auth_i(
     .data_i(auth_data_in),
     .data_o(auth_data_out),
 
-    .valid_o(auth_valid)
+    .valid_o(auth_valid),
+
+    .eeprom_busy(eeprom_busy),
+    .eeprom_done(eeprom_done),
+    .eeprom_buffer(eeprom_buffer),
+    .eeprom_start(eeprom_start),
+    .eeprom_get_key(eeprom_get_key)
 );
 
 endmodule

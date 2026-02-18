@@ -10,7 +10,13 @@ module layr(
     output logic [168: 0] command,
 
     output logic status,                // 1 if the request has been successfully authorized.
-    output logic status_valid           // 1 if the status is valid.
+    output logic status_valid,          // 1 if the status is valid.
+
+    input logic eeprom_busy,
+    input logic eeprom_done,
+    input logic [127:0] eeprom_buffer,
+    output logic eeprom_start,
+    output logic eeprom_get_key
 );
 
 logic select_prog, auth_init, generate_challenge, auth, get_id, verify_id, authed;
@@ -88,7 +94,13 @@ layr_auth auth_i(
     .chip_challenge(chip_cypher_new),
 
     .id_verified(id_verified),
-    .id_valid(id_valid)
+    .id_valid(id_valid),
+
+    .eeprom_busy(eeprom_busy),
+    .eeprom_done(eeprom_done),
+    .eeprom_buffer(eeprom_buffer),
+    .eeprom_start(eeprom_start),
+    .eeprom_get_key(eeprom_get_key)
 );
 
 always_ff @(posedge clk) begin
