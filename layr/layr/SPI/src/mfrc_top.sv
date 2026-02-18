@@ -6,8 +6,10 @@
 //   - Simple TX/RX interface for communication with card
 //
 // Usage:
-//   - Read card_present to detect card
+//   - Read card_present for one-cycle pulse when card detected
 //   - Use tx_* / rx_* for sending/receiving data
+//
+// Note: Once a card is detected, polling stops. Reset the module to resume polling.
 
 module mfrc_top (
     input wire clk,
@@ -16,7 +18,7 @@ module mfrc_top (
     // ── status outputs ──
     output wire        ready,         // 1 = idle/ready for commands
     output wire        init_done,     // 1 = initialization complete
-    output wire        card_present,  // 1 = card detected
+    output wire        card_present,  // 1-cycle pulse when card detected
     output wire [15:0] atqa,          // ATQA response (2 bytes)
 
     // ── TX interface (to card) ──
@@ -154,7 +156,8 @@ module mfrc_top (
 
   // Internal state
   reg          init_done_r;
-  reg          card_present_r;
+  reg          card_present_r;  // One-cycle pulse output
+  reg          card_found_r;  // Latched: stops polling once set
   reg  [ 15:0] atqa_r;
   reg          ready_r;
   reg          rx_valid_r;
@@ -272,32 +275,32 @@ module mfrc_top (
   // =====================================================================
   // Main FSM (init + polling)
   // =====================================================================
-  state_t state;
+  state_t         state;
 
-  reg  [  3:0] init_idx;
-  reg  [ 31:0] wait_cnt;
+  reg     [  3:0] init_idx;
+  reg     [ 31:0] wait_cnt;
 
-  reg          trx_v;
-  reg  [  4:0] trx_len_r;
-  reg  [255:0] trx_data_r;
-  reg  [  2:0] trx_last_r;
+  reg             trx_v;
+  reg     [  4:0] trx_len_r;
+  reg     [255:0] trx_data_r;
+  reg     [  2:0] trx_last_r;
 
-  assign trx_valid = trx_v;
-  assign trx_tx_len = trx_len_r;
-  assign trx_tx_data = trx_data_r;
+  assign trx_valid        = trx_v;
+  assign trx_tx_len       = trx_len_r;
+  assign trx_tx_data      = trx_data_r;
   assign trx_tx_last_bits = trx_last_r;
 
-  assign ready        = ready_r;
-  assign init_done    = init_done_r;
-  assign card_present = card_present_r;
-  assign atqa         = atqa_r;
+  assign ready            = ready_r;
+  assign init_done        = init_done_r;
+  assign card_present     = card_present_r;
+  assign atqa             = atqa_r;
 
-  assign rx_valid     = rx_valid_r;
-  assign rx_len       = trx_rx_len;
-  assign rx_data      = trx_rx_data;
-  assign rx_last_bits = trx_rx_last_bits;
+  assign rx_valid         = rx_valid_r;
+  assign rx_len           = trx_rx_len;
+  assign rx_data          = trx_rx_data;
+  assign rx_last_bits     = trx_rx_last_bits;
 
-  assign tx_ready     = trx_ready;
+  assign tx_ready         = trx_ready;
 
   always @(posedge clk or posedge rst) begin
     if (rst) begin
@@ -305,6 +308,7 @@ module mfrc_top (
       ready_r        <= 1'b1;
       init_done_r    <= 1'b0;
       card_present_r <= 1'b0;
+      card_found_r   <= 1'b0;
       atqa_r         <= 16'd0;
       init_idx       <= 4'd0;
       wait_cnt       <= 32'd0;
@@ -312,28 +316,29 @@ module mfrc_top (
       fsm_req_valid  <= 1'b0;
       rx_valid_r     <= 1'b0;
     end else begin
-      trx_v         <= 1'b0;
-      fsm_req_valid <= 1'b0;
-      rx_valid_r    <= 1'b0;
+      trx_v          <= 1'b0;
+      fsm_req_valid  <= 1'b0;
+      rx_valid_r     <= 1'b0;
+      card_present_r <= 1'b0;  // Default: pulse is low
 
       case (state)
         S_IDLE: begin
-          ready_r        <= 1'b1;
-          card_present_r <= 1'b0;
-          atqa_r         <= 16'd0;
+          ready_r <= 1'b1;
 
           if (!init_done_r) begin
             state       <= S_SOFT_RESET;
             ready_r     <= 1'b0;
             init_idx    <= 4'd0;
             init_done_r <= 1'b0;
-          end else if (!card_present_r) begin
+          end else if (!card_found_r) begin
+            // Only poll if we haven't found a card yet
             state      <= S_POLL_SETUP;
             ready_r    <= 1'b0;
             trx_len_r  <= 5'd1;
             trx_data_r <= {PICC_REQA, 248'd0};
             trx_last_r <= 3'd7;
           end
+          // If card_found_r is set, stay in S_IDLE (no more polling)
         end
 
         S_SOFT_RESET: begin
@@ -410,15 +415,12 @@ module mfrc_top (
 
         S_POLL_RESULT: begin
           if (trx_rx_len == 5'd2) begin
-            card_present_r <= 1'b1;
-            // atqa_r[7:0] <= trx_rx_data[255:248];
-            // atqa_r[15:8] <= trx_rx_data[247:240];
+            card_present_r <= 1'b1;  // One-cycle pulse
+            card_found_r <= 1'b1;  // Latched: stops future polling
             atqa_r[15:8] <= trx_rx_data[255:248];  // First byte (0x04) → high byte
             atqa_r[7:0] <= trx_rx_data[247:240];  // Second byte (0x00) → low byte
-          end else begin
-            card_present_r <= 1'b0;
-            atqa_r         <= 16'd0;
           end
+          // If no card found, card_found_r stays 0 and we'll poll again
           state <= S_IDLE;
         end
 
@@ -428,3 +430,13 @@ module mfrc_top (
   end
 
 endmodule
+
+
+
+
+
+
+
+
+
+
