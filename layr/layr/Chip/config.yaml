@@ -40,6 +40,7 @@ VERILOG_FILES:
   - ../SPI/src/mfrc_top.sv
   - ../SPI/src/mfrc_core.sv
   - ../SPI/src/mfrc_reg_if.sv
+  - ../SPI/src/clock_divider.sv
 USE_SLANG: true
 
 CLOCK_PERIOD: 10
