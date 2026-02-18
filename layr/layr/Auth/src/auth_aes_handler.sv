@@ -5,7 +5,7 @@ module auth_aes_handler(
     input logic aes_core_ready,
     input logic result_valid,
 
-    output logic valid,
+    output logic valid_o,
     output logic aes_core_init,
     output logic aes_core_next
 );
@@ -18,16 +18,15 @@ enum {
     READ_VALID
 } state, next_state;
 
+logic valid;
+
+assign valid_o = valid;
+
 always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
-        aes_core_init <= 1'b0;
-        aes_core_next <= 1'b0;
         state <= IDLE;
-        valid <= 1'b0;
-
     end else begin
         state <= next_state;
-
     end
 end
 
@@ -35,11 +34,10 @@ always_comb begin
     next_state = state;
     aes_core_init = 1'b0;
     aes_core_next = 1'b0;
+    valid = 1'b0;
 
     case(state)
         IDLE: begin
-            valid = 1'b0;
-
             if (ready) begin
                 next_state = WRITE_INIT;
             end

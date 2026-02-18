@@ -43,7 +43,7 @@ auth_aes_handler u_aes_handler(
     .aes_core_ready(aes_core_ready),
     .result_valid(result_valid),
 
-    .valid(aes_handler_valid),
+    .valid_o(aes_handler_valid),
     .aes_core_init(aes_core_init),
     .aes_core_next(aes_core_next)
 );
@@ -64,7 +64,9 @@ always_comb begin
     valid = 1'b0;
     id_valid = 1'b0;
     eeprom_start = 1'b0;
+    eeprom_get_key = 1'b0;
     aes_handler_ready = 1'b0;
+    next_state = state;
 
     case(state)
         IDLE: begin
@@ -72,11 +74,12 @@ always_comb begin
         end
 
         DECRYPT: begin
-            aes_handler_ready = 1'b1;
             encdec = 1'b0;
             block = input_cipher;
 
-            if (aes_handler_valid) begin
+            if (!aes_handler_valid) begin
+                aes_handler_ready = 1'b1;
+            end else if (aes_handler_valid) begin
                 id = aes_core_result;
                 next_state = GET_ID;
             end

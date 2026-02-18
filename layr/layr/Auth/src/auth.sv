@@ -35,7 +35,7 @@ module auth(
     //   1 = the operation is done, data
     //       can be read from data_o
     //--------------------------------------
-    input  tri0 [127:0] data_i,
+    input  reg [127:0] data_i,
     output reg [127:0] data_o,
     output reg valid_o,
 

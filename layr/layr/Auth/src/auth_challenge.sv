@@ -50,7 +50,7 @@ auth_aes_handler u_aes_handler(
     .aes_core_ready(aes_core_ready),
     .result_valid(result_valid),
 
-    .valid(aes_handler_valid),
+    .valid_o(aes_handler_valid),
     .aes_core_init(aes_core_init),
     .aes_core_next(aes_core_next)
 );
@@ -94,13 +94,14 @@ always_comb begin
         end
 
         DECRYPT: begin
-            aes_handler_ready = 1'b1;
             encdec = 1'b0;
             key = input_key;
             block = input_cipher;
 
-            if (aes_handler_valid) begin
-                rc = aes_core_result >> 64;
+            if (!aes_handler_valid) begin
+                aes_handler_ready = 1'b1;
+            end else if (aes_handler_valid) begin
+                rc = aes_core_result[127:64];
                 next_state = GET_RANDOM;
             end
         end
@@ -108,33 +109,33 @@ always_comb begin
         GET_RANDOM: begin
             if (random_ready && !random_valid) begin
                 random_load = 1'b1;
-            end
-
-            if (random_valid) begin
+            end else if (random_valid) begin
                 rt = random_value;
                 next_state = ENCRYPT_SESSION_KEY;
             end
         end
 
         ENCRYPT_SESSION_KEY: begin
-            aes_handler_ready = 1'b1;
             encdec = 1'b1;
             key = input_key;
             block = {rc, rt};
 
-            if (aes_handler_valid) begin
+            if (!aes_handler_valid) begin
+                aes_handler_ready = 1'b1;
+            end else if (aes_handler_valid) begin
                 session_key = aes_core_result;
                 next_state = ENCRYPT_CHALLENGE;
             end
         end
 
         ENCRYPT_CHALLENGE: begin
-            aes_handler_ready = 1'b1;
             encdec = 1'b1;
             key = input_key;
             block = {rt, rc};
 
-            if (aes_handler_valid) begin
+            if (!aes_handler_valid) begin
+                aes_handler_ready = 1'b1;
+            end else if (aes_handler_valid) begin
                 valid = 1'b1;
                 challenge = aes_core_result;
                 next_state = IDLE;

@@ -57,15 +57,21 @@ async def auth_challenge__decrypt_input_cipher(dut):
     dut.eeprom_done.value = 1
     dut.eeprom_buffer.value = int.from_bytes(key);
 
+    x = 0
     while True:
         await RisingEdge(dut.clk)
+
+        if x == 73:
+            break
+        else:
+            x += 1
 
         if dut.u_auth_challenge.u_aes_handler.valid.value == 1:
             dut.start_i.value = 0
             await RisingEdge(dut.clk)
             break
 
-    assert dut.u_aes_core.result.value == int.from_bytes(plain)
+    assert dut.u_aes_core.result.value == int.from_bytes(plain), ""
 
 
 @cocotb.test()
