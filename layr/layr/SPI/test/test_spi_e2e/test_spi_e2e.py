@@ -117,11 +117,11 @@ async def test_mfrc_auto_card_detection(dut):
 
     assert dut.mfrc_card_present.value == 1, "card_present should be 1"
     assert (
-        dut.mfrc_atqa.value == 0x0400
-    ), f"Expected ATQA=0x0400, got {dut.mfrc_atqa.value:#06x}"
+        int(dut.mfrc_atqa.value) == 0x0400
+    ), f"Expected ATQA=0x0400, got {int(dut.mfrc_atqa.value):#06x}"
 
     dut._log.info(
-        f"card_present={dut.mfrc_card_present.value}, atqa={dut.mfrc_atqa.value:#06x}"
+        f"card_present={dut.mfrc_card_present.value}, atqa={int(dut.mfrc_atqa.value):#06x}"
     )
     dut._log.info("test_mfrc_auto_card_detection PASSED ✓")
 

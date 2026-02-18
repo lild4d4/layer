@@ -432,8 +432,10 @@ module mfrc_top (
         S_POLL_RESULT: begin
           if (trx_rx_len == 5'd2) begin
             card_present_r <= 1'b1;
-            atqa_r[7:0] <= trx_rx_data[255:248];
-            atqa_r[15:8] <= trx_rx_data[247:240];
+            // atqa_r[7:0] <= trx_rx_data[255:248];
+            // atqa_r[15:8] <= trx_rx_data[247:240];
+            atqa_r[15:8] <= trx_rx_data[255:248];  // First byte (0x04) → high byte
+            atqa_r[7:0] <= trx_rx_data[247:240];  // Second byte (0x00) → low byte
           end else begin
             card_present_r <= 1'b0;
             atqa_r         <= 16'd0;

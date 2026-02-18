@@ -259,14 +259,14 @@ module mfrc_core (
             reg_req_valid <= 1'b1;
             reg_req_write <= 1'b0;
             reg_req_addr  <= REG_FIFO_DATA;
-            reg_req_len   <= fifo_level - 6'd1;
+            reg_req_len   <= fifo_level;
             reg_req_wdata <= 256'd0;
             state         <= S_RDFIFO_WAIT;
           end
         end
         S_RDFIFO_WAIT: begin
           if (reg_resp_valid) begin
-            trx_rx_len  <= fifo_level - 6'd1;
+            trx_rx_len  <= fifo_level;
             trx_rx_data <= reg_resp_rdata;
             state       <= S_RDCTRL_ISSUE;
           end
