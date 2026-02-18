@@ -77,74 +77,24 @@ module test_fpga_mfrc_poll_top (
     .cs_1(cs1)  // active-low chip select – AT25010B
 );
 
-  localparam [32:0]   DELAY_CYCLES = 32'd100_000_000;
-  localparam [127:0]  KEY_A = 128'h39558d1f193656ab8b4b65e25ac48474;
-  localparam [127:0]  ID_A  = 128'hbbe8278a67f960605adafd6f63cf7ba7;
+  localparam [32:0]   DELAY_CYCLES = 32'd200_000_000;
 
-  typedef enum logic [2:0] {
-    S_IDLE,
-    S_START,
-    S_WAIT,
-    S_DELAY
-  } state_t;
-
-  (* MARK_DEBUG = "TRUE" *) state_t state;
   reg [32:0] ctr;
 
   always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
-      state   <= S_IDLE;
       ctr     <= DELAY_CYCLES;
-      led     <= 4'b0000;
-
-      // eeprom  
-      eeprom_start <= 0;
-      eeprom_get_key <= 0;
-
+      led <= 4'b0000;
     end else begin
-      led[3] <= mfrc_card_present;
-      eeprom_start <= 1'b0;          // default: pulse only one cycle
+      led[1] <= mfrc_card_present;
+      if (ctr == 0) begin
+        ctr <= DELAY_CYCLES;
+      end else begin
+        ctr <= ctr - 1;
+      end
 
-      case (state)
-        // wait after reset before first trigger
-        S_IDLE: begin
-          if (ctr == 0) begin
-            eeprom_get_key <= ~eeprom_get_key;
-            state <= S_START;
-          end else begin
-            ctr <= ctr - 1;
-          end
-        end
-
-        // pulse start for one cycle
-        S_START: begin
-          eeprom_start <= 1'b1;
-          state <= S_WAIT;
-        end
-
-        // wait for done
-        S_WAIT: begin
-          if (eeprom_done) begin
-            led[0] <= ~led[0];           // toggle heartbeat
-            if (eeprom_get_key == 0) begin // get id
-              if (eeprom_buffer[127:0] == ID_A)
-                led[1] <= 1'b1;  // ID VALID
-              else
-                led[1] <= 1'b0;
-            end else begin // get key
-              if (eeprom_buffer[127:0] == KEY_A)
-                led[2] <= 1'b1; // KEY VALID
-              else
-                led[2] <= 1'b0;
-            end
-            ctr   <= DELAY_CYCLES;
-            state <= S_IDLE;
-          end
-        end
-
-        default: state <= S_IDLE;
-      endcase
+      if (ctr == DELAY_CYCLES / 2 )
+        led[0] <= 1;
     end
   end
-
 endmodule

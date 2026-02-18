@@ -402,11 +402,11 @@ module mfrc_top (
         end
 
         S_POLL_SETUP: begin
-          //if (trx_ready) begin
-          //  trx_v <= 1'b1;
-          //  state <= S_POLL_WAIT;
-          //end
-          state <= S_POLL_SETUP;
+          if (trx_ready) begin
+           trx_v <= 1'b1;
+           state <= S_POLL_WAIT;
+          end
+          // state <= S_POLL_SETUP;
         end
 
         S_POLL_WAIT: begin
