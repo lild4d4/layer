@@ -143,7 +143,7 @@ async def _start_and_wait(
     await RisingEdge(dut.clk)
     dut.go.value = 0
 
-    for _ in range(50000):
+    for _ in range(100000):
         await RisingEdge(dut.clk)
         if dut.done.value == 1:
             return
@@ -240,9 +240,9 @@ async def test_write_then_read(dut):
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     await _reset(dut)
 
-    tx_payload = [0x03, 0x00, 0x10]  # e.g. READ cmd + 2-byte address
+    tx_payload = [0xaa, 0xbb, 0xcc]  # e.g. READ cmd + 2-byte address
     w_len = len(tx_payload)
-    reply = [0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80]
+    reply = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]
     r_len = len(reply)
 
     spi_bus = _build_spi_bus(dut, "cs0")
@@ -287,7 +287,7 @@ async def test_max_32_bytes(dut):
     await _start_and_wait(dut, tx_payload, w_len=w_len, r_len=r_len, cs_sel=1)
 
     # Verify write
-    slave_rx = await with_timeout(slave.get_content(), 10, "us")
+    slave_rx = await with_timeout(slave.get_content(), 20*50, "us")
     dut._log.info(f"Slave received {len(slave_rx)} bytes")
     assert slave_rx == tx_payload
 
@@ -351,6 +351,7 @@ def test_spi_ctrl_runner():
     src = proj_dir / "src"
 
     sources = [
+        src / "clock_divider.sv",
         src / "spi_master.sv",
         src / "spi_ctrl.sv",
         test_dir / "test_spi_ctrl_top.sv",

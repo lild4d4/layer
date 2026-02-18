@@ -6,13 +6,13 @@ module eeprom_spi (
     input wire eeprom_start,
     input wire [6:0] eeprom_addr,  // read / write address in eeprom
     output reg [127:0] eeprom_rdata,  // data read from an address
-    output reg eeprom_busy,
-    output reg eeprom_done,
+    (* MARK_DEBUG = "TRUE" *) output reg eeprom_busy,
+    (* MARK_DEBUG = "TRUE" *) output reg eeprom_done,
 
     // interface spi
-    output reg spi_start,  // Issue start
-    input  reg spi_done,
-    input  reg spi_busy,
+    (* MARK_DEBUG = "TRUE" *) output reg spi_start,  // Issue start
+    (* MARK_DEBUG = "TRUE" *) input  reg spi_done,
+    (* MARK_DEBUG = "TRUE" *) input  reg spi_busy,
 
     input  reg [255:0] spi_rx_data,  // Data received
     output reg [255:0] spi_tx_data,  // Data to Send
@@ -26,10 +26,10 @@ module eeprom_spi (
     S_READ_1
   } state_t;
 
-  reg [5:0] state;
+  (* MARK_DEBUG = "TRUE" *) reg [5:0] state;
 
   // Latched addr
-  reg [6:0] lat_addr;
+   (* MARK_DEBUG = "TRUE" *) reg [6:0] lat_addr;
 
   assign eeprom_busy = (state != S_IDLE);
 

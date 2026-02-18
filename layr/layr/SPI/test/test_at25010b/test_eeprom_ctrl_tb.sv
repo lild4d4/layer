@@ -3,29 +3,29 @@ module test_eeprom_ctrl_tb (
     input wire rst,
 
     // eeprom_spi interface
-    input  wire         start,
-    output reg          done,
-    output wire         busy,
-    input  wire         get_key,
-    output reg  [127:0] buffer,
+    (* MARK_DEBUG = "TRUE" *) input  wire         start,
+    (* MARK_DEBUG = "TRUE" *) output reg          done,
+    (* MARK_DEBUG = "TRUE" *) output wire         busy,
+    (* MARK_DEBUG = "TRUE" *) input  wire         get_key,
+                              output reg  [127:0] buffer,
 
     // SPI bus
-    output wire spi_sclk,
-    output wire spi_mosi,
-    input  wire spi_miso,
-    output wire cs_1,
-    output wire cs_0
+    (* MARK_DEBUG = "TRUE" *) output wire spi_sclk,
+    (* MARK_DEBUG = "TRUE" *) output wire spi_mosi,
+    (* MARK_DEBUG = "TRUE" *) input  wire spi_miso,
+    (* MARK_DEBUG = "TRUE" *) output wire cs_1,
+    (* MARK_DEBUG = "TRUE" *) output wire cs_0
 );
   // wires between u_eeprom_spi and u_spi_ctrl
   wire [255:0] spi_tx_data;
   wire [255:0] spi_rx_data;
-  wire [5:0] spi_w_len;
-  wire [5:0] spi_r_len;
+  (* MARK_DEBUG = "TRUE" *) wire [5:0] spi_w_len;
+  (* MARK_DEBUG = "TRUE" *) wire [5:0] spi_r_len;
   wire spi_cs_sel;
 
-  wire spi_start;
-  wire spi_done;
-  wire spi_busy;
+  (* MARK_DEBUG = "TRUE" *) wire spi_start;
+  (* MARK_DEBUG = "TRUE" *) wire spi_done;
+  (* MARK_DEBUG = "TRUE" *) wire spi_busy;
 
   eeprom_ctrl u_eeprom_ctrl (
       .clk(clk),
@@ -60,6 +60,7 @@ module test_eeprom_ctrl_tb (
       .w_len  (spi_w_len),
       .r_len  (spi_r_len),
 
+      .cs_sel(1),
 
       // spi out
       .sclk(spi_sclk),

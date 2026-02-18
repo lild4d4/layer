@@ -33,9 +33,11 @@ async def test_simple_byte_write(dut):
     dut.start.value = 0
     dut.data_in.value = 0
     dut.miso.value = 0
+    dut.clk_en.value = 0
 
     await ClockCycles(dut.clk, 5)
     dut.reset.value = 0
+    dut.clk_en.value = 1
     await ClockCycles(dut.clk, 5)
 
     test_data = 0xA5
@@ -72,8 +74,10 @@ async def test_spi_slave_receives_byte(dut):
     dut.start.value = 0
     dut.data_in.value = 0
     dut.miso.value = 0
+    dut.clk_en.value = 0
     await ClockCycles(dut.clk, 5)
     dut.reset.value = 0
+    dut.clk_en.value = 1
     await ClockCycles(dut.clk, 5)
 
     test_data = 0xA5

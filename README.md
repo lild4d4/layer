@@ -23,3 +23,6 @@ uv run pre-commit install
 ```sh
 uv run pytest
 ```
+
+
+openfpg loader for flashing

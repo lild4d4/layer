@@ -51,7 +51,7 @@ module eeprom_ctrl (
     S_WAIT_EEPROM
   } state_t;
 
-  reg [5:0] state;
+  (* MARK_DEBUG = "TRUE" *) reg [5:0] state;
 
   assign busy = (state != S_IDLE);
 

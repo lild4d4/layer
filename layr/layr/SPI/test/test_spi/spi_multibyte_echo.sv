@@ -40,6 +40,7 @@ module spi_multibyte_echo (
 
   spi_master u_spi (
       .clk     (clk),
+      .clk_en  (1'b1), // HACK but works :D
       .reset   (rst),
       .data_in (spi_data_in),
       .start   (spi_start),

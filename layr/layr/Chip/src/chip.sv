@@ -1,6 +1,7 @@
-module chip (
-    input wire clk,
-    input wire rst,
+module chip(
+    input clk,
+    input rst,
+    input button,
 
     // SPI bus output (Pin13-17)
     output wire spi_sclk,
