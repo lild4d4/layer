@@ -10,7 +10,9 @@ module chip(
     output wire cs_0,  // Pin14 - cs_2 (MFRC522)
     output wire cs_1,  // Pin13 - cs_1 (AT25010B)
 
-    // Status output (Pin23)
+    // Status output (Pin20-22)
+    output wire status_fault,
+    output wire status_unlock,
     output wire status_busy
 );
 
@@ -118,6 +120,8 @@ module chip(
     );
 
   assign status_busy = eeprom_busy;
+  assign status_fault = eeprom_busy;
+  assign status_unlock = eeprom_busy;
 
 endmodule
 

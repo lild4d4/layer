@@ -62,6 +62,7 @@ enum {
 wire encdec;
 wire verify_encdec;
 wire chal_encdec;
+wire aes_core_ready;
 wire aes_core_init;
 wire aes_core_next;
 wire chal_aes_core_init;

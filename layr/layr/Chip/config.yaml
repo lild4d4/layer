@@ -59,8 +59,8 @@ CLOCK_PERIOD: 10
 CLOCK_PORT: clk_PAD
 
 FP_SIZING: absolute
-DIE_AREA: [0, 0, 2400, 2400]
-CORE_AREA: [358.00, 358.00, 842, 842]
+DIE_AREA: [0, 0, 2699, 2699]
+CORE_AREA: [1060.00, 1060.00, 1639, 1639]
 
 PDN_CORE_RING: true
 PDN_CORE_RING_CONNECT_TO_PADS: true
@@ -97,26 +97,38 @@ PDK_ROOT: "../../pdk"
 # Pin15: spi_miso (input to chip)
 # Pin16: spi_mosi (output from chip)
 # Pin17: spi_sclk (output from chip)
-# Pin23: status_busy (output)
+# Pin22: status_busy (output)
+
+PAD_NORTH:
+  - "iovdd_pads\\[0\\].iovdd_pad"
+  - "iovss_pads\\[0\\].iovss_pad"
+  - status_busy_pad
+#  - "vdd_pads\\[0\\].vdd_pad"
+
+PAD_EAST:
+#  - "vss_pads\\[0\\].vss_pad"
+  - spi_sclk_pad
+  - spi_mosi_pad
+  - spi_miso_pad
+  - cs_0_pad
+  - cs_1_pad
+
+PAD_SOUTH:
+# - user_io_0
+# - user_io_1
+# - user_io_2
+# - user_io_3
+  - status_fault_pad
+  - status_unlock_pad
+  - "vdd_pads\\[0\\].vdd_pad"
+  - "vss_pads\\[0\\].vss_pad"
+
 
 PAD_WEST:
   - rst_pad
   - clk_pad
+# - uart_clk
+# - uart_io_0
+# - uart_rx
+# - uart_tx
 
-PAD_SOUTH:
-  [
-    "vdd_pads\\[0\\].vdd_pad",
-    "vss_pads\\[0\\].vss_pad",
-    "iovdd_pads\\[0\\].iovdd_pad",
-    "iovss_pads\\[0\\].iovss_pad",
-  ]
-
-PAD_EAST:
-  - cs_1_pad
-  - cs_0_pad
-  - spi_mosi_pad
-  - spi_sclk_pad
-  - status_busy_pad
-
-PAD_NORTH:
-  - spi_miso_pad
