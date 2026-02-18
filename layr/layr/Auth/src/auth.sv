@@ -88,20 +88,6 @@ reg [127:0] output_data, next_output_data;
 reg [127:0] input_key, next_input_key;
 reg [127:0] session_key, next_session_key;
 
-assign valid_o = valid;
-assign data_o = output_data;
-
-// Demux for AES core.
-assign aes_core_init = (state == VERIFY_ID) ? verify_aes_core_init : chal_aes_core_init;
-assign aes_core_next = (state == VERIFY_ID) ? verify_aes_core_next : chal_aes_core_next;
-assign encdec = (state == VERIFY_ID) ? verify_encdec : chal_encdec;
-assign key = (state == VERIFY_ID) ? session_key : input_key;
-assign block = (state == VERIFY_ID) ? verify_block : chal_block;
-
-// Demux for EEPROM
-assign eeprom_start = (state == VERIFY_ID) ? verify_eeprom_start : auth_eeprom_start;
-assign eeprom_get_key = (state == VERIFY_ID) ? verify_eeprom_get_key : auth_eeprom_get_key;
-
 aes_core u_aes_core(
     .clk(clk),
     .reset_n(!rst),
@@ -158,6 +144,20 @@ auth_verify_id u_auth_verify_id(
     .eeprom_start(verify_eeprom_start),
     .eeprom_get_key(verify_eeprom_get_key)
 );
+
+assign valid_o = valid;
+assign data_o = output_data;
+
+// Demux for AES core.
+assign aes_core_init = (state == VERIFY_ID) ? verify_aes_core_init : chal_aes_core_init;
+assign aes_core_next = (state == VERIFY_ID) ? verify_aes_core_next : chal_aes_core_next;
+assign encdec = (state == VERIFY_ID) ? verify_encdec : chal_encdec;
+assign key = (state == VERIFY_ID) ? session_key : input_key;
+assign block = (state == VERIFY_ID) ? verify_block : chal_block;
+
+// Demux for EEPROM
+assign eeprom_start = (state == VERIFY_ID) ? verify_eeprom_start : auth_eeprom_start;
+assign eeprom_get_key = (state == VERIFY_ID) ? verify_eeprom_get_key : auth_eeprom_get_key;
 
 always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
