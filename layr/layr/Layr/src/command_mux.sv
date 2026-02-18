@@ -37,15 +37,15 @@ enum {SELECT_PROG, AUTH_INIT, AUTH, GET_ID} active_transmission, next_active_tra
 enum {READY, EXECUTING, DONE} state, next_state;
 
 
-function automatic logic [168:0] cmd (
-    input logic [7:0] ins,
-    input logic [127:0] payload
-);
-    return {
+function logic [167:0] cmd;
+    input logic [7:0] ins;
+    input logic [127:0] payload;
+
+    cmd = {
         CLA,
         ins,
-        16'h00, // instructions
-        8'h10,  // payload size
+        16'h0000,
+        8'h10,      // payload size
         payload
     };
 endfunction
