@@ -40,6 +40,10 @@ VERILOG_FILES:
   - ../SPI/src/mfrc_top.sv
   - ../SPI/src/mfrc_core.sv
   - ../SPI/src/mfrc_reg_if.sv
+  - ../Layr/src/layr.sv
+  - ../Layr/src/layr_controller.sv
+  - ../Layr/src/command_mux.sv
+  - ../Layr/src/layr_auth.sv
   - ../SPI/src/clock_divider.sv
   - ../Auth/src/auth.sv
   - ../Auth/src/auth_challenge.sv
@@ -106,7 +110,7 @@ PAD_NORTH:
 #  - "vdd_pads\\[0\\].vdd_pad"
 
 PAD_EAST:
-#  - "vss_pads\\[0\\].vss_pad"
+  #  - "vss_pads\\[0\\].vss_pad"
   - spi_sclk_pad
   - spi_mosi_pad
   - spi_miso_pad
@@ -114,15 +118,14 @@ PAD_EAST:
   - cs_1_pad
 
 PAD_SOUTH:
-# - user_io_0
-# - user_io_1
-# - user_io_2
-# - user_io_3
+  # - user_io_0
+  # - user_io_1
+  # - user_io_2
+  # - user_io_3
   - status_fault_pad
   - status_unlock_pad
   - "vdd_pads\\[0\\].vdd_pad"
   - "vss_pads\\[0\\].vss_pad"
-
 
 PAD_WEST:
   - rst_pad

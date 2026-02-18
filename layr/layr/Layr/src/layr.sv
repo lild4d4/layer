@@ -3,14 +3,23 @@ module layr(
     input logic rst,
     input logic card_present_i,
 
-    input logic response_valid,
-    input logic [127: 0] response,
 
-    output logic command_valid,
-    output logic [168: 0] command,
+    // mfrc TX interface (to card)
+    output  wire         mfrc_tx_valid,
+    input wire         mfrc_tx_ready,
+    output  wire [  4:0] mfrc_tx_len,
+    output  wire [255:0] mfrc_tx_data,
+    output  wire [  2:0] mfrc_tx_last_bits,
+
+    // mfrc RX interface (from card)
+    input wire         mfrc_rx_valid,
+    input wire [  4:0] mfrc_rx_len,
+    input wire [255:0] mfrc_rx_data,
+    input wire [  2:0] mfrc_rx_last_bits,
 
     output logic status,                // 1 if the request has been successfully authorized.
     output logic status_valid,          // 1 if the status is valid.
+    output logic busy,
 
     input logic eeprom_busy,
     input logic eeprom_done,
@@ -19,7 +28,6 @@ module layr(
     output logic eeprom_get_key
 );
 
-logic busy;
 logic select_prog, auth_init, generate_challenge, auth, get_id, verify_id, authed;
 logic prog_selected, auth_initialized, challenge_generated, authenticated, id_retrieved, id_verified, id_valid;
 
@@ -65,8 +73,16 @@ command_mux mux(
 
     .chip_challenge(chip_cypher),
 
-    .response_valid(response_valid),
-    .response(response),
+    .mfrc_tx_valid(mfrc_tx_valid),
+    .mfrc_tx_ready(mfrc_tx_ready),
+    .mfrc_tx_len(mfrc_tx_len),
+    .mfrc_tx_data(mfrc_tx_data),
+    .mfrc_tx_last_bits(mfrc_tx_last_bits),
+
+    .mfrc_rx_valid(mfrc_rx_valid),
+    .mfrc_rx_len(mfrc_rx_len),
+    .mfrc_rx_data(mfrc_rx_data),
+    .mfrc_rx_last_bits(mfrc_rx_last_bits),
 
     .prog_selected(prog_selected),
     .auth_initialized(auth_initialized),
@@ -75,10 +91,7 @@ command_mux mux(
     .authed(authed),
 
     .id_retrieved(id_retrieved),
-    .id_cipher(id_cipher),
-
-    .command(command),
-    .command_valid(command_valid)
+    .id_cipher(id_cipher)
 );
 
 layr_auth auth_i(

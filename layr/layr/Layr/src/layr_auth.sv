@@ -60,7 +60,8 @@ always_ff @(posedge clk) begin
         auth_data_in <= '0;
         operation <= '0;
     end else begin
-    state <= next_state;
+        state <= next_state;
+        start <= 0;
         if (state == READY & next_state==RUNNING)begin
             if(generate_challenge) begin
                 auth_data_in <= card_cipher;
@@ -88,7 +89,6 @@ end
 
 always_ff @(posedge clk) begin
     if(auth_valid) begin
-        start <= 0;
         if(operation==0) begin
             chip_challenge <= auth_data_out;
             chip_challenge_generated <= 1;

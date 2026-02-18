@@ -1,7 +1,6 @@
 module chip(
     input clk,
     input rst,
-    input button,
 
     // SPI bus output (Pin13-17)
     output wire spi_sclk,
@@ -16,6 +15,9 @@ module chip(
     output wire status_busy
 );
 
+  wire layr_status;
+  wire layr_status_valid;
+
   // Tie off EEPROM interface signals
   wire         eeprom_start;
   wire         eeprom_busy;
@@ -27,36 +29,18 @@ module chip(
   assign eeprom_get_key = 1'b0;
 
   // Tie off MFRC interface signals
-  wire         mfrc_trx_valid;
-  wire         mfrc_trx_ready;
-  wire [  4:0] mfrc_trx_tx_len;
-  wire [255:0] mfrc_trx_tx_data;
-  wire [  2:0] mfrc_trx_tx_last_bits;
-  wire [ 31:0] mfrc_trx_timeout_cycles;
-  wire         mfrc_trx_done;
-  wire         mfrc_trx_ok;
-  wire [  4:0] mfrc_trx_rx_len;
-  wire [255:0] mfrc_trx_rx_data;
-  wire [  2:0] mfrc_trx_rx_last_bits;
-  wire [  7:0] mfrc_trx_error;
+  wire         mfrc_tx_valid;
+  wire         mfrc_tx_ready;
+  wire [  4:0] mfrc_tx_len;
+  wire [255:0] mfrc_tx_data;
+  wire [  2:0] mfrc_tx_last_bits;
 
-  assign mfrc_trx_valid = 1'b0;
-  assign mfrc_trx_tx_len = 5'b0;
-  assign mfrc_trx_tx_data = 256'b0;
-  assign mfrc_trx_tx_last_bits = 3'b0;
-  assign mfrc_trx_timeout_cycles = 32'b0;
+  wire         mfrc_rx_valid;
+  wire [  4:0] mfrc_rx_len;
+  wire [255:0] mfrc_rx_data;
+  wire [  2:0] mfrc_rx_last_bits;
 
-  // ------------------------------------------------------------------
-  //  Dummy signals for the auth module (tied‑off / looped‑back)
-  // ------------------------------------------------------------------
-  // Control signals
-  wire        auth_operation_i = 1'b0;   // 0 = generate challenge
-  wire        auth_start_i     = 1'b0;   // keep low – no operation started
-
-  // Data bus
-  wire [127:0] auth_data_i   = 128'd0;   // constant input data
-  wire [127:0] auth_data_o;             // will be left unconnected
-  wire        auth_valid_o;             // will be left unconnected
+  wire         mfrc_card_present;
 
   // EEPROM interface (must be passed through unchanged)
   wire        auth_eeprom_busy   = eeprom_busy;
@@ -64,6 +48,10 @@ module chip(
   wire [127:0] auth_eeprom_buffer = eeprom_rbuffer;
   wire        auth_eeprom_start;       // driven by auth
   wire        auth_eeprom_get_key;     // driven by auth
+
+  // results
+  wire        unlocked;
+  wire        forbidden;
 
   spi_top u_spi (
       .clk(clk),
@@ -77,18 +65,17 @@ module chip(
       .eeprom_rbuffer(eeprom_rbuffer),
 
       // mfrc interface (tied off)
-      .mfrc_trx_valid(mfrc_trx_valid),
-      .mfrc_trx_ready(mfrc_trx_ready),
-      .mfrc_trx_tx_len(mfrc_trx_tx_len),
-      .mfrc_trx_tx_data(mfrc_trx_tx_data),
-      .mfrc_trx_tx_last_bits(mfrc_trx_tx_last_bits),
-      .mfrc_trx_timeout_cycles(mfrc_trx_timeout_cycles),
-      .mfrc_trx_done(mfrc_trx_done),
-      .mfrc_trx_ok(mfrc_trx_ok),
-      .mfrc_trx_rx_len(mfrc_trx_rx_len),
-      .mfrc_trx_rx_data(mfrc_trx_rx_data),
-      .mfrc_trx_rx_last_bits(mfrc_trx_rx_last_bits),
-      .mfrc_trx_error(mfrc_trx_error),
+      .mfrc_card_present(mfrc_card_present),
+      .mfrc_tx_valid(mfrc_tx_valid),
+      .mfrc_tx_ready(mfrc_tx_ready),
+      .mfrc_tx_len(mfrc_tx_len),
+      .mfrc_tx_data(mfrc_tx_data),
+      .mfrc_tx_last_bits(mfrc_tx_last_bits),
+
+      .mfrc_rx_valid(mfrc_rx_valid),
+      .mfrc_rx_len(mfrc_rx_len),
+      .mfrc_rx_data(mfrc_rx_data),
+      .mfrc_rx_last_bits(mfrc_rx_last_bits),
 
       // SPI bus
       .spi_sclk(spi_sclk),
@@ -98,30 +85,50 @@ module chip(
       .cs_1(cs_1)
   );
 
-  auth u_auth(
-       .clk               (clk),
+  layr layr(
+      .clk               (clk),
       .rst               (rst),
+      .busy              (status_busy),
 
-      // Control
-      .operation_i       (auth_operation_i),
-      .start_i           (auth_start_i),
+      .card_present_i(mfrc_card_present),
 
-      // Data bus
-      .data_i            (auth_data_i),
-      .data_o            (auth_data_o),   // left unconnected downstream
-      .valid_o           (auth_valid_o),  // left unconnected downstream
+      .mfrc_tx_valid(mfrc_tx_valid),
+      .mfrc_tx_ready(mfrc_tx_ready),
+      .mfrc_tx_len(mfrc_tx_len),
+      .mfrc_tx_data(mfrc_tx_data),
+      .mfrc_tx_last_bits(mfrc_tx_last_bits),
+
+      .mfrc_rx_valid(mfrc_rx_valid),
+      .mfrc_rx_len(mfrc_rx_len),
+      .mfrc_rx_data(mfrc_rx_data),
+      .mfrc_rx_last_bits(mfrc_rx_last_bits),
 
       // EEPROM interface (passed through)
-      .eeprom_busy       (auth_eeprom_busy),
-      .eeprom_done       (auth_eeprom_done),
-      .eeprom_buffer     (auth_eeprom_buffer),
-      .eeprom_start      (auth_eeprom_start),
-      .eeprom_get_key    (auth_eeprom_get_key)
-    );
+      .eeprom_busy(auth_eeprom_busy),
+      .eeprom_done(auth_eeprom_done),
+      .eeprom_buffer(auth_eeprom_buffer),
+      .eeprom_start(auth_eeprom_start),
+      .eeprom_get_key(auth_eeprom_get_key),
 
-  assign status_busy = eeprom_busy;
-  assign status_fault = eeprom_busy;
-  assign status_unlock = eeprom_busy;
+      .status(layr_status),
+      .status_valid(layr_status_valid)
+  );
+
+  assign status_unlock = unlocked;
+  assign status_fault  = forbidden;
+  
+  always_ff @(posedge clk)begin
+    if (rst)begin
+        unlocked <= 0;
+        forbidden <= 0;
+    end else begin
+      if(layr_status_valid)begin
+        unlocked <= layr_status;
+        forbidden <= ~layr_status;
+      end
+    end
+  end
+  
 
 endmodule
 

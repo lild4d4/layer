@@ -17,24 +17,31 @@ module command_mux(
     input logic get_id,
     input logic [127: 0] chip_challenge,
 
-    input logic response_valid,
-    input logic [127: 0] response,
+    // mfrc TX interface (to card)
+    output logic         mfrc_tx_valid,
+    input  logic         mfrc_tx_ready,
+    output logic [  4:0] mfrc_tx_len,
+    output logic [255:0] mfrc_tx_data,
+    output logic [  2:0] mfrc_tx_last_bits,
+
+    // mfrc RX interface (from card)
+    input  logic         mfrc_rx_valid,
+    input  logic [  4:0] mfrc_rx_len,
+    input  logic [255:0] mfrc_rx_data,
+    input  logic [  2:0] mfrc_rx_last_bits,
 
     output logic prog_selected,
     output logic auth_initialized,
     output logic [127: 0] card_challenge,
     output logic authed,
     output logic id_retrieved,
-    output logic [127: 0] id_cipher,
-
-    output logic [168: 0] command, // 1b cla + 1b ins + 2b instructions (always empty) + 1b lc + 16b daten
-    output logic command_valid
+    output logic [127: 0] id_cipher
 );
 
 parameter CLA = 8'h80;
 
 enum {SELECT_PROG, AUTH_INIT, AUTH, GET_ID} active_transmission, next_active_transmission;
-enum {READY, EXECUTING, DONE} state, next_state;
+enum {READY, SEND, WAIT_RX} state, next_state;
 
 
 function logic [167:0] cmd;
@@ -63,40 +70,78 @@ always_comb begin
                 next_active_transmission = AUTH;
             else if(get_id)
                 next_active_transmission = GET_ID;
-            if (auth_init || auth || get_id || select_prog)begin
-                next_state = EXECUTING;
+            if (auth_init || auth || get_id || select_prog) begin
+                next_state = SEND;
             end
         end
-        EXECUTING:begin
-            if(response_valid) begin
+        SEND: begin
+            if (mfrc_tx_valid && mfrc_tx_ready) begin
+                next_state = WAIT_RX;
+            end
+        end
+        WAIT_RX: begin
+            if (mfrc_rx_valid) begin
                 next_state = READY;
             end
         end
     endcase
 end
 
-// updating the command
+// TX datapath
 always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
-        command <= '0;
-        command_valid <= 0;
+        mfrc_tx_valid <= 1'b0;
+        mfrc_tx_len <= '0;
+        mfrc_tx_data <= '0;
+        mfrc_tx_last_bits <= 3'd0;
     end else begin
-        command_valid <= next_state != READY;
-        if(state == READY & next_state != READY)begin
+        // Default: hold tx_* stable while valid is asserted.
+        if (state == READY && next_state == SEND) begin
+            mfrc_tx_valid <= 1'b1;
+            mfrc_tx_last_bits <= 3'd0;
+
             case (next_active_transmission)
                 SELECT_PROG:
-                    command <= {
-                        8'h00, 8'hA4, 8'h04, 8'h00, 8'h06,
-                        8'hF0, 8'h00, 8'h00, 8'h0C, 8'hDC, 8'h00
-                    };
+                    begin
+                        // 11 bytes
+                        mfrc_tx_len <= 5'd10;
+                        mfrc_tx_data <= {
+                            8'h00, 8'hA4, 8'h04, 8'h00, 8'h06,
+                            8'hF0, 8'h00, 8'h00, 8'h0C, 8'hDC, 8'h00,
+                            168'd0
+                        };
+                    end
                 AUTH_INIT:
-                    command <= cmd(8'h10, 0);
+                    begin
+                        // 21 bytes
+                        mfrc_tx_len <= 5'd20;
+                        mfrc_tx_data <= {cmd(8'h10, 128'd0), 88'd0};
+                    end
                 AUTH:
-                    command = cmd(8'h11, chip_challenge);
+                    begin
+                        // 21 bytes
+                        mfrc_tx_len <= 5'd20;
+                        mfrc_tx_data <= {cmd(8'h11, chip_challenge), 88'd0};
+                    end
                 GET_ID:
-                    command = cmd(8'h12, 0);
-            endcase;
-        end;
+                    begin
+                        // 21 bytes
+                        mfrc_tx_len <= 5'd20;
+                        mfrc_tx_data <= {cmd(8'h12, 128'd0), 88'd0};
+                    end
+            endcase
+        end
+
+        if (state == SEND && mfrc_tx_valid && mfrc_tx_ready) begin
+            mfrc_tx_valid <= 1'b0;
+        end
+
+        if (state == READY) begin
+            // If a command is not being sent, keep tx_valid low.
+            if (next_state == READY) begin
+                mfrc_tx_valid <= 1'b0;
+            end
+        end
     end
 end
 
@@ -124,22 +169,21 @@ always_ff @(posedge clk or posedge rst) begin
         id_retrieved <= 0;
         id_cipher <= 0;
     end else begin
-
-        state <= next_state;
-        active_transmission <= next_active_transmission;
-        if(response_valid) begin
-            case(active_transmission)
-                SELECT_PROG:
+        if (mfrc_rx_valid) begin
+            unique case (active_transmission)
+                SELECT_PROG: begin
                     prog_selected <= 1;
+                end
                 AUTH_INIT: begin
-                    card_challenge <= response;
+                    card_challenge <= mfrc_rx_data[255:128];
                     auth_initialized <= 1;
                 end
-                AUTH:
+                AUTH: begin
                     authed <= 1;
+                end
                 GET_ID: begin
                     id_retrieved <= 1;
-                    id_cipher <= response;
+                    id_cipher <= mfrc_rx_data[255:128];
                 end
             endcase
         end
