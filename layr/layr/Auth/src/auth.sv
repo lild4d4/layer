@@ -36,8 +36,8 @@ module auth(
     //       can be read from data_o
     //--------------------------------------
     input  reg [127:0] data_i,
-    output reg [127:0] data_o,
-    output reg valid_o,
+    output logic [127:0] data_o,
+    output logic valid_o,
 
     //--------------------------------------
     // = EEPROM interface =
@@ -83,8 +83,13 @@ logic generate_challenge_ready;
 logic verify_id_ready;
 
 reg id_valid;
-reg [127:0] input_key;
-reg [127:0] session_key;
+reg valid, next_valid;
+reg [127:0] output_data, next_output_data;
+reg [127:0] input_key, next_input_key;
+reg [127:0] session_key, next_session_key;
+
+assign valid_o = valid;
+assign data_o = output_data;
 
 // Demux for AES core.
 assign aes_core_init = (state == VERIFY_ID) ? verify_aes_core_init : chal_aes_core_init;
@@ -121,12 +126,12 @@ auth_challenge u_auth_challenge(
     .input_key(input_key),
     .aes_core_result(result),
 
-    .block(chal_block),
+    .block_o(chal_block),
     .encdec(chal_encdec),
     .aes_core_init(chal_aes_core_init),
     .aes_core_next(chal_aes_core_next),
     .aes_core_ready(aes_core_ready),
-    .valid(auth_challenge_valid),
+    .valid_o(auth_challenge_valid),
     .challenge_o(challenge_o),
     .session_key_o(session_key_o)
 );
@@ -144,7 +149,7 @@ auth_verify_id u_auth_verify_id(
     .encdec(verify_encdec),
     .aes_core_init(verify_aes_core_init),
     .aes_core_next(verify_aes_core_next),
-    .block(verify_block),
+    .block_o(verify_block),
     .id_valid(id_valid),
 
     .eeprom_busy(eeprom_busy),
@@ -158,20 +163,33 @@ always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
         input_key <= 128'h0;
         session_key <= 128'h0;
-        data_o <= 128'h0;
         generate_challenge_ready <= 1'b0;
         verify_id_ready <= 1'b0;
+        valid <= 1'b0;
+        output_data <= 128'h0;
+        input_key <= 128'h0;
+        session_key <= 128'h0;
         state <= GET_KEY;
     end else begin
         state <= next_state;
+        valid <= next_valid;
+        output_data <= next_output_data;
+        input_key <= next_input_key;
+        session_key <= next_session_key;
     end
 end
 
 always_comb begin
     next_state = state;
-    valid_o = 1'b0;
     auth_eeprom_start = 1'b0;
     auth_eeprom_get_key = 1'b0;
+    next_valid = 1'b0;
+    next_state = state;
+    generate_challenge_ready = 1'b0;
+    verify_id_ready = 1'b0;
+    next_output_data = output_data;
+    next_input_key = input_key;
+    next_session_key = session_key;
 
     case(state)
         GET_KEY: begin
@@ -184,15 +202,12 @@ always_comb begin
 
         WAIT_FOR_KEY: begin
             if (eeprom_done) begin
-                input_key = eeprom_buffer;
+                next_input_key = eeprom_buffer;
                 next_state = IDLE;
             end
         end
 
         IDLE: begin
-            verify_id_ready = 1'b0;
-            generate_challenge_ready = 1'b0;
-
             if (start_i) begin
                 case(operation_i)
                     1'b0: next_state = GENERATE_CHALLENGE;
@@ -203,24 +218,23 @@ always_comb begin
         end
 
         GENERATE_CHALLENGE: begin
-            verify_id_ready = 1'b0;
-            generate_challenge_ready = 1'b1;
 
-            if (auth_challenge_valid) begin
-                session_key = session_key_o;
-                data_o = challenge_o;
-                valid_o = 1'b1;
+            if (!auth_challenge_valid) begin
+                generate_challenge_ready = 1'b1;
+            end else if (auth_challenge_valid) begin
+                next_session_key = session_key_o;
+                next_output_data = challenge_o;
+                next_valid = 1'b1;
                 next_state = IDLE;
             end
         end
 
         VERIFY_ID: begin
-            verify_id_ready = 1'b1;
-            generate_challenge_ready = 1'b0;
-
-            if (auth_verify_id_valid) begin
-                data_o = {127'h0, id_valid};
-                valid_o = 1'b1;
+            if (!auth_verify_id_valid) begin
+                verify_id_ready = 1'b1;
+            end else if (auth_verify_id_valid) begin
+                next_output_data = {127'h0, id_valid};
+                next_valid = 1'b1;
                 next_state = IDLE;
             end
         end

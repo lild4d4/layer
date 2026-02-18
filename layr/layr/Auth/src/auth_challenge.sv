@@ -8,12 +8,11 @@ module auth_challenge(
     input logic [127:0] aes_core_result,
     input reg [127:0] input_key,
 
-    output logic valid,
+    output logic valid_o,
     output logic encdec,
     output logic aes_core_init,
     output logic aes_core_next,
-    output logic [127:0] key,
-    output logic [127:0] block,
+    output logic [127:0] block_o,
     output reg [127:0] challenge_o,
     output reg [127:0] session_key_o
 );
@@ -22,8 +21,8 @@ enum {
     IDLE,
     DECRYPT,
     GET_RANDOM,
-    ENCRYPT_CHALLENGE,
-    ENCRYPT_SESSION_KEY
+    ENCRYPT_SESSION_KEY,
+    ENCRYPT_CHALLENGE
 } state, next_state;
 
 wire random_valid;
@@ -35,11 +34,15 @@ logic random_load;
 logic aes_handler_ready;
 
 reg decrypt_ready;
-reg [63:0] rc;
-reg [63:0] rt;
-reg [127:0] challenge;
-reg [127:0] session_key;
+reg valid, next_valid;
+reg [63:0] rc, next_rc;
+reg [63:0] rt, next_rt;
+reg [127:0] block, next_block;
+reg [127:0] challenge, next_challenge;
+reg [127:0] session_key, next_session_key;
 
+assign valid_o = valid;
+assign block_o = next_block;
 assign challenge_o = challenge;
 assign session_key_o = session_key;
 
@@ -70,7 +73,6 @@ always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
         rc <= 64'd0;
         rt <= 64'd0;
-        key <= 128'h0;
         block <= 128'h0;
         valid <= 1'b0;
         challenge <= 128'h0;
@@ -78,15 +80,26 @@ always_ff @(posedge clk or posedge rst) begin
         state <= IDLE;
     end else begin
         state <= next_state;
+        block <= next_block;
+        valid <= next_valid;
+        rc <= next_rc;
+        rt <= next_rt;
+        session_key <= next_session_key;
+        challenge <= next_challenge;
     end
 end
 
 always_comb begin
     next_state = state;
     encdec = 1'b0;
-    valid = 1'b0;
+    next_valid = 1'b0;
     aes_handler_ready = 1'b0;
     random_load = 1'b0;
+    next_block = block;
+    next_rc = rc;
+    next_rt = rt;
+    next_session_key = session_key;
+    next_challenge = challenge;
 
     case(state)
         IDLE: begin
@@ -95,13 +108,12 @@ always_comb begin
 
         DECRYPT: begin
             encdec = 1'b0;
-            key = input_key;
-            block = input_cipher;
+            next_block = input_cipher;
 
             if (!aes_handler_valid) begin
                 aes_handler_ready = 1'b1;
             end else if (aes_handler_valid) begin
-                rc = aes_core_result[127:64];
+                next_rc = aes_core_result[127:64];
                 next_state = GET_RANDOM;
             end
         end
@@ -110,34 +122,32 @@ always_comb begin
             if (random_ready && !random_valid) begin
                 random_load = 1'b1;
             end else if (random_valid) begin
-                rt = random_value;
+                next_rt = random_value;
                 next_state = ENCRYPT_SESSION_KEY;
             end
         end
 
         ENCRYPT_SESSION_KEY: begin
             encdec = 1'b1;
-            key = input_key;
-            block = {rc, rt};
+            next_block = {rc, rt};
 
             if (!aes_handler_valid) begin
                 aes_handler_ready = 1'b1;
             end else if (aes_handler_valid) begin
-                session_key = aes_core_result;
+                next_session_key = aes_core_result;
                 next_state = ENCRYPT_CHALLENGE;
             end
         end
 
         ENCRYPT_CHALLENGE: begin
             encdec = 1'b1;
-            key = input_key;
-            block = {rt, rc};
+            next_block = {rt, rc};
 
             if (!aes_handler_valid) begin
                 aes_handler_ready = 1'b1;
             end else if (aes_handler_valid) begin
-                valid = 1'b1;
-                challenge = aes_core_result;
+                next_valid = 1'b1;
+                next_challenge = aes_core_result;
                 next_state = IDLE;
             end
         end
