@@ -23,7 +23,7 @@ module mfrc_reg_if (
     output wire         req_ready,  // high when idle, can accept
     input  wire         req_write,  // 1 = write, 0 = read
     input  wire [  5:0] req_addr,   // MFRC522 register address
-    input  wire [  4:0] req_len,    // number of data bytes 0 -> 1 
+    input  wire [  4:0] req_len,    // number of data bytes 0 -> 1
     input  wire [255:0] req_wdata,  // write payload (byte0 at [255:248])
 
     // ── response side ──

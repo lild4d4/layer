@@ -132,28 +132,17 @@ def millis():
 
 
 class MFRC522:
-    def __init__(self) -> None:
-        self.spi = SpiController()
-        # Create SPI controller
-        self.spi.configure("ftdi://ftdi:232h/1")
+    def __init__(self, dry_run=False) -> None:
+        self.dry_run = dry_run
 
-        # Get SPI port (CS0)
-        self.slave = self.spi.get_port(cs=0, freq=SPI_FREQ, mode=0)
-
-    def read_version_string(self):
-        version = self.read_register(VersionReg)
-        print(f"MFRC522 Version register: 0x{version:02X}")
-
-        # Known values:
-        # 0x91 -> v1.0
-        # 0x92 -> v2.0
-
-        if version == 0x91:
-            print("Detected MFRC522 v1.0")
-        elif version == 0x92:
-            print("Detected MFRC522 v2.0")
+        if dry_run:
+            print("=== DRY RUN MODE - No SPI communication ===")
+            self.spi = None
+            self.slave = None
         else:
-            print("Unknown version value")
+            self.spi = SpiController()
+            self.spi.configure("ftdi://ftdi:232h/1")
+            self.slave = self.spi.get_port(cs=0, freq=SPI_FREQ, mode=0)
 
     def write_register(self, reg, value):
         if isinstance(value, bytes):
@@ -161,19 +150,48 @@ class MFRC522:
         else:
             data = [reg, value]
 
-        self.slave.exchange(data)
+        reg_addr = reg >> 1
+        print(f"WR  reg=0x{reg_addr:02X}  data={bytes(data).hex(' ')}")
+
+        if not self.dry_run:
+            self.slave.exchange(data)
 
     def read_register(self, reg):
-        # MSB == 1 is for reading. LSB is not used in address. Datasheet section 8.1.2.3.
-        return self.slave.exchange([0x80 | reg], 1)[
-            0
-        ]  # Read the value back. Send 0 to stop reading.
+        reg_addr = reg >> 1
+        tx = 0x80 | reg
+
+        if self.dry_run:
+            # Return fake values for dry run
+            fake_responses = {
+                0x37: 0x92,  # VersionReg -> v2.0
+                0x14: 0x00,  # TxControlReg
+                0x04: 0x30,  # ComIrqReg -> success
+                0x06: 0x00,  # ErrorReg -> no errors
+                0x0A: 0x02,  # FIFOLevelReg -> 2 bytes
+                0x0C: 0x00,  # ControlReg
+            }
+            rx = fake_responses.get(reg_addr, 0x00)
+            return rx
+        else:
+            rx = self.slave.exchange([tx], 1)[0]
+            return rx
 
     def read_register_bytes(self, reg, length):
-        # MSB == 1 is for reading. LSB is not used in address. Datasheet section 8.1.2.3.
-        return self.slave.exchange(
-            [0x80 | reg], length
-        )  # Read the value back. Send 0 to stop reading.
+        reg_addr = reg >> 1
+        tx = 0x80 | reg
+
+        if self.dry_run:
+            rx = bytes([0x04, 0x00])  # Fake ATQA response
+            print(
+                f"RD  reg=0x{reg_addr:02X}  tx={tx:02x} len={length} -> rx={rx.hex(' ')} (fake)"
+            )
+            return rx
+        else:
+            rx = self.slave.exchange([tx], length)
+            print(
+                f"RD  reg=0x{reg_addr:02X}  tx={tx:02x} len={length} -> rx={rx.hex(' ')}"
+            )
+            return rx
 
     def clear_register_bit_mask(self, reg, mask):
         tmp = self.read_register(reg)
@@ -229,7 +247,7 @@ class MFRC522:
     ):
         # Transceive the data, store the reply in cmdBuffer[]
         waitIRq = 0x30  # RxIRq and IdleIRq
-        (result_status, result, valid_bits) = self.communicate_with_picc(
+        result_status, result, valid_bits = self.communicate_with_picc(
             PCD_Transceive, sendData, True, 0, waitIRq=waitIRq
         )
         if result_status != "STATUS_OK":
@@ -339,7 +357,7 @@ class MFRC522:
             CollReg, 0x80
         )  # ValuesAfterColl=1 => Bits received after collision are cleared.
         validBits = 7  # For REQA and WUPA we need the short frame format - transmit only 7 bits of the last (and only) byte. TxLastBits = BitFramingReg[2..0]
-        (status, back_data, validBits) = self.communicate_with_picc(
+        status, back_data, validBits = self.communicate_with_picc(
             command=PCD_Transceive,
             sendData=bytes([PICC_CMD_REQA]),
             retrieveBackData=True,
@@ -356,22 +374,30 @@ class MFRC522:
 
 
 def main():
-    mfrc = MFRC522()
-    try:
-        mfrc.pdc_init()
-        mfrc.read_version_string()
+    # Set dry_run=True to just dump commands without hardware
+    mfrc = MFRC522(dry_run=True)
+    mfrc.req_a()
 
-        while not mfrc.is_new_card_present():
-            time.sleep(1)
-        print("new card present")
 
-        mfrc.transceive(
-            bytes([0x00, 0xA4, 0x04, 0x00, 0x06, 0xF0, 0x00, 0x00, 0x0C, 0xDC, 0x00])
-        )
-    except KeyboardInterrupt:
-        print("finished running tests")
-    finally:
-        mfrc.spi.terminate()
+# def main():
+#     # Set dry_run=True to just dump commands without hardware
+#     mfrc = MFRC522(dry_run=True)
+#     try:
+#         mfrc.pdc_init()
+#         mfrc.read_version_string()
+#
+#         if mfrc.is_new_card_present():
+#             print("new card present")
+#             mfrc.transceive(
+#                 bytes(
+#                     [0x00, 0xA4, 0x04, 0x00, 0x06, 0xF0, 0x00, 0x00, 0x0C, 0xDC, 0x00]
+#                 )
+#             )
+#     except KeyboardInterrupt:
+#         print("finished running tests")
+#     finally:
+#         if mfrc.spi:
+#             mfrc.spi.terminate()
 
 
 if __name__ == "__main__":

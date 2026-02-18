@@ -2,13 +2,30 @@ import os
 from pathlib import Path
 import cocotb
 from cocotb.clock import Clock
+from cocotb.triggers import RisingEdge, Timer
 from at25010b_helpers import eeprom_setup, eeprom_send_cmd, KEY_A, ID_A
-from mfrc522_helpers import mfrc_setup, mfrc_reqa, mfrc_anticoll, mfrc_select, mfrc_wupa
+from mfrc522_helpers import (
+    mfrc_setup,
+    mfrc_reqa,
+    mfrc_anticoll,
+    mfrc_select,
+    mfrc_wupa,
+    mfrc_wait_for_init,
+    mfrc_wait_for_card,
+)
 from helpers import reset_dut
 from cocotb_tools.runner import get_runner
-from cocotb.triggers import RisingEdge
 
-CLK_PERIOD_NS = 10  # 100Mhz
+CLK_PERIOD_NS = 10  # 100MHz
+
+
+def dump_hex(mfrc, test_name):
+    with open(f"{test_name}_sent.hex", "w") as f:
+        for b in mfrc.get_spi_bytes_sent():
+            f.write(f"{b:02X}\n")
+    with open(f"{test_name}_received.hex", "w") as f:
+        for b in mfrc.get_spi_bytes_received():
+            f.write(f"{b:02X}\n")
 
 
 async def setup(dut):
@@ -22,9 +39,9 @@ async def setup(dut):
     return (eeprom, mfrc)
 
 
-#
-# AT25010B Tests
-#
+# =============================================================================
+# AT25010B EEPROM Tests
+# =============================================================================
 
 
 @cocotb.test()
@@ -69,197 +86,6 @@ async def test_eeprom_conseq(dut):
     assert result == expected, f"4: Expected {expected:#x}, got {result:#x}"
 
 
-# #
-# # MFRC Tests
-# #
-
-
-# MOCK_UID = [0xDE, 0xAD, 0xBE, 0xEF]
-
-
-# @cocotb.test()
-# async def test_mfrc_reqa(dut):
-#     """Send REQA (0x26) → expect ATQA [0x04, 0x00]."""
-#     _ = await setup(dut)
-
-#     result = await mfrc_reqa(dut)
-
-#     assert result["ok"], f"REQA failed: error={result['error']:#04x}"
-#     assert result["rx_len"] == 2, f"Expected 2 bytes, got {result['rx_len']}"
-#     assert result["rx_data"] == [0x04, 0x00], f"Expected ATQA, got {result['rx_data']}"
-#     assert result["rx_last_bits"] == 0, "Expected full bytes in response"
-
-
-# @cocotb.test()
-# async def test_mfrc_wupa(dut):
-#     """Send WUPA (0x52) → expect ATQA [0x04, 0x00]."""
-#     _ = await setup(dut)
-
-#     result = await mfrc_wupa(dut)
-
-#     assert result["ok"], f"WUPA failed: error={result['error']:#04x}"
-#     assert result["rx_len"] == 2, f"Expected 2 bytes, got {result['rx_len']}"
-#     assert result["rx_data"] == [0x04, 0x00], f"Expected ATQA, got {result['rx_data']}"
-
-
-# @cocotb.test()
-# async def test_mfrc_anticoll(dut):
-#     """Send ANTICOLL CL1 (0x93 0x20) → expect UID + BCC (5 bytes)."""
-#     _ = await setup(dut)
-
-#     result = await mfrc_anticoll(dut)
-
-#     bcc = MOCK_UID[0] ^ MOCK_UID[1] ^ MOCK_UID[2] ^ MOCK_UID[3]
-#     expected = MOCK_UID + [bcc]
-
-#     assert result["ok"], f"ANTICOLL failed: error={result['error']:#04x}"
-#     assert result["rx_len"] == 5, f"Expected 5 bytes, got {result['rx_len']}"
-#     assert (
-#         result["rx_data"] == expected
-#     ), f"Expected UID {expected}, got {result['rx_data']}"
-
-
-# @cocotb.test()
-# async def test_mfrc_select(dut):
-#     """Send SELECT with UID → expect SAK + CRC_A (3 bytes)."""
-#     _ = await setup(dut)
-
-#     result = await mfrc_select(dut, MOCK_UID)
-
-#     assert result["ok"], f"SELECT failed: error={result['error']:#04x}"
-#     assert result["rx_len"] == 3, f"Expected 3 bytes, got {result['rx_len']}"
-#     assert (
-#         result["rx_data"][0] == 0x08
-#     ), f"Expected SAK=0x08, got {result['rx_data'][0]:#04x}"
-
-
-# @cocotb.test()
-# async def test_mfrc_card_activate_sequence(dut):
-#     """Full card activation: REQA → ANTICOLL → SELECT."""
-#     _ = await setup(dut)
-
-#     result = await mfrc_reqa(dut)
-#     assert result["ok"]
-#     assert result["rx_data"] == [0x04, 0x00]
-
-#     result = await mfrc_anticoll(dut)
-#     assert result["ok"]
-#     uid = result["rx_data"][:4]
-#     assert uid == MOCK_UID
-
-#     result = await mfrc_select(dut, uid)
-#     assert result["ok"]
-#     assert result["rx_data"][0] == 0x08
-
-
-# ---------------------------------------------------------------------------
-# Test: Simultaneous requests – first pair
-# ---------------------------------------------------------------------------
-
-
-# @cocotb.test()
-# async def test_simultaneous_first_grant_default(dut):
-#     """
-#     When both clients request at the same time (from reset),
-#     rr_pref=0 so client A should be granted first, then B.
-#     """
-#     await setup(dut)
-
-#     # Launch both transactions concurrently
-#     eeprom_task = cocotb.start_soon(eeprom_send_cmd(dut, 1))
-#     mfrc_task = cocotb.start_soon(mfrc_reqa(dut))
-
-#     eeprom_result = await eeprom_task
-#     mfrc_result = await mfrc_task
-
-#     # Both should succeed
-#     expected_key = int.from_bytes(KEY_A, byteorder="big")
-#     assert (
-#         eeprom_result == expected_key
-#     ), f"EEPROM read failed: expected {expected_key:#x}, got {eeprom_result:#x}"
-#     assert mfrc_result["ok"], f"MFRC REQA failed: error={mfrc_result['error']:#04x}"
-#     assert mfrc_result["rx_data"] == [
-#         0x04,
-#         0x00,
-#     ], f"Expected ATQA, got {mfrc_result['rx_data']}"
-
-
-# @cocotb.test()
-# async def test_simultaneous_first_grant_alternates(dut):
-#     """
-#     Two back-to-back simultaneous requests should alternate:
-#     Round 1: A first (rr_pref starts at 0), then B
-#     Round 2: B first (rr_pref flipped), then A
-
-#     We verify both complete successfully each time.
-#     """
-#     await setup(dut)
-
-#     # --- Round 1: both request simultaneously ---
-#     e1 = cocotb.start_soon(eeprom_send_cmd(dut, 1))
-#     m1 = cocotb.start_soon(mfrc_reqa(dut))
-#     r_e1 = await e1
-#     r_m1 = await m1
-
-#     expected_key = int.from_bytes(KEY_A, byteorder="big")
-#     assert r_e1 == expected_key, f"Round 1 EEPROM failed"
-#     assert r_m1["ok"], f"Round 1 MFRC failed"
-
-#     # --- Round 2: both request simultaneously again ---
-#     e2 = cocotb.start_soon(eeprom_send_cmd(dut, 0))
-#     m2 = cocotb.start_soon(mfrc_reqa(dut))
-#     r_e2 = await e2
-#     r_m2 = await m2
-
-#     expected_id = int.from_bytes(ID_A, byteorder="big")
-#     assert r_e2 == expected_id, f"Round 2 EEPROM failed"
-#     assert r_m2["ok"], f"Round 2 MFRC failed"
-
-
-# ---------------------------------------------------------------------------
-# Test: Sequential single-client requests (no contention)
-# ---------------------------------------------------------------------------
-
-
-# @cocotb.test()
-# async def test_eeprom_then_mfrc_no_contention(dut):
-#     """
-#     Client A finishes, then client B requests. No arbitration conflict.
-#     Both should succeed normally.
-#     """
-#     await setup(dut)
-
-#     # EEPROM first (no contention)
-#     result_a = await eeprom_send_cmd(dut, 1)
-#     expected_key = int.from_bytes(KEY_A, byteorder="big")
-#     assert result_a == expected_key, f"EEPROM read failed"
-
-#     # MFRC second (no contention)
-#     result_b = await mfrc_reqa(dut)
-#     assert result_b["ok"], f"MFRC REQA failed"
-#     assert result_b["rx_data"] == [0x04, 0x00]
-
-
-# @cocotb.test()
-# async def test_mfrc_then_eeprom_no_contention(dut):
-#     """
-#     Client B finishes, then client A requests. No arbitration conflict.
-#     """
-#     await setup(dut)
-
-#     result_b = await mfrc_reqa(dut)
-#     assert result_b["ok"], f"MFRC REQA failed"
-
-#     result_a = await eeprom_send_cmd(dut, 0)
-#     expected_id = int.from_bytes(ID_A, byteorder="big")
-#     assert result_a == expected_id, f"EEPROM read failed"
-
-
-# ---------------------------------------------------------------------------
-# Test: Repeated back-to-back single-client doesn't starve
-# ---------------------------------------------------------------------------
-
-
 @cocotb.test()
 async def test_eeprom_back_to_back(dut):
     """
@@ -278,208 +104,621 @@ async def test_eeprom_back_to_back(dut):
         assert result == expected, f"EEPROM iteration {i} failed"
 
 
-# @cocotb.test()
-# async def test_mfrc_back_to_back(dut):
-#     """
-#     Multiple MFRC transactions in a row (no EEPROM contention).
-#     """
-#     await setup(dut)
-
-#     for i in range(4):
-#         result = await mfrc_reqa(dut)
-#         assert result["ok"], f"MFRC iteration {i} failed: error={result['error']:#04x}"
-#         assert result["rx_data"] == [0x04, 0x00], f"MFRC iteration {i} bad ATQA"
+# =============================================================================
+# MFRC522 Auto-Init and Card Detection Tests
+# =============================================================================
 
 
-# ---------------------------------------------------------------------------
-# Test: Fairness over many simultaneous requests
-# ---------------------------------------------------------------------------
+MOCK_UID = [0xDE, 0xAD, 0xBE, 0xEF]
 
 
-# @cocotb.test()
-# async def test_fairness_many_simultaneous(dut):
-#     """
-#     Launch 6 rounds of simultaneous requests. All should complete
-#     successfully, demonstrating the arbiter doesn't favor one client.
-#     """
-#     await setup(dut)
+@cocotb.test()
+async def test_mfrc_auto_init(dut):
+    """Verify that mfrc_init_done goes high after auto-initialization."""
+    _ = await setup(dut)
+    dut._log.info("Waiting for MFRC auto-initialization...")
 
-#     expected_key = int.from_bytes(KEY_A, byteorder="big")
-#     expected_id = int.from_bytes(ID_A, byteorder="big")
+    # Wait for init to complete
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
 
-#     for i in range(6):
-#         get_key = i % 2
-#         e = cocotb.start_soon(eeprom_send_cmd(dut, get_key))
-#         m = cocotb.start_soon(mfrc_reqa(dut))
+    assert init_ok, "MFRC auto-init did not complete in time"
+    assert dut.mfrc_init_done.value == 1, "init_done should be 1"
 
-#         r_e = await e
-#         r_m = await m
-
-#         expected = expected_key if get_key else expected_id
-#         assert r_e == expected, f"Round {i} EEPROM failed"
-#         assert r_m["ok"], f"Round {i} MFRC failed"
+    dut._log.info(f"init_done={dut.mfrc_init_done.value}")
+    dut._log.info("test_mfrc_auto_init PASSED ✓")
 
 
-# # ---------------------------------------------------------------------------
-# # Test: Interleaved — one client mid-transaction, other arrives
-# # ---------------------------------------------------------------------------
+@cocotb.test()
+async def test_mfrc_auto_card_detection(dut):
+    """Verify that card_present goes high when card is detected via auto-poll."""
+    _ = await setup(dut)
+    dut._log.info("Waiting for MFRC auto-initialization and card detection...")
+
+    # Wait for init to complete
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete in time"
+
+    # Wait for card to be detected (auto-poll runs after init)
+    card_detected = await mfrc_wait_for_card(dut, timeout_us=300000)
+    assert card_detected, "Card was not detected in time"
+
+    assert dut.mfrc_card_present.value == 1, "card_present should be 1"
+    assert (
+        int(dut.mfrc_atqa.value) == 0x0400
+    ), f"Expected ATQA=0x0400, got {int(dut.mfrc_atqa.value):#06x}"
+
+    dut._log.info(
+        f"card_present={dut.mfrc_card_present.value}, atqa={int(dut.mfrc_atqa.value):#06x}"
+    )
+    dut._log.info("test_mfrc_auto_card_detection PASSED ✓")
 
 
-# @cocotb.test()
-# async def test_mfrc_arrives_during_eeprom(dut):
-#     """
-#     Start an EEPROM read, then while it's in-flight start an MFRC request.
-#     The MFRC should wait and then succeed after EEPROM completes.
-#     """
-#     await setup(dut)
+@cocotb.test()
+async def test_mfrc_delayed_card_detection(dut):
+    """
+    Test card detection with 5 polling cycles before card appears.
+    Verifies auto-poll continues working when card is not initially present.
+    """
+    _, mfrc = await setup(dut)
+    dut._log.info("Testing delayed card detection...")
 
-#     # Start EEPROM (will take many SPI clocks)
-#     eeprom_task = cocotb.start_soon(eeprom_send_cmd(dut, 1))
+    # Wait for init to complete
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete in time"
+    dut._log.info("MFRC auto-init complete")
 
-#     # Wait a few clocks so EEPROM is mid-transaction
-#     for _ in range(50):
-#         await RisingEdge(dut.clk)
+    # Disable card presence - simulate no card nearby
+    mfrc.set_card_present(False)
+    dut._log.info("Card presence disabled - simulating no card nearby")
 
-#     # Now start MFRC — should be queued
-#     mfrc_task = cocotb.start_soon(mfrc_reqa(dut))
+    # Wait for 5 polling cycles (each cycle is ~50ms based on auto-poll timing)
+    # We'll wait for 5 failed polls - polling happens at regular intervals
+    POLL_CYCLE_US = 50000  # 50ms per poll cycle
+    num_polls = 5
+    for i in range(num_polls):
+        dut._log.info(f"Waiting for poll cycle {i + 1}/{num_polls}...")
+        await RisingEdge(dut.clk)
+        await Timer(POLL_CYCLE_US, unit="ns")
 
-#     r_e = await eeprom_task
-#     r_m = await mfrc_task
+    dut._log.info(f"Completed {num_polls} polling cycles with no card")
 
-#     expected_key = int.from_bytes(KEY_A, byteorder="big")
-#     assert r_e == expected_key, f"EEPROM read failed"
-#     assert r_m["ok"], f"MFRC REQA failed after waiting"
+    # Now make card appear
+    mfrc.set_card_present(True)
+    dut._log.info("Card now present - enabling card detection")
 
+    # Wait for card to be detected
+    card_detected = await mfrc_wait_for_card(dut, timeout_us=300000)
+    assert card_detected, "Card was not detected after becoming present"
 
-# @cocotb.test()
-# async def test_eeprom_arrives_during_mfrc(dut):
-#     """
-#     Start an MFRC REQA, then while it's in-flight start an EEPROM request.
-#     The EEPROM should wait and then succeed after MFRC completes.
-#     """
-#     await setup(dut)
+    assert dut.mfrc_card_present.value == 1, "card_present should be 1"
+    assert (
+        int(dut.mfrc_atqa.value) == 0x0400
+    ), f"Expected ATQA=0x0400, got {int(dut.mfrc_atqa.value):#06x}"
 
-#     mfrc_task = cocotb.start_soon(mfrc_reqa(dut))
+    dut._log.info(
+        f"card_present={dut.mfrc_card_present.value}, atqa={int(dut.mfrc_atqa.value):#06x}"
+    )
+    dut._log.info("test_mfrc_delayed_card_detection PASSED ✓")
 
-#     for _ in range(50):
-#         await RisingEdge(dut.clk)
-
-#     eeprom_task = cocotb.start_soon(eeprom_send_cmd(dut, 0))
-
-#     r_m = await mfrc_task
-#     r_e = await eeprom_task
-
-#     assert r_m["ok"], f"MFRC REQA failed"
-#     expected_id = int.from_bytes(ID_A, byteorder="big")
-#     assert r_e == expected_id, f"EEPROM read failed after waiting"
-
-
-# # ---------------------------------------------------------------------------
-# # Test: Rapid alternating requests (A, B, A, B without overlap)
-# # ---------------------------------------------------------------------------
+    dump_hex(mfrc, "test_mfrc_delayed_card_detection")
 
 
-# @cocotb.test()
-# async def test_rapid_alternating(dut):
-#     """
-#     Quickly alternate: EEPROM → MFRC → EEPROM → MFRC, each sequential.
-#     Verifies arbiter state doesn't get corrupted by rapid switching.
-#     """
-#     await setup(dut)
-
-#     expected_key = int.from_bytes(KEY_A, byteorder="big")
-
-#     for i in range(4):
-#         if i % 2 == 0:
-#             r = await eeprom_send_cmd(dut, 1)
-#             assert r == expected_key, f"Step {i} EEPROM failed"
-#         else:
-#             r = await mfrc_reqa(dut)
-#             assert r["ok"], f"Step {i} MFRC failed"
+# =============================================================================
+# MFRC522 Transceive / PICC Communication Tests
+# =============================================================================
 
 
-# # ---------------------------------------------------------------------------
-# # Test: MFRC ANTICOLL with simultaneous EEPROM
-# # ---------------------------------------------------------------------------
+@cocotb.test()
+async def test_mfrc_transceive_reqa(dut):
+    """
+    Test standalone REQA transceive command.
+    Sends REQA (0x26) and expects ATQA (0x04 0x00) response.
+    """
+    _ = await setup(dut)
+    dut._log.info("Testing REQA transceive...")
+
+    # Wait for init + card
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete"
+    dut._log.info("MFRC auto-init complete")
+    card_ok = await mfrc_wait_for_card(dut, timeout_us=200000)
+    assert card_ok, "MFRC card-ok did not complete"
+    dut._log.info("MFRC card-ok complete")
+
+    # Send REQA manually
+    atqa = await mfrc_reqa(dut)
+
+    assert atqa is not None, "No ATQA response received"
+    assert atqa == 0x0400, f"Expected ATQA=0x0400, got {atqa:#06x}"
+
+    dut._log.info(f"REQA -> ATQA={atqa:#06x}")
+    dut._log.info("test_mfrc_transceive_reqa PASSED ✓")
 
 
-# @cocotb.test()
-# async def test_anticoll_simultaneous_with_eeprom(dut):
-#     """
-#     Simultaneous ANTICOLL (longer MFRC transaction) + EEPROM read.
-#     Tests that longer multi-byte SPI transactions also work under contention.
-#     """
-#     await setup(dut)
+@cocotb.test()
+async def test_mfrc_transceive_wupa(dut):
+    """
+    Test WUPA transceive command.
+    Sends WUPA (0x52) and expects ATQA (0x04 0x00) response.
+    """
+    _ = await setup(dut)
+    dut._log.info("Testing WUPA transceive...")
 
-#     eeprom_task = cocotb.start_soon(eeprom_send_cmd(dut, 1))
-#     mfrc_task = cocotb.start_soon(mfrc_anticoll(dut))
+    # Wait for init + card
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete"
+    dut._log.info("MFRC auto-init complete")
+    card_ok = await mfrc_wait_for_card(dut, timeout_us=200000)
+    assert card_ok, "MFRC card-ok did not complete"
+    dut._log.info("MFRC card-ok complete")
 
-#     r_e = await eeprom_task
-#     r_m = await mfrc_task
+    # Send WUPA manually
+    atqa = await mfrc_wupa(dut)
 
-#     expected_key = int.from_bytes(KEY_A, byteorder="big")
-#     assert r_e == expected_key, f"EEPROM failed"
-#     assert r_m["ok"], f"ANTICOLL failed"
-#     assert r_m["rx_len"] == 5, f"Expected 5 bytes UID+BCC, got {r_m['rx_len']}"
+    assert atqa is not None, "No ATQA response received"
+    assert atqa == 0x0400, f"Expected ATQA=0x0400, got {atqa:#06x}"
 
-
-# # ---------------------------------------------------------------------------
-# # Test: Stress — many simultaneous rounds with varied operations
-# # ---------------------------------------------------------------------------
-
-
-# @cocotb.test()
-# async def test_stress_mixed_operations(dut):
-#     """
-#     Stress test: 8 rounds of simultaneous requests mixing different
-#     EEPROM addresses and MFRC commands.
-#     """
-#     await setup(dut)
-
-#     expected_key = int.from_bytes(KEY_A, byteorder="big")
-#     expected_id = int.from_bytes(ID_A, byteorder="big")
-
-#     operations = [
-#         (1, "reqa"),
-#         (0, "reqa"),
-#         (1, "anticoll"),
-#         (0, "anticoll"),
-#         (1, "reqa"),
-#         (0, "reqa"),
-#         (1, "anticoll"),
-#         (0, "anticoll"),
-#     ]
-
-#     for i, (get_key, mfrc_op) in enumerate(operations):
-#         if mfrc_op == "reqa":
-#             mfrc_coro = mfrc_reqa(dut)
-#         else:
-#             mfrc_coro = mfrc_anticoll(dut)
-
-#         eeprom_task = cocotb.start_soon(eeprom_send_cmd(dut, get_key))
-#         mfrc_task = cocotb.start_soon(mfrc_coro)
-
-#         r_e = await eeprom_task
-#         r_m = await mfrc_task
-
-#         expected = expected_key if get_key else expected_id
-#         assert r_e == expected, f"Round {i} EEPROM (get_key={get_key}) failed"
-#         assert r_m["ok"], f"Round {i} MFRC ({mfrc_op}) failed"
-
-#         if mfrc_op == "reqa":
-#             assert r_m["rx_data"] == [
-#                 0x04,
-#                 0x00,
-#             ], f"Round {i} bad ATQA: {r_m['rx_data']}"
-#         else:
-#             assert (
-#                 r_m["rx_len"] == 5
-#             ), f"Round {i} ANTICOLL expected 5 bytes, got {r_m['rx_len']}"
+    dut._log.info(f"WUPA -> ATQA={atqa:#06x}")
+    dut._log.info("test_mfrc_transceive_wupa PASSED ✓")
 
 
-#
+@cocotb.test()
+async def test_mfrc_transceive_anticoll(dut):
+    """
+    Test ANTICOLLISION command sequence.
+    Sends REQA, then ANTICOLL CL1, expects UID + BCC.
+    """
+    _ = await setup(dut)
+    dut._log.info("Testing ANTICOLLISION transceive...")
+
+    # Wait for init + card
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete"
+    dut._log.info("MFRC auto-init complete")
+    card_ok = await mfrc_wait_for_card(dut, timeout_us=200000)
+    assert card_ok, "MFRC card-ok did not complete"
+    dut._log.info("MFRC card-ok complete")
+
+    # Step 1: REQA
+    atqa = await mfrc_reqa(dut)
+    assert atqa is not None, "No ATQA response"
+    assert atqa == 0x0400, f"Expected ATQA=0x0400, got {atqa:#06x}"
+
+    # Step 2: ANTICOLL CL1
+    uid_bcc = await mfrc_anticoll(dut)
+    assert uid_bcc is not None, "No ANTICOLL response"
+
+    # Verify UID matches mock
+    expected_uid = bytes(MOCK_UID)
+    expected_bcc = MOCK_UID[0] ^ MOCK_UID[1] ^ MOCK_UID[2] ^ MOCK_UID[3]
+
+    received_uid = uid_bcc[:4]
+    received_bcc = uid_bcc[4]
+
+    assert (
+        received_uid == expected_uid
+    ), f"UID mismatch: expected {expected_uid.hex()}, got {received_uid.hex()}"
+    assert (
+        received_bcc == expected_bcc
+    ), f"BCC mismatch: expected {expected_bcc:#04x}, got {received_bcc:#04x}"
+
+    dut._log.info(f"ANTICOLL -> UID={received_uid.hex()}, BCC={received_bcc:#04x}")
+    dut._log.info("test_mfrc_transceive_anticoll PASSED ✓")
+
+
+@cocotb.test()
+async def test_mfrc_transceive_select(dut):
+    """
+    Test full SELECT sequence: REQA -> ANTICOLL -> SELECT.
+    Expects SAK response after SELECT.
+    """
+    _ = await setup(dut)
+    dut._log.info("Testing SELECT transceive sequence...")
+
+    # Wait for init + card
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete"
+    dut._log.info("MFRC auto-init complete")
+    card_ok = await mfrc_wait_for_card(dut, timeout_us=200000)
+    assert card_ok, "MFRC card-ok did not complete"
+    dut._log.info("MFRC card-ok complete")
+
+    # Step 1: REQA
+    atqa = await mfrc_reqa(dut)
+    assert atqa == 0x0400, f"REQA failed: ATQA={atqa:#06x}"
+
+    # Step 2: ANTICOLL CL1
+    uid_bcc = await mfrc_anticoll(dut)
+    assert uid_bcc is not None, "ANTICOLL failed"
+
+    uid = uid_bcc[:4]
+    bcc = uid_bcc[4]
+
+    # Step 3: SELECT CL1
+    sak = await mfrc_select(dut, uid, bcc)
+    assert sak is not None, "No SAK response"
+
+    # SAK for MIFARE Classic 1K = 0x08
+    assert sak == 0x08, f"Expected SAK=0x08, got {sak:#04x}"
+
+    dut._log.info(f"SELECT -> SAK={sak:#04x}")
+    dut._log.info("test_mfrc_transceive_select PASSED ✓")
+
+
+@cocotb.test()
+async def test_mfrc_full_card_identification(dut):
+    """
+    Complete card identification sequence:
+    REQA -> ANTICOLL -> SELECT -> verify full UID.
+    """
+    _ = await setup(dut)
+    dut._log.info("Testing full card identification...")
+
+    # Wait for init + card
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete"
+    dut._log.info("MFRC auto-init complete")
+    card_ok = await mfrc_wait_for_card(dut, timeout_us=200000)
+    assert card_ok, "MFRC card-ok did not complete"
+    dut._log.info("MFRC card-ok complete")
+
+    # Full sequence
+    atqa = await mfrc_reqa(dut)
+    assert atqa == 0x0400
+
+    uid_bcc = await mfrc_anticoll(dut)
+    assert uid_bcc, "INTERNAL TEST EXCEPTION"
+
+    uid = uid_bcc[:4]
+    bcc = uid_bcc[4]
+
+    sak = await mfrc_select(dut, uid, bcc)
+    assert sak == 0x08
+
+    # Verify complete UID
+    expected_uid = bytes(MOCK_UID)
+    assert uid == expected_uid, f"UID mismatch: {uid.hex()} != {expected_uid.hex()}"
+
+    dut._log.info(f"Card identified: UID={uid.hex()}, SAK={sak:#04x}")
+    dut._log.info("test_mfrc_full_card_identification PASSED ✓")
+
+
+@cocotb.test()
+async def test_mfrc_multiple_reqa(dut):
+    """
+    Test multiple consecutive REQA commands.
+    Ensures transceive state machine resets properly between commands.
+    """
+    _ = await setup(dut)
+    dut._log.info("Testing multiple REQA commands...")
+
+    # Wait for init + card
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete"
+    dut._log.info("MFRC auto-init complete")
+    card_ok = await mfrc_wait_for_card(dut, timeout_us=200000)
+    assert card_ok, "MFRC card-ok did not complete"
+    dut._log.info("MFRC card-ok complete")
+
+    for i in range(5):
+        atqa = await mfrc_reqa(dut)
+        assert atqa == 0x0400, f"REQA #{i + 1} failed: ATQA={atqa}"
+        dut._log.info(f"REQA #{i + 1} -> ATQA={atqa:#06x}")
+
+    dut._log.info("test_mfrc_multiple_reqa PASSED ✓")
+
+
+# =============================================================================
+# SPI Arbiter Tests - Concurrent Access
+# =============================================================================
+
+
+@cocotb.test()
+async def test_arb_eeprom_during_mfrc_init(dut):
+    """
+    Test EEPROM access while MFRC522 is initializing.
+    Verifies arbiter handles concurrent requests from different clients.
+    """
+    await setup(dut)
+    dut._log.info("Testing EEPROM access during MFRC init...")
+
+    # Don't wait for init - start EEPROM read immediately
+    # MFRC init should be running in background
+
+    # Read EEPROM while MFRC is initializing
+    result = await eeprom_send_cmd(dut, 1)
+    expected = int.from_bytes(KEY_A, byteorder="big")
+    assert result == expected, f"EEPROM read failed during MFRC init"
+
+    # Now wait for init to complete
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC init should still complete"
+
+    dut._log.info("test_arb_eeprom_during_mfrc_init PASSED ✓")
+
+
+@cocotb.test()
+async def test_arb_eeprom_during_card_poll(dut):
+    """
+    Test EEPROM access while MFRC522 is polling for cards.
+    Arbiter should interleave EEPROM and MFRC transactions.
+    """
+    await setup(dut)
+    dut._log.info("Testing EEPROM access during card polling...")
+
+    # Wait for init
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC init failed"
+
+    # Card polling should be running now
+    # Interleave EEPROM reads
+    for i in range(3):
+        get_key = i % 2
+        result = await eeprom_send_cmd(dut, get_key)
+        if get_key:
+            expected = int.from_bytes(KEY_A, byteorder="big")
+        else:
+            expected = int.from_bytes(ID_A, byteorder="big")
+        assert result == expected, f"EEPROM read #{i + 1} failed during polling"
+        dut._log.info(f"EEPROM read #{i + 1} OK during card poll")
+
+    # Card should still be detectable
+    card_detected = await mfrc_wait_for_card(dut, timeout_us=300000)
+    assert card_detected, "Card detection should work after EEPROM accesses"
+
+    dut._log.info("test_arb_eeprom_during_card_poll PASSED ✓")
+
+
+@cocotb.test()
+async def test_arb_interleaved_operations(dut):
+    """
+    Interleave EEPROM reads with MFRC PICC commands.
+    Tests arbiter fairness and state isolation.
+    """
+    _ = await setup(dut)
+    dut._log.info("Testing interleaved EEPROM and MFRC operations...")
+
+    # Wait for init + card
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete"
+    dut._log.info("MFRC auto-init complete")
+    card_ok = await mfrc_wait_for_card(dut, timeout_us=200000)
+    assert card_ok, "MFRC card-ok did not complete"
+    dut._log.info("MFRC card-ok complete")
+
+    # Interleaved sequence
+    # 1. EEPROM read
+    result = await eeprom_send_cmd(dut, 1)
+    assert result == int.from_bytes(KEY_A, byteorder="big"), "EEPROM KEY read failed"
+    dut._log.info("Step 1: EEPROM KEY read OK")
+
+    # 2. MFRC REQA
+    atqa = await mfrc_reqa(dut)
+    assert atqa == 0x0400, "REQA failed"
+    dut._log.info("Step 2: MFRC REQA OK")
+
+    # 3. EEPROM read
+    result = await eeprom_send_cmd(dut, 0)
+    assert result == int.from_bytes(ID_A, byteorder="big"), "EEPROM ID read failed"
+    dut._log.info("Step 3: EEPROM ID read OK")
+
+    # 4. MFRC ANTICOLL
+    uid_bcc = await mfrc_anticoll(dut)
+    assert uid_bcc is not None, "ANTICOLL failed"
+    dut._log.info("Step 4: MFRC ANTICOLL OK")
+
+    # 5. EEPROM read
+    result = await eeprom_send_cmd(dut, 1)
+    assert result == int.from_bytes(KEY_A, byteorder="big"), "EEPROM KEY read failed"
+    dut._log.info("Step 5: EEPROM KEY read OK")
+
+    # 6. MFRC SELECT
+    uid = uid_bcc[:4]
+    bcc = uid_bcc[4]
+    sak = await mfrc_select(dut, uid, bcc)
+    assert sak == 0x08, "SELECT failed"
+    dut._log.info("Step 6: MFRC SELECT OK")
+
+    dut._log.info("test_arb_interleaved_operations PASSED ✓")
+
+
+@cocotb.test()
+async def test_arb_rapid_switching(dut):
+    """
+    Rapidly alternate between EEPROM and MFRC commands.
+    Stress test for arbiter grant/release logic.
+    """
+    _ = await setup(dut)
+    dut._log.info("Testing rapid arbiter switching...")
+
+    # Wait for init + card
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete"
+    dut._log.info("MFRC auto-init complete")
+    card_ok = await mfrc_wait_for_card(dut, timeout_us=200000)
+    assert card_ok, "MFRC card-ok did not complete"
+    dut._log.info("MFRC card-ok complete")
+
+    for i in range(10):
+        # EEPROM
+        result = await eeprom_send_cmd(dut, i % 2)
+        if i % 2:
+            expected = int.from_bytes(KEY_A, byteorder="big")
+        else:
+            expected = int.from_bytes(ID_A, byteorder="big")
+        assert result == expected, f"EEPROM #{i} failed"
+
+        # MFRC REQA
+        atqa = await mfrc_reqa(dut)
+        assert atqa == 0x0400, f"REQA #{i} failed"
+
+    dut._log.info("test_arb_rapid_switching PASSED ✓")
+
+
+@cocotb.test()
+async def test_arb_burst_eeprom_then_mfrc(dut):
+    """
+    Burst of EEPROM reads followed by MFRC sequence.
+    Ensures arbiter releases properly after burst.
+    """
+    _ = await setup(dut)
+    dut._log.info("Testing burst EEPROM then MFRC...")
+
+    # Wait for init + card
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete"
+    dut._log.info("MFRC auto-init complete")
+    card_ok = await mfrc_wait_for_card(dut, timeout_us=200000)
+    assert card_ok, "MFRC card-ok did not complete"
+    dut._log.info("MFRC card-ok complete")
+
+    # Burst EEPROM reads
+    for i in range(8):
+        result = await eeprom_send_cmd(dut, i % 2)
+        if i % 2:
+            expected = int.from_bytes(KEY_A, byteorder="big")
+        else:
+            expected = int.from_bytes(ID_A, byteorder="big")
+        assert result == expected, f"EEPROM burst #{i} failed"
+
+    dut._log.info("EEPROM burst complete")
+
+    # Full MFRC sequence
+    atqa = await mfrc_reqa(dut)
+    assert atqa == 0x0400
+
+    uid_bcc = await mfrc_anticoll(dut)
+    assert uid_bcc is not None
+
+    sak = await mfrc_select(dut, uid_bcc[:4], uid_bcc[4])
+    assert sak == 0x08
+
+    dut._log.info("MFRC sequence after burst complete")
+    dut._log.info("test_arb_burst_eeprom_then_mfrc PASSED ✓")
+
+
+@cocotb.test()
+async def test_arb_burst_mfrc_then_eeprom(dut):
+    """
+    Multiple MFRC transactions followed by EEPROM reads.
+    Ensures arbiter releases properly after MFRC burst.
+    """
+    _ = await setup(dut)
+    dut._log.info("Testing burst MFRC then EEPROM...")
+
+    # Wait for init + card
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete"
+    dut._log.info("MFRC auto-init complete")
+    card_ok = await mfrc_wait_for_card(dut, timeout_us=200000)
+    assert card_ok, "MFRC card-ok did not complete"
+    dut._log.info("MFRC card-ok complete")
+
+    # Multiple MFRC REQA commands
+    for i in range(5):
+        atqa = await mfrc_reqa(dut)
+        assert atqa == 0x0400, f"REQA #{i} failed"
+
+    dut._log.info("MFRC REQA burst complete")
+
+    # Full card identification
+    atqa = await mfrc_reqa(dut)
+    uid_bcc = await mfrc_anticoll(dut)
+    assert uid_bcc, "INTERNAL TEST EXCEPTION"
+    sak = await mfrc_select(dut, uid_bcc[:4], uid_bcc[4])
+    assert sak == 0x08
+
+    dut._log.info("MFRC SELECT complete")
+
+    # Now EEPROM reads
+    for i in range(4):
+        result = await eeprom_send_cmd(dut, i % 2)
+        if i % 2:
+            expected = int.from_bytes(KEY_A, byteorder="big")
+        else:
+            expected = int.from_bytes(ID_A, byteorder="big")
+        assert result == expected, f"EEPROM #{i} after MFRC burst failed"
+
+    dut._log.info("EEPROM reads after MFRC burst complete")
+    dut._log.info("test_arb_burst_mfrc_then_eeprom PASSED ✓")
+
+
+# =============================================================================
+# Edge Cases and Error Handling
+# =============================================================================
+
+
+@cocotb.test()
+async def test_mfrc_reqa_after_select(dut):
+    """
+    Test that REQA works after a complete SELECT sequence.
+    Card should return to IDLE/READY state.
+    """
+    _ = await setup(dut)
+    dut._log.info("Testing REQA after SELECT...")
+
+    # Wait for init + card
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete"
+    dut._log.info("MFRC auto-init complete")
+    card_ok = await mfrc_wait_for_card(dut, timeout_us=200000)
+    assert card_ok, "MFRC card-ok did not complete"
+    dut._log.info("MFRC card-ok complete")
+
+    # Full SELECT sequence
+    _ = await mfrc_reqa(dut)
+    uid_bcc = await mfrc_anticoll(dut)
+    assert uid_bcc, "INTERNAL TEST EXCEPTION"
+
+    sak = await mfrc_select(dut, uid_bcc[:4], uid_bcc[4])
+    assert sak == 0x08
+
+    dut._log.info("First SELECT complete")
+
+    # WUPA should wake up the card (REQA only works on IDLE cards)
+    atqa2 = await mfrc_wupa(dut)
+    assert atqa2 == 0x0400, f"WUPA after SELECT failed: {atqa2}"
+
+    dut._log.info("WUPA after SELECT OK")
+    dut._log.info("test_mfrc_reqa_after_select PASSED ✓")
+
+
+@cocotb.test()
+async def test_mfrc_repeated_select_sequence(dut):
+    """
+    Perform multiple complete card identification sequences.
+    Tests full state machine cycling.
+    """
+    _ = await setup(dut)
+    dut._log.info("Testing repeated SELECT sequences...")
+
+    # Wait for init + card
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete"
+    dut._log.info("MFRC auto-init complete")
+    card_ok = await mfrc_wait_for_card(dut, timeout_us=200000)
+    assert card_ok, "MFRC card-ok did not complete"
+    dut._log.info("MFRC card-ok complete")
+
+    for i in range(3):
+        # Use WUPA to ensure card responds even if in HALT state
+        atqa = await mfrc_wupa(dut)
+        assert atqa == 0x0400, f"Sequence #{i + 1}: WUPA failed"
+
+        uid_bcc = await mfrc_anticoll(dut)
+        assert uid_bcc is not None, f"Sequence #{i + 1}: ANTICOLL failed"
+
+        sak = await mfrc_select(dut, uid_bcc[:4], uid_bcc[4])
+        assert sak == 0x08, f"Sequence #{i + 1}: SELECT failed"
+
+        dut._log.info(f"SELECT sequence #{i + 1} complete")
+
+    dut._log.info("test_mfrc_repeated_select_sequence PASSED ✓")
+
+
+# =============================================================================
 # Runner
-#
+# =============================================================================
 
 
 def test_spi_e2e_runner():

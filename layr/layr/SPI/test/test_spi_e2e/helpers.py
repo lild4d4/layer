@@ -31,11 +31,10 @@ async def reset_dut(dut):
     dut.eeprom_start.value = 0
     dut.eeprom_get_key.value = 0
 
-    dut.mfrc_trx_valid.value = 0
-    dut.mfrc_trx_tx_len.value = 0
-    dut.mfrc_trx_tx_data.value = 0
-    dut.mfrc_trx_tx_last_bits.value = 0
-    dut.mfrc_trx_timeout_cycles.value = 0
+    dut.mfrc_tx_valid.value = 0
+    dut.mfrc_tx_len.value = 0
+    dut.mfrc_tx_data.value = 0
+    dut.mfrc_tx_last_bits.value = 0
 
     for _ in range(RESET_CYCLES):
         await RisingEdge(dut.clk)

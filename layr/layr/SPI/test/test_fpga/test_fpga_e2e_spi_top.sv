@@ -19,19 +19,24 @@ module test_2e2_fpga_top (
   logic        eeprom_get_key;
   wire [127:0] eeprom_buffer;
 
-  // mfrc
-  logic        mfrc_trx_valid;
-  wire         mfrc_trx_ready;
-  logic [  4:0] mfrc_trx_tx_len;
-  logic [255:0] mfrc_trx_tx_data;
-  logic [  2:0] mfrc_trx_tx_last_bits;
-  logic [ 31:0] mfrc_trx_timeout_cycles;
-  wire         mfrc_trx_done;
-  wire         mfrc_trx_ok;
-  wire [  4:0] mfrc_trx_rx_len;
-  wire [255:0] mfrc_trx_rx_data;
-  wire [  2:0] mfrc_trx_rx_last_bits;
-  wire [  7:0] mfrc_trx_error;
+  // mfrc status
+  wire         mfrc_ready;
+  wire         mfrc_init_done;
+  wire         mfrc_card_present;
+  wire [15:0] mfrc_atqa;
+
+  // mfrc TX interface
+  logic        mfrc_tx_valid;
+  wire         mfrc_tx_ready;
+  logic [  4:0] mfrc_tx_len;
+  logic [255:0] mfrc_tx_data;
+  logic [  2:0] mfrc_tx_last_bits;
+
+  // mfrc RX interface
+  wire         mfrc_rx_valid;
+  wire [  4:0] mfrc_rx_len;
+  wire [255:0] mfrc_rx_data;
+  wire [  2:0] mfrc_rx_last_bits;
 
   spi_top spi_dut (
     .clk(clk),
@@ -45,18 +50,19 @@ module test_2e2_fpga_top (
     .eeprom_rbuffer(eeprom_buffer),
 
     // mfrc interface
-    .mfrc_trx_valid(mfrc_trx_valid),
-    .mfrc_trx_ready(mfrc_trx_ready),
-    .mfrc_trx_tx_len(mfrc_trx_tx_len),
-    .mfrc_trx_tx_data(mfrc_trx_tx_data),
-    .mfrc_trx_tx_last_bits(mfrc_trx_tx_last_bits),
-    .mfrc_trx_timeout_cycles(mfrc_trx_timeout_cycles),
-    .mfrc_trx_done(mfrc_trx_done),
-    .mfrc_trx_ok(mfrc_trx_ok),
-    .mfrc_trx_rx_len(mfrc_trx_rx_len),
-    .mfrc_trx_rx_data(mfrc_trx_rx_data),
-    .mfrc_trx_rx_last_bits(mfrc_trx_rx_last_bits),
-    .mfrc_trx_error(mfrc_trx_error),
+    .mfrc_ready(mfrc_ready),
+    .mfrc_init_done(mfrc_init_done),
+    .mfrc_card_present(mfrc_card_present),
+    .mfrc_atqa(mfrc_atqa),
+    .mfrc_tx_valid(mfrc_tx_valid),
+    .mfrc_tx_ready(mfrc_tx_ready),
+    .mfrc_tx_len(mfrc_tx_len),
+    .mfrc_tx_data(mfrc_tx_data),
+    .mfrc_tx_last_bits(mfrc_tx_last_bits),
+    .mfrc_rx_valid(mfrc_rx_valid),
+    .mfrc_rx_len(mfrc_rx_len),
+    .mfrc_rx_data(mfrc_rx_data),
+    .mfrc_rx_last_bits(mfrc_rx_last_bits),
 
     // spi bus output
     .spi_sclk(sclk),
@@ -91,11 +97,10 @@ module test_2e2_fpga_top (
       eeprom_get_key <= 0;
 
       // mfrc
-      mfrc_trx_valid <= 0;
-      mfrc_trx_tx_len <= 0;
-      mfrc_trx_tx_data <= 0;
-      mfrc_trx_tx_last_bits <= 0;
-      mfrc_trx_timeout_cycles <= 0;
+      mfrc_tx_valid <= 0;
+      mfrc_tx_len <= 0;
+      mfrc_tx_data <= 0;
+      mfrc_tx_last_bits <= 0;
 
     end else begin
       eeprom_start <= 1'b0;          // default: pulse only one cycle
