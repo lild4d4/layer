@@ -334,7 +334,7 @@ module mfrc_top (
             // Only poll if we haven't found a card yet
             state      <= S_POLL_SETUP;
             ready_r    <= 1'b0;
-            trx_len_r  <= 5'd1;
+            trx_len_r  <= 5'd0;
             trx_data_r <= {PICC_REQA, 248'd0};
             trx_last_r <= 3'd7;
           end

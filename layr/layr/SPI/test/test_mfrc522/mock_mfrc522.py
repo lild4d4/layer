@@ -128,6 +128,9 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         self._inject_error: int = 0x00
         self._inject_timeout: bool = False
 
+        # Card presence simulation
+        self._card_present: bool = True
+
         # SPI byte tracking
         self.spi_bytes_sent: List[int] = []  # Bytes sent TO master (MISO)
         self.spi_bytes_received: List[int] = []  # Bytes received FROM master (MOSI)
@@ -189,6 +192,10 @@ class Mfrc522SpiSlave(SpiSlaveBase):
     def set_uid(self, uid: bytes) -> None:
         """Set the card UID for PICC emulation."""
         self._uid = uid[:4] if len(uid) >= 4 else uid + b"\x00" * (4 - len(uid))
+
+    def set_card_present(self, present: bool) -> None:
+        """Control card visibility for PICC emulation."""
+        self._card_present = present
 
     def get_spi_bytes_sent(self) -> List[int]:
         """Get all bytes sent to master (MISO)."""
@@ -625,6 +632,11 @@ class Mfrc522SpiSlave(SpiSlaveBase):
         # REQA/WUPA: 7-bit command (single byte, may be padded)
         if tx_last_bits == 7 and len(req_stripped) == 1:
             if req_stripped[0] in (0x26, 0x52):
+                if not self._card_present:
+                    cocotb.log.debug(
+                        f"MFRC522: {req_stripped[0] == 0x26 and 'REQA' or 'WUPA'} received, no card present"
+                    )
+                    return b"", 0
                 cmd_name = "REQA" if req_stripped[0] == 0x26 else "WUPA"
                 cocotb.log.debug(f"MFRC522: {cmd_name} received")
                 # ATQA for MIFARE Classic 1K: 0x04 0x00

@@ -171,11 +171,9 @@ class MFRC522:
                 0x0C: 0x00,  # ControlReg
             }
             rx = fake_responses.get(reg_addr, 0x00)
-            print(f"RD  reg=0x{reg_addr:02X}  tx={tx:02x} -> rx=0x{rx:02X} (fake)")
             return rx
         else:
             rx = self.slave.exchange([tx], 1)[0]
-            print(f"RD  reg=0x{reg_addr:02X}  tx={tx:02x} -> rx=0x{rx:02X}")
             return rx
 
     def read_register_bytes(self, reg, length):
@@ -378,23 +376,28 @@ class MFRC522:
 def main():
     # Set dry_run=True to just dump commands without hardware
     mfrc = MFRC522(dry_run=True)
-    try:
-        mfrc.pdc_init()
-        mfrc.read_version_string()
+    mfrc.req_a()
 
-        # In dry run mode, simulate card present
-        if mfrc.dry_run or mfrc.is_new_card_present():
-            print("new card present")
-            mfrc.transceive(
-                bytes(
-                    [0x00, 0xA4, 0x04, 0x00, 0x06, 0xF0, 0x00, 0x00, 0x0C, 0xDC, 0x00]
-                )
-            )
-    except KeyboardInterrupt:
-        print("finished running tests")
-    finally:
-        if mfrc.spi:
-            mfrc.spi.terminate()
+
+# def main():
+#     # Set dry_run=True to just dump commands without hardware
+#     mfrc = MFRC522(dry_run=True)
+#     try:
+#         mfrc.pdc_init()
+#         mfrc.read_version_string()
+#
+#         if mfrc.is_new_card_present():
+#             print("new card present")
+#             mfrc.transceive(
+#                 bytes(
+#                     [0x00, 0xA4, 0x04, 0x00, 0x06, 0xF0, 0x00, 0x00, 0x0C, 0xDC, 0x00]
+#                 )
+#             )
+#     except KeyboardInterrupt:
+#         print("finished running tests")
+#     finally:
+#         if mfrc.spi:
+#             mfrc.spi.terminate()
 
 
 if __name__ == "__main__":

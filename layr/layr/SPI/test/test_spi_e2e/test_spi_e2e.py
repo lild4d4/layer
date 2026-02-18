@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import cocotb
 from cocotb.clock import Clock
+from cocotb.triggers import RisingEdge, Timer
 from at25010b_helpers import eeprom_setup, eeprom_send_cmd, KEY_A, ID_A
 from mfrc522_helpers import (
     mfrc_setup,
@@ -18,11 +19,11 @@ from cocotb_tools.runner import get_runner
 CLK_PERIOD_NS = 10  # 100MHz
 
 
-def dump_hex(mfrc):
-    with open("spi_sent.hex", "w") as f:
+def dump_hex(mfrc, test_name):
+    with open(f"{test_name}_sent.hex", "w") as f:
         for b in mfrc.get_spi_bytes_sent():
             f.write(f"{b:02X}\n")
-    with open("spi_received.hex", "w") as f:
+    with open(f"{test_name}_received.hex", "w") as f:
         for b in mfrc.get_spi_bytes_received():
             f.write(f"{b:02X}\n")
 
@@ -130,7 +131,7 @@ async def test_mfrc_auto_init(dut):
 @cocotb.test()
 async def test_mfrc_auto_card_detection(dut):
     """Verify that card_present goes high when card is detected via auto-poll."""
-    _, mfrc = await setup(dut)
+    _ = await setup(dut)
     dut._log.info("Waiting for MFRC auto-initialization and card detection...")
 
     # Wait for init to complete
@@ -151,7 +152,55 @@ async def test_mfrc_auto_card_detection(dut):
     )
     dut._log.info("test_mfrc_auto_card_detection PASSED ✓")
 
-    dump_hex(mfrc)
+
+@cocotb.test()
+async def test_mfrc_delayed_card_detection(dut):
+    """
+    Test card detection with 5 polling cycles before card appears.
+    Verifies auto-poll continues working when card is not initially present.
+    """
+    _, mfrc = await setup(dut)
+    dut._log.info("Testing delayed card detection...")
+
+    # Wait for init to complete
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete in time"
+    dut._log.info("MFRC auto-init complete")
+
+    # Disable card presence - simulate no card nearby
+    mfrc.set_card_present(False)
+    dut._log.info("Card presence disabled - simulating no card nearby")
+
+    # Wait for 5 polling cycles (each cycle is ~50ms based on auto-poll timing)
+    # We'll wait for 5 failed polls - polling happens at regular intervals
+    POLL_CYCLE_US = 50000  # 50ms per poll cycle
+    num_polls = 5
+    for i in range(num_polls):
+        dut._log.info(f"Waiting for poll cycle {i + 1}/{num_polls}...")
+        await RisingEdge(dut.clk)
+        await Timer(POLL_CYCLE_US, unit="ns")
+
+    dut._log.info(f"Completed {num_polls} polling cycles with no card")
+
+    # Now make card appear
+    mfrc.set_card_present(True)
+    dut._log.info("Card now present - enabling card detection")
+
+    # Wait for card to be detected
+    card_detected = await mfrc_wait_for_card(dut, timeout_us=300000)
+    assert card_detected, "Card was not detected after becoming present"
+
+    assert dut.mfrc_card_present.value == 1, "card_present should be 1"
+    assert (
+        int(dut.mfrc_atqa.value) == 0x0400
+    ), f"Expected ATQA=0x0400, got {int(dut.mfrc_atqa.value):#06x}"
+
+    dut._log.info(
+        f"card_present={dut.mfrc_card_present.value}, atqa={int(dut.mfrc_atqa.value):#06x}"
+    )
+    dut._log.info("test_mfrc_delayed_card_detection PASSED ✓")
+
+    dump_hex(mfrc, "test_mfrc_delayed_card_detection")
 
 
 # =============================================================================
@@ -353,8 +402,8 @@ async def test_mfrc_multiple_reqa(dut):
 
     for i in range(5):
         atqa = await mfrc_reqa(dut)
-        assert atqa == 0x0400, f"REQA #{i+1} failed: ATQA={atqa}"
-        dut._log.info(f"REQA #{i+1} -> ATQA={atqa:#06x}")
+        assert atqa == 0x0400, f"REQA #{i + 1} failed: ATQA={atqa}"
+        dut._log.info(f"REQA #{i + 1} -> ATQA={atqa:#06x}")
 
     dut._log.info("test_mfrc_multiple_reqa PASSED ✓")
 
@@ -410,8 +459,8 @@ async def test_arb_eeprom_during_card_poll(dut):
             expected = int.from_bytes(KEY_A, byteorder="big")
         else:
             expected = int.from_bytes(ID_A, byteorder="big")
-        assert result == expected, f"EEPROM read #{i+1} failed during polling"
-        dut._log.info(f"EEPROM read #{i+1} OK during card poll")
+        assert result == expected, f"EEPROM read #{i + 1} failed during polling"
+        dut._log.info(f"EEPROM read #{i + 1} OK during card poll")
 
     # Card should still be detectable
     card_detected = await mfrc_wait_for_card(dut, timeout_us=300000)
@@ -654,15 +703,15 @@ async def test_mfrc_repeated_select_sequence(dut):
     for i in range(3):
         # Use WUPA to ensure card responds even if in HALT state
         atqa = await mfrc_wupa(dut)
-        assert atqa == 0x0400, f"Sequence #{i+1}: WUPA failed"
+        assert atqa == 0x0400, f"Sequence #{i + 1}: WUPA failed"
 
         uid_bcc = await mfrc_anticoll(dut)
-        assert uid_bcc is not None, f"Sequence #{i+1}: ANTICOLL failed"
+        assert uid_bcc is not None, f"Sequence #{i + 1}: ANTICOLL failed"
 
         sak = await mfrc_select(dut, uid_bcc[:4], uid_bcc[4])
-        assert sak == 0x08, f"Sequence #{i+1}: SELECT failed"
+        assert sak == 0x08, f"Sequence #{i + 1}: SELECT failed"
 
-        dut._log.info(f"SELECT sequence #{i+1} complete")
+        dut._log.info(f"SELECT sequence #{i + 1} complete")
 
     dut._log.info("test_mfrc_repeated_select_sequence PASSED ✓")
 
