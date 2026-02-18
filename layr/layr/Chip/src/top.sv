@@ -11,11 +11,12 @@ module top (
 
     inout cs_1_PAD,
     inout cs_0_PAD,
-    inout spi_mosi_PAD,
     inout spi_sclk_PAD,
-    inout status_busy_PAD,
-
-    inout spi_miso_PAD
+    inout spi_mosi_PAD,
+    inout spi_miso_PAD,
+    inout status_fault_PAD,
+    inout status_unlock_PAD,
+    inout status_busy_PAD
 );
 
   logic clk;
@@ -100,6 +101,8 @@ module top (
   logic cs_0;
   logic cs_1;
   logic status_busy;
+  logic status_fault;
+  logic status_unlock;
 
   // cs_1 PAD (Pin13 - spi chip select 1 - AT25010B)
   sg13g2_IOPadOut4mA cs_1_pad (
@@ -149,7 +152,31 @@ module top (
       .pad  (spi_sclk_PAD)
   );
 
-  // status_busy PAD (Pin23)
+  // status unlock PAD (Pin20)
+  sg13g2_IOPadOut4mA status_unlock_pad(
+`ifdef USE_POWER_PINS
+      .iovdd(IOVDD),
+      .iovss(IOVSS),
+      .vdd  (VDD),
+      .vss  (VSS),
+`endif
+      .c2p(status_unlock),
+      .pad(status_unlock_PAD)
+  );
+
+  // status_fault PAD (Pin21)
+  sg13g2_IOPadOut4mA status_fault_pad (
+`ifdef USE_POWER_PINS
+      .iovdd(IOVDD),
+      .iovss(IOVSS),
+      .vdd  (VDD),
+      .vss  (VSS),
+`endif
+      .c2p(status_fault),
+      .pad(status_fault_PAD)
+  );
+
+  // status_busy PAD (Pin22)
   sg13g2_IOPadOut4mA status_busy_pad (
 `ifdef USE_POWER_PINS
       .iovdd(IOVDD),
@@ -183,6 +210,8 @@ module top (
       .cs_0(cs_0),
       .cs_1(cs_1),
 
+      .status_fault(status_fault),
+      .status_unlock(status_unlock),
       .status_busy(status_busy)
   );
 
