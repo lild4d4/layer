@@ -31,6 +31,8 @@ enum {
     CHECK_ID
 } state, next_state;
 
+wire aes_handler_valid;
+
 logic aes_handler_ready;
 
 reg [127:0] block, next_block;
@@ -55,8 +57,6 @@ always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
         id <= 128'h0;
         expected_id <= 128'h0;
-        id_valid <= 1'b0;
-        aes_handler_ready <= 1'b0;
         block <= 128'h0;
         expected_id <= 128'h0;
         state <= IDLE;

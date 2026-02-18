@@ -59,23 +59,26 @@ enum {
     VERIFY_ID
 } state, next_state;
 
-wire aes_core_ready;
+wire encdec;
+wire verify_encdec;
+wire chal_encdec;
+wire aes_core_init;
+wire aes_core_next;
+wire chal_aes_core_init;
+wire chal_aes_core_next;
+wire verify_aes_core_init;
+wire verify_aes_core_next;
 wire result_valid;
 wire auth_challenge_valid;
 wire auth_challenge_encdec;
 wire auth_verify_id_valid;
-wire auth_verify_id_encdec;
-wire verify_eeprom_busy;
-wire verify_eeprom_done;
 wire verify_eeprom_start;
 wire verify_eeprom_get_key;
 wire [127:0] key;
-wire [127:0] verify_key;
 wire [127:0] block, chal_block, verify_block;
 wire [127:0] result;
 wire [127:0] challenge_o;
 wire [127:0] session_key_o;
-wire [127:0] verify_eeprom_buffer;
 
 logic auth_eeprom_start;
 logic auth_eeprom_get_key;
@@ -109,7 +112,6 @@ auth_challenge u_auth_challenge(
     .ready(generate_challenge_ready),
     .result_valid(result_valid),
     .input_cipher(data_i),
-    .input_key(input_key),
     .aes_core_result(result),
 
     .block_o(chal_block),
@@ -163,8 +165,6 @@ always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
         input_key <= 128'h0;
         session_key <= 128'h0;
-        generate_challenge_ready <= 1'b0;
-        verify_id_ready <= 1'b0;
         valid <= 1'b0;
         output_data <= 128'h0;
         input_key <= 128'h0;

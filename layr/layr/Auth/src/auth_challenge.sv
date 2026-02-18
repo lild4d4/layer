@@ -6,7 +6,6 @@ module auth_challenge(
     input logic aes_core_ready,
     input logic [127:0] input_cipher,
     input logic [127:0] aes_core_result,
-    input reg [127:0] input_key,
 
     output logic valid_o,
     output logic encdec,
@@ -33,7 +32,6 @@ wire [63:0] random_value;
 logic random_load;
 logic aes_handler_ready;
 
-reg decrypt_ready;
 reg valid, next_valid;
 reg [63:0] rc, next_rc;
 reg [63:0] rt, next_rt;
