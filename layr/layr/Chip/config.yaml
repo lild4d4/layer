@@ -41,6 +41,12 @@ VERILOG_FILES:
   - ../SPI/src/mfrc_core.sv
   - ../SPI/src/mfrc_reg_if.sv
   - ../SPI/src/clock_divider.sv
+  - ../Auth/src/auth.sv
+  - ../Auth/src/auth_challenge.sv
+  - ../Auth/src/auth_verify_id.sv
+  - ../Auth/src/auth_random.sv
+  - ../Auth/src/auth_aes_handler.sv
+
 USE_SLANG: true
 
 CLOCK_PERIOD: 10
