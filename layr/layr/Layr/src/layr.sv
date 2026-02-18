@@ -1,7 +1,7 @@
 module layr(
     input logic clk,
     input logic rst,
-    input logic card_present,
+    input logic card_present_i,
 
     input logic response_valid,
     input logic [127: 0] response,
@@ -19,6 +19,7 @@ module layr(
     output logic eeprom_get_key
 );
 
+logic busy;
 logic select_prog, auth_init, generate_challenge, auth, get_id, verify_id, authed;
 logic prog_selected, auth_initialized, challenge_generated, authenticated, id_retrieved, id_verified, id_valid;
 
@@ -27,13 +28,13 @@ logic [127:0] card_cipher;
 logic [127:0] chip_cypher, chip_cypher_new;
 
 logic rst_;
-assign rst_ = rst | ~card_present;
+assign rst_ = rst | (~busy & ~card_present_i);
 
 layr_controller controller(
     .clk(clk),
     .rst(rst_),
 
-    .start(card_present),
+    .start(card_present_i),
     .select_prog(select_prog),
     .auth_initialized(auth_initialized),
     .challenge_generated(challenge_generated),
@@ -104,11 +105,14 @@ layr_auth auth_i(
 );
 
 always_ff @(posedge clk) begin
-    if(rst_)
-        chip_cypher <= 0;
-    if (challenge_generated) begin
-        chip_cypher <= chip_cypher_new;
-    end
+    if(rst) busy <= 0;
+    else begin
+        if (card_present_i) busy <= 1;
+        else if (status_valid) busy <= 0;
+    end;
+
+    if(rst_) chip_cypher <= 0;
+    else if (challenge_generated) chip_cypher <= chip_cypher_new;
 end
 
 
