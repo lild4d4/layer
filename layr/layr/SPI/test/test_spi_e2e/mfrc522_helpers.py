@@ -125,7 +125,7 @@ async def mfrc_transceive(
         timeout = bool(dut.mfrc_rx_timeout.value)
 
     return {
-        "ok": bool(dut.mfrc_rx_ok.value) and not timeout,
+        "ok": bool(dut.mfrc_rx_valid.value) and not timeout,
         "rx_len": rx_count,
         "rx_data": rx_bytes,
         "rx_last_bits": int(dut.mfrc_rx_last_bits.value),
@@ -163,6 +163,7 @@ async def mfrc_wupa(dut) -> int | None:
         None on timeout/error
     """
     result = await mfrc_transceive(dut, tx_bytes=[0x52], tx_last_bits=7)
+    dut._log.info(f"WUPA Reponse: {result}")
 
     if not result["ok"] or result["rx_len"] < 2:
         return None
