@@ -46,6 +46,12 @@ VERILOG_FILES:
   - ../Auth/src/auth_verify_id.sv
   - ../Auth/src/auth_random.sv
   - ../Auth/src/auth_aes_handler.sv
+  - ../Auth/secworks-aes/src/rtl/aes_core.v
+  - ../Auth/secworks-aes/src/rtl/aes_sbox.v
+  - ../Auth/secworks-aes/src/rtl/aes_key_mem.v
+  - ../Auth/secworks-aes/src/rtl/aes_inv_sbox.v
+  - ../Auth/secworks-aes/src/rtl/aes_decipher_block.v
+  - ../Auth/secworks-aes/src/rtl/aes_encipher_block.v
 
 USE_SLANG: true
 
@@ -79,6 +85,9 @@ EXTRA_GDS:
   - dir::bondpad/bondpad_70x70.gds
 EXTRA_LEFS:
   - dir::bondpad/bondpad_70x70.lef
+
+PDK: ihp-sg13g2
+PDK_ROOT: "../../pdk"
 
 # Pinout based on user requirements:
 # Pin1: rst (input)
