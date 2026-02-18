@@ -65,7 +65,8 @@ async def auth_challenge__decrypt_input_cipher(dut):
             await RisingEdge(dut.clk)
             break
 
-    assert dut.u_aes_core.result.value == int.from_bytes(plain)
+    assert dut.u_aes_core.result.value == int.from_bytes(plain), ""
+    await RisingEdge(dut.clk)
 
 
 @cocotb.test()
@@ -90,7 +91,7 @@ async def auth_challenge__full_flow(dut):
         await RisingEdge(dut.clk)
 
         if dut.u_auth_challenge.u_random.valid.value == 1:
-            rt = int(dut.u_auth_challenge.rt.value).to_bytes(8)
+            rt = int(dut.u_auth_challenge.next_rt.value).to_bytes(8)
 
         if dut.valid_o.value == 1:
             dut.start_i.value = 0
@@ -157,12 +158,10 @@ async def auth_verify_id__valid_id(dut):
 
         if dut.valid_o.value == 1:
             dut.start_i.value = 0
-            id_validated = dut.u_auth_verify_id.id_valid.value
             id_validated_output = dut.data_o.value[0]
             await RisingEdge(dut.clk)
             break
 
-    assert id_validated == 1, "Valid ID was marked as invalid."
     assert id_validated_output == 1, "Valid status was not correctly output."
 
 

@@ -14,7 +14,7 @@ module auth_random(
 );
 
 logic busy;
-logic [5:0] counter;
+logic [4:0] counter;
 logic [63:0] state;
 
 assign rnd = state;

@@ -11,7 +11,7 @@ module auth_verify_id(
     output logic encdec,
     output logic aes_core_init,
     output logic aes_core_next,
-    output logic [127:0] block,
+    output logic [127:0] block_o,
     output reg id_valid,
 
     // EEPROM interface
@@ -31,10 +31,15 @@ enum {
     CHECK_ID
 } state, next_state;
 
+wire aes_handler_valid;
+
 logic aes_handler_ready;
 
-reg [127:0] id;
-reg [127:0] expected_id;
+reg [127:0] block, next_block;
+reg [127:0] id, next_id;
+reg [127:0] expected_id, next_expected_id;
+
+assign block_o = block;
 
 auth_aes_handler u_aes_handler(
     .clk(clk),
@@ -43,7 +48,7 @@ auth_aes_handler u_aes_handler(
     .aes_core_ready(aes_core_ready),
     .result_valid(result_valid),
 
-    .valid(aes_handler_valid),
+    .valid_o(aes_handler_valid),
     .aes_core_init(aes_core_init),
     .aes_core_next(aes_core_next)
 );
@@ -52,19 +57,28 @@ always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
         id <= 128'h0;
         expected_id <= 128'h0;
-        id_valid <= 1'b0;
-        aes_handler_ready <= 1'b0;
+        block <= 128'h0;
+        expected_id <= 128'h0;
         state <= IDLE;
     end else begin
         state <= next_state;
+        block <= next_block;
+        id <= next_id;
+        expected_id <= next_expected_id;
     end
 end
 
 always_comb begin
     valid = 1'b0;
+    encdec = 1'b0;
     id_valid = 1'b0;
     eeprom_start = 1'b0;
+    eeprom_get_key = 1'b0;
     aes_handler_ready = 1'b0;
+    next_state = state;
+    next_block = block;
+    next_id = id;
+    next_expected_id = expected_id;
 
     case(state)
         IDLE: begin
@@ -72,12 +86,12 @@ always_comb begin
         end
 
         DECRYPT: begin
-            aes_handler_ready = 1'b1;
-            encdec = 1'b0;
-            block = input_cipher;
+            next_block = input_cipher;
 
-            if (aes_handler_valid) begin
-                id = aes_core_result;
+            if (!aes_handler_valid) begin
+                aes_handler_ready = 1'b1;
+            end else if (aes_handler_valid) begin
+                next_id = aes_core_result;
                 next_state = GET_ID;
             end
         end
@@ -92,7 +106,7 @@ always_comb begin
 
         WAIT_FOR_ID: begin
             if (eeprom_done) begin
-                expected_id = eeprom_buffer;
+                next_expected_id = eeprom_buffer;
                 next_state = CHECK_ID;
             end
         end

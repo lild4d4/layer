@@ -1,0 +1,13 @@
+read_verilog -sv ../src/auth.sv
+read_verilog -sv ../src/auth_challenge.sv
+read_verilog -sv ../src/auth_verify_id.sv
+read_verilog -sv ../src/auth_random.sv
+read_verilog -sv ../src/auth_aes_handler.sv
+read_verilog ../secworks-aes/src/rtl/aes_core.v
+read_verilog ../secworks-aes/src/rtl/aes_decipher_block.v
+read_verilog ../secworks-aes/src/rtl/aes_encipher_block.v
+read_verilog ../secworks-aes/src/rtl/aes_inv_sbox.v
+read_verilog ../secworks-aes/src/rtl/aes_key_mem.v
+read_verilog ../secworks-aes/src/rtl/aes_sbox.v
+synth
+
