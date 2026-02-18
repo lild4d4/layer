@@ -1,0 +1,571 @@
+
+
+==================================
+   LAYR GUARDIAN - DEBUG MODE
+==================================
+
+  // SoftReset
+  // write reg 0x01 = 0x0F
+Master: 02 0F
+MFRC  : 00 00
+  // POLLING CommandReg for reset complete
+  // read reg 0x01 → 0x00
+Master: 82 00
+MFRC  : 00 00
+  // write reg 0x12 = 0x00
+Master: 24 00
+MFRC  : 00 00
+  // write reg 0x13 = 0x00
+Master: 26 00
+MFRC  : 00 00
+  // write reg 0x24 = 0x26
+Master: 48 26
+MFRC  : 00 00
+  // write reg 0x2A = 0x80
+Master: 54 80
+MFRC  : 00 00
+  // write reg 0x2B = 0xA9
+Master: 56 A9
+MFRC  : 00 00
+  // write reg 0x2C = 0x03
+Master: 58 03
+MFRC  : 00 00
+  // write reg 0x2D = 0xE8
+Master: 5A E8
+MFRC  : 00 00
+  // write reg 0x15 = 0x40
+Master: 2A 40
+MFRC  : 00 00
+  // write reg 0x11 = 0x3D
+Master: 22 3D
+MFRC  : 00 00
+  // read reg 0x14 → 0x00
+Master: A8 00
+MFRC  : 00 00
+  // write reg 0x14 = 0x03
+Master: 28 03
+MFRC  : 00 00
+  // read reg 0x37 → 0x92
+Master: EE 00
+MFRC  : 00 92
+[2] Reader Firmware Version: 0x92
+Ready — present card...
+
+
+  // --- PICC_IsNewCardPresent (REQA) ---
+  // write reg 0x12 = 0x00
+Master: 24 00
+MFRC  : 00 00
+  // write reg 0x13 = 0x00
+Master: 26 00
+MFRC  : 00 00
+  // write reg 0x24 = 0x26
+Master: 48 26
+MFRC  : 00 00
+  // PCD_TransceiveData (send 1 bytes)
+  // write reg 0x01 = 0x00
+Master: 02 00
+MFRC  : 00 00
+  // write reg 0x04 = 0x7F
+Master: 08 7F
+MFRC  : 00 00
+  // write reg 0x0A = 0x80
+Master: 14 80
+MFRC  : 00 00
+  // write reg 0x09 = 0x26
+Master: 12 26
+MFRC  : 00 00
+  // write reg 0x0D = 0x07
+Master: 1A 07
+MFRC  : 00 00
+  // write reg 0x01 = 0x0C
+Master: 02 0C
+MFRC  : 00 00
+  // Transceive → card responds
+  // read reg 0x0D → 0x07
+Master: 9A 00
+MFRC  : 00 07
+  // write reg 0x0D = 0x87
+Master: 1A 87
+MFRC  : 00 00
+  // POLLING ComIrqReg for Rx/Idle/Timeout
+  // read reg 0x04 → 0x30
+Master: 88 00
+MFRC  : 00 30
+  // read reg 0x06 → 0x00
+Master: 8C 00
+MFRC  : 00 00
+  // read reg 0x0A → 0x02
+Master: 94 00
+MFRC  : 00 02
+  // read reg 0x09 → 0x04
+Master: 92 00
+MFRC  : 00 04
+  // read reg 0x09 → 0x00
+Master: 92 00
+MFRC  : 00 00
+  // read reg 0x0C → 0x00
+Master: 98 00
+MFRC  : 00 00
+
+  // --- PICC_ReadCardSerial (Anticoll+Select) ---
+  // write reg 0x0E = 0x80
+Master: 1C 80
+MFRC  : 00 00
+  // PCD_TransceiveData (send 2 bytes)
+  // write reg 0x01 = 0x00
+Master: 02 00
+MFRC  : 00 00
+  // write reg 0x04 = 0x7F
+Master: 08 7F
+MFRC  : 00 00
+  // write reg 0x0A = 0x80
+Master: 14 80
+MFRC  : 00 00
+  // write reg 0x09 = 0x93
+Master: 12 93
+MFRC  : 00 00
+  // write reg 0x09 = 0x20
+Master: 12 20
+MFRC  : 00 00
+  // write reg 0x0D = 0x00
+Master: 1A 00
+MFRC  : 00 00
+  // write reg 0x01 = 0x0C
+Master: 02 0C
+MFRC  : 00 00
+  // Transceive → card responds
+  // read reg 0x0D → 0x00
+Master: 9A 00
+MFRC  : 00 00
+  // write reg 0x0D = 0x80
+Master: 1A 80
+MFRC  : 00 00
+  // POLLING ComIrqReg for Rx/Idle/Timeout
+  // read reg 0x04 → 0x30
+Master: 88 00
+MFRC  : 00 30
+  // read reg 0x06 → 0x00
+Master: 8C 00
+MFRC  : 00 00
+  // read reg 0x0A → 0x05
+Master: 94 00
+MFRC  : 00 05
+  // read reg 0x09 → 0xDE
+Master: 92 00
+MFRC  : 00 DE
+  // read reg 0x09 → 0xAD
+Master: 92 00
+MFRC  : 00 AD
+  // read reg 0x09 → 0xBE
+Master: 92 00
+MFRC  : 00 BE
+  // read reg 0x09 → 0xEF
+Master: 92 00
+MFRC  : 00 EF
+  // read reg 0x09 → 0x22
+Master: 92 00
+MFRC  : 00 22
+  // calculateCRC (7 bytes)
+  // write reg 0x01 = 0x00
+Master: 02 00
+MFRC  : 00 00
+  // write reg 0x05 = 0x04
+Master: 0A 04
+MFRC  : 00 00
+  // write reg 0x0A = 0x80
+Master: 14 80
+MFRC  : 00 00
+  // write reg 0x09 = 0x93
+Master: 12 93
+MFRC  : 00 00
+  // write reg 0x09 = 0x70
+Master: 12 70
+MFRC  : 00 00
+  // write reg 0x09 = 0xDE
+Master: 12 DE
+MFRC  : 00 00
+  // write reg 0x09 = 0xAD
+Master: 12 AD
+MFRC  : 00 00
+  // write reg 0x09 = 0xBE
+Master: 12 BE
+MFRC  : 00 00
+  // write reg 0x09 = 0xEF
+Master: 12 EF
+MFRC  : 00 00
+  // write reg 0x09 = 0x22
+Master: 12 22
+MFRC  : 00 00
+  // write reg 0x01 = 0x03
+Master: 02 03
+MFRC  : 00 00
+  // POLLING DivIrqReg for CRC ready
+  // read reg 0x05 → 0x04
+Master: 8A 00
+MFRC  : 00 04
+  // write reg 0x01 = 0x00
+Master: 02 00
+MFRC  : 00 00
+  // read reg 0x22 → 0xAA
+Master: C4 00
+MFRC  : 00 AA
+  // read reg 0x21 → 0x55
+Master: C2 00
+MFRC  : 00 55
+  // PCD_TransceiveData (send 9 bytes)
+  // write reg 0x01 = 0x00
+Master: 02 00
+MFRC  : 00 00
+  // write reg 0x04 = 0x7F
+Master: 08 7F
+MFRC  : 00 00
+  // write reg 0x0A = 0x80
+Master: 14 80
+MFRC  : 00 00
+  // write reg 0x09 = 0x93
+Master: 12 93
+MFRC  : 00 00
+  // write reg 0x09 = 0x70
+Master: 12 70
+MFRC  : 00 00
+  // write reg 0x09 = 0xDE
+Master: 12 DE
+MFRC  : 00 00
+  // write reg 0x09 = 0xAD
+Master: 12 AD
+MFRC  : 00 00
+  // write reg 0x09 = 0xBE
+Master: 12 BE
+MFRC  : 00 00
+  // write reg 0x09 = 0xEF
+Master: 12 EF
+MFRC  : 00 00
+  // write reg 0x09 = 0x22
+Master: 12 22
+MFRC  : 00 00
+  // write reg 0x09 = 0xAA
+Master: 12 AA
+MFRC  : 00 00
+  // write reg 0x09 = 0x55
+Master: 12 55
+MFRC  : 00 00
+  // write reg 0x0D = 0x00
+Master: 1A 00
+MFRC  : 00 00
+  // write reg 0x01 = 0x0C
+Master: 02 0C
+MFRC  : 00 00
+  // Transceive → card responds
+  // read reg 0x0D → 0x00
+Master: 9A 00
+MFRC  : 00 00
+  // write reg 0x0D = 0x80
+Master: 1A 80
+MFRC  : 00 00
+  // POLLING ComIrqReg for Rx/Idle/Timeout
+  // read reg 0x04 → 0x30
+Master: 88 00
+MFRC  : 00 30
+  // read reg 0x06 → 0x00
+Master: 8C 00
+MFRC  : 00 00
+  // read reg 0x0A → 0x03
+Master: 94 00
+MFRC  : 00 03
+  // read reg 0x09 → 0x20
+Master: 92 00
+MFRC  : 00 20
+  // read reg 0x09 → 0xAA
+Master: 92 00
+MFRC  : 00 AA
+  // read reg 0x09 → 0x55
+Master: 92 00
+MFRC  : 00 55
+  // write reg 0x12 = 0x80
+Master: 24 80
+MFRC  : 00 00
+
+  // --- doRATS ---
+  // write reg 0x12 = 0x80
+Master: 24 80
+MFRC  : 00 00
+  // write reg 0x13 = 0x00
+Master: 26 00
+MFRC  : 00 00
+  // PCD_TransceiveData (send 2 bytes)
+  // write reg 0x01 = 0x00
+Master: 02 00
+MFRC  : 00 00
+  // write reg 0x04 = 0x7F
+Master: 08 7F
+MFRC  : 00 00
+  // write reg 0x0A = 0x80
+Master: 14 80
+MFRC  : 00 00
+  // write reg 0x09 = 0xE0
+Master: 12 E0
+MFRC  : 00 00
+  // write reg 0x09 = 0x50
+Master: 12 50
+MFRC  : 00 00
+  // write reg 0x0D = 0x00
+Master: 1A 00
+MFRC  : 00 00
+  // write reg 0x01 = 0x0C
+Master: 02 0C
+MFRC  : 00 00
+  // Transceive → card responds
+  // read reg 0x0D → 0x00
+Master: 9A 00
+MFRC  : 00 00
+  // write reg 0x0D = 0x80
+Master: 1A 80
+MFRC  : 00 00
+  // POLLING ComIrqReg for Rx/Idle/Timeout
+  // read reg 0x04 → 0x30
+Master: 88 00
+MFRC  : 00 30
+  // read reg 0x06 → 0x00
+Master: 8C 00
+MFRC  : 00 00
+  // read reg 0x0A → 0x05
+Master: 94 00
+MFRC  : 00 05
+  // read reg 0x09 → 0x05
+Master: 92 00
+MFRC  : 00 05
+  // read reg 0x09 → 0x78
+Master: 92 00
+MFRC  : 00 78
+  // read reg 0x09 → 0x80
+Master: 92 00
+MFRC  : 00 80
+  // read reg 0x09 → 0x70
+Master: 92 00
+MFRC  : 00 70
+  // read reg 0x09 → 0x02
+Master: 92 00
+MFRC  : 00 02
+  // write reg 0x13 = 0x80
+Master: 26 80
+MFRC  : 00 00
+  // write reg 0x0D = 0x00
+Master: 1A 00
+MFRC  : 00 00
+  // write reg 0x2A = 0x8D
+Master: 54 8D
+MFRC  : 00 00
+  // write reg 0x2B = 0x3E
+Master: 56 3E
+MFRC  : 00 00
+
+  // --- SELECT APPLICATION ---
+
+  // --- sendIBlock (PCB=0x02, 11 bytes) ---
+  // write reg 0x0A = 0x80
+Master: 14 80
+MFRC  : 00 00
+  // PCD_TransceiveData (send 12 bytes)
+  // write reg 0x01 = 0x00
+Master: 02 00
+MFRC  : 00 00
+  // write reg 0x04 = 0x7F
+Master: 08 7F
+MFRC  : 00 00
+  // write reg 0x0A = 0x80
+Master: 14 80
+MFRC  : 00 00
+  // write reg 0x09 = 0x02
+Master: 12 02
+MFRC  : 00 00
+  // write reg 0x09 = 0x00
+Master: 12 00
+MFRC  : 00 00
+  // write reg 0x09 = 0xA4
+Master: 12 A4
+MFRC  : 00 00
+  // write reg 0x09 = 0x04
+Master: 12 04
+MFRC  : 00 00
+  // write reg 0x09 = 0x00
+Master: 12 00
+MFRC  : 00 00
+  // write reg 0x09 = 0x06
+Master: 12 06
+MFRC  : 00 00
+  // write reg 0x09 = 0xF0
+Master: 12 F0
+MFRC  : 00 00
+  // write reg 0x09 = 0x00
+Master: 12 00
+MFRC  : 00 00
+  // write reg 0x09 = 0x00
+Master: 12 00
+MFRC  : 00 00
+  // write reg 0x09 = 0x0C
+Master: 12 0C
+MFRC  : 00 00
+  // write reg 0x09 = 0xDC
+Master: 12 DC
+MFRC  : 00 00
+  // write reg 0x09 = 0x00
+Master: 12 00
+MFRC  : 00 00
+  // write reg 0x0D = 0x00
+Master: 1A 00
+MFRC  : 00 00
+  // write reg 0x01 = 0x0C
+Master: 02 0C
+MFRC  : 00 00
+  // Transceive → card responds
+  // read reg 0x0D → 0x00
+Master: 9A 00
+MFRC  : 00 00
+  // write reg 0x0D = 0x80
+Master: 1A 80
+MFRC  : 00 00
+  // POLLING ComIrqReg for Rx/Idle/Timeout
+  // read reg 0x04 → 0x30
+Master: 88 00
+MFRC  : 00 30
+  // read reg 0x06 → 0x00
+Master: 8C 00
+MFRC  : 00 00
+  // read reg 0x0A → 0x03
+Master: 94 00
+MFRC  : 00 03
+  // read reg 0x09 → 0x02
+Master: 92 00
+MFRC  : 00 02
+  // read reg 0x09 → 0x90
+Master: 92 00
+MFRC  : 00 90
+  // read reg 0x09 → 0x00
+Master: 92 00
+MFRC  : 00 00
+
+  // --- GET ID ---
+
+  // --- sendIBlock (PCB=0x03, 5 bytes) ---
+  // write reg 0x0A = 0x80
+Master: 14 80
+MFRC  : 00 00
+  // PCD_TransceiveData (send 6 bytes)
+  // write reg 0x01 = 0x00
+Master: 02 00
+MFRC  : 00 00
+  // write reg 0x04 = 0x7F
+Master: 08 7F
+MFRC  : 00 00
+  // write reg 0x0A = 0x80
+Master: 14 80
+MFRC  : 00 00
+  // write reg 0x09 = 0x03
+Master: 12 03
+MFRC  : 00 00
+  // write reg 0x09 = 0x80
+Master: 12 80
+MFRC  : 00 00
+  // write reg 0x09 = 0x12
+Master: 12 12
+MFRC  : 00 00
+  // write reg 0x09 = 0x00
+Master: 12 00
+MFRC  : 00 00
+  // write reg 0x09 = 0x00
+Master: 12 00
+MFRC  : 00 00
+  // write reg 0x09 = 0x00
+Master: 12 00
+MFRC  : 00 00
+  // write reg 0x0D = 0x00
+Master: 1A 00
+MFRC  : 00 00
+  // write reg 0x01 = 0x0C
+Master: 02 0C
+MFRC  : 00 00
+  // Transceive → card responds
+  // read reg 0x0D → 0x00
+Master: 9A 00
+MFRC  : 00 00
+  // write reg 0x0D = 0x80
+Master: 1A 80
+MFRC  : 00 00
+  // POLLING ComIrqReg for Rx/Idle/Timeout
+  // read reg 0x04 → 0x30
+Master: 88 00
+MFRC  : 00 30
+  // read reg 0x06 → 0x00
+Master: 8C 00
+MFRC  : 00 00
+  // read reg 0x0A → 0x13
+Master: 94 00
+MFRC  : 00 13
+  // read reg 0x09 → 0x03
+Master: 92 00
+MFRC  : 00 03
+  // read reg 0x09 → 0x01
+Master: 92 00
+MFRC  : 00 01
+  // read reg 0x09 → 0x02
+Master: 92 00
+MFRC  : 00 02
+  // read reg 0x09 → 0x03
+Master: 92 00
+MFRC  : 00 03
+  // read reg 0x09 → 0x04
+Master: 92 00
+MFRC  : 00 04
+  // read reg 0x09 → 0x05
+Master: 92 00
+MFRC  : 00 05
+  // read reg 0x09 → 0x06
+Master: 92 00
+MFRC  : 00 06
+  // read reg 0x09 → 0x07
+Master: 92 00
+MFRC  : 00 07
+  // read reg 0x09 → 0x08
+Master: 92 00
+MFRC  : 00 08
+  // read reg 0x09 → 0x09
+Master: 92 00
+MFRC  : 00 09
+  // read reg 0x09 → 0x0A
+Master: 92 00
+MFRC  : 00 0A
+  // read reg 0x09 → 0x0B
+Master: 92 00
+MFRC  : 00 0B
+  // read reg 0x09 → 0x0C
+Master: 92 00
+MFRC  : 00 0C
+  // read reg 0x09 → 0x0D
+Master: 92 00
+MFRC  : 00 0D
+  // read reg 0x09 → 0x0E
+Master: 92 00
+MFRC  : 00 0E
+  // read reg 0x09 → 0x0F
+Master: 92 00
+MFRC  : 00 0F
+  // read reg 0x09 → 0x10
+Master: 92 00
+MFRC  : 00 10
+  // read reg 0x09 → 0x90
+Master: 92 00
+MFRC  : 00 90
+  // read reg 0x09 → 0x00
+Master: 92 00
+MFRC  : 00 00
+
+Card ID: 03 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F 10 90 00 
+  // Compare card ID against EXPECTED_ID
+
+[ACCESS GRANTED]
+  // write reg 0x12 = 0x00
+Master: 24 00
+MFRC  : 00 00
+
+-- cycle complete --
