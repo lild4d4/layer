@@ -1,7 +1,0 @@
-MFRC522.zip
-
-# ignore IDE files
-.idea
-cmake
-cmake-build-debug
-CMakeLists.txt
