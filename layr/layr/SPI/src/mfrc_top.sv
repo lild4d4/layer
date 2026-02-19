@@ -45,7 +45,7 @@ module mfrc_top (
 );
   // RESET CYCLES
   // TODO: INCREASE THIS TO 50ms ON REAL HARDWARE!
-  localparam logic [31:0] RESET_CYCLES = 32'd5_000_000;
+  localparam logic [31:0] RESET_CYCLES = 32'd5_000;
   // 5mil.
 
 
@@ -78,15 +78,16 @@ module mfrc_top (
   // State machine states
   // =====================================================================
   typedef enum logic [3:0] {
-    S_IDLE        = 4'd0,
-    S_SOFT_RESET  = 4'd1,
-    S_WAIT_RESET  = 4'd2,
-    S_INIT_WRITE  = 4'd3,
-    S_INIT_WAIT   = 4'd4,
-    S_ANTENNA_ON  = 4'd5,
-    S_POLL_SETUP  = 4'd6,
-    S_POLL_WAIT   = 4'd7,
-    S_POLL_RESULT = 4'd8
+    S_IDLE         = 4'd0,
+    S_SOFT_RESET   = 4'd1,
+    S_WAIT_RESET   = 4'd2,
+    S_INIT_WRITE   = 4'd3,
+    S_INIT_WAIT    = 4'd4,
+    S_ANTENNA_ON   = 4'd5,
+    S_ANTENNA_WAIT = 4'd6,
+    S_POLL_SETUP   = 4'd7,
+    S_POLL_WAIT    = 4'd8,
+    S_POLL_RESULT  = 4'd9
   } state_t;
 
   // =====================================================================
@@ -276,7 +277,7 @@ module mfrc_top (
   // =====================================================================
   // Main FSM (init + polling)
   // =====================================================================
-  (* MARK_DEBUG = "TRUE" *) state_t state;
+  (* MARK_DEBUG = "TRUE" *)state_t         state;
 
   reg     [  3:0] init_idx;
   reg     [ 31:0] wait_cnt;
@@ -396,15 +397,21 @@ module mfrc_top (
             fsm_req_addr  <= REG_TX_CONTROL;
             fsm_req_len   <= 5'd0;
             fsm_req_wdata <= {8'h03, 248'd0};
-            state         <= S_IDLE;
-            init_done_r   <= 1'b1;
+            state         <= S_ANTENNA_WAIT;
+          end
+        end
+
+        S_ANTENNA_WAIT: begin
+          if (fsm_resp_valid) begin
+            init_done_r <= 1'b1;
+            state       <= S_IDLE;
           end
         end
 
         S_POLL_SETUP: begin
           if (trx_ready) begin
-           trx_v <= 1'b1;
-           state <= S_POLL_WAIT;
+            trx_v <= 1'b1;
+            state <= S_POLL_WAIT;
           end
           // state <= S_POLL_SETUP;
         end

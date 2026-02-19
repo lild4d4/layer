@@ -99,14 +99,16 @@ module mfrc_core (
     S_DONE           = 5'd25   // Step 13: Done
   } state_t;
 
-  (* MARK_DEBUG = "TRUE" *) state_t         state;
+  (* MARK_DEBUG = "TRUE" *)state_t         state;
 
   // Latched request
   reg     [  4:0] lat_tx_len;
   reg     [255:0] lat_tx_data;
   reg     [  2:0] lat_tx_last_bits;
   reg     [  4:0] fifo_level;
+  reg             fifo_empty;
   reg             lat_timeout;
+
 
   assign trx_ready = (state == S_IDLE);
 
@@ -289,24 +291,25 @@ module mfrc_core (
             state         <= S_RDLVL_WAIT;
           end
         end
+
         S_RDLVL_WAIT: begin
+          fifo_empty <= (reg_resp_rdata[255:248] == 8'd0);
+
           if (reg_resp_valid) begin
-            // Cap at 32 bytes (our max buffer size)
             if (reg_resp_rdata[255:248] > 8'd32) begin
-              fifo_level <= 5'd31;
-            end else if (reg_resp_rdata[255:248] == 8'd0) begin
-              fifo_level <= 5'd0;
+              fifo_level <= 5'd31;  // 31 = 32 bytes in your encoding
+              state      <= S_RDFIFO_ISSUE;
             end else begin
-              fifo_level <= reg_resp_rdata[252:248];
+              fifo_level <= reg_resp_rdata[252:248] - 5'd1;  // convert count→len encoding
+              state      <= S_RDFIFO_ISSUE;
             end
-            state <= S_RDFIFO_ISSUE;
           end
         end
 
         // ── Step 11: Read FIFO data ──
         S_RDFIFO_ISSUE: begin
           // Skip read if FIFO is empty or timeout occurred
-          if (lat_timeout || (fifo_level == 5'd0 && reg_resp_rdata[255:248] == 8'd0)) begin
+          if (lat_timeout || fifo_empty) begin
             trx_rx_len  <= 5'd0;
             trx_rx_data <= 256'd0;
             state       <= S_RDCTRL_ISSUE;
@@ -319,9 +322,10 @@ module mfrc_core (
             state         <= S_RDFIFO_WAIT;
           end
         end
+
         S_RDFIFO_WAIT: begin
           if (reg_resp_valid) begin
-            trx_rx_len  <= fifo_level;
+            trx_rx_len  <= fifo_level + 5'd1;
             trx_rx_data <= reg_resp_rdata;
             state       <= S_RDCTRL_ISSUE;
           end
