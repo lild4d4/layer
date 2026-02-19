@@ -2,7 +2,7 @@
 This module is responsible for tracking the overall protocol.
 Including the handshakes with the nfc card and the local computations required for the authentication.
 */
-module layr_controller(
+module layr_controller (
     input logic clk,
     input logic rst,
     input logic idle_clear,
@@ -34,7 +34,7 @@ module layr_controller(
     output logic status_valid
 );
 
-enum {
+  typedef enum logic [5:0] {
     READY,
     ANTI_COLL,
     SELECT_CARD,
@@ -47,62 +47,53 @@ enum {
     VERIFY_ID,
     REQUEST_VALIDATED,
     REQUEST_DENIED
-} state, next_state;
+  } state_t;
 
-// Driving the state
-always_comb begin
+  state_t state, next_state;
+
+  // Driving the state
+  always_comb begin
     next_state = state;
 
     case (state)
-        READY: begin
-            if(start)
-                next_state = ANTI_COLL;
+      READY: begin
+        if (start) next_state = ANTI_COLL;
+      end
+      ANTI_COLL: begin
+        if (anti_coll_done) next_state = SELECT_CARD;
+      end
+      SELECT_CARD: begin
+        if (card_selected) next_state = DO_RATS;
+      end
+      DO_RATS: begin
+        if (rats_done) next_state = SELECT_PROG;
+      end
+      SELECT_PROG: begin
+        if (prog_selected) next_state = AUTH_INIT;
+      end
+      AUTH_INIT: begin
+        if (auth_initialized) next_state = GENERATE_CHALLENGE;
+      end
+      GENERATE_CHALLENGE: begin
+        if (challenge_generated) next_state = AUTH;
+      end
+      AUTH: begin
+        if (authed) next_state = GET_ID;
+      end
+      GET_ID: begin
+        if (id_retrieved) next_state = VERIFY_ID;
+      end
+      VERIFY_ID: begin
+        if (id_verified) begin
+          if (id_valid) next_state = REQUEST_VALIDATED;
+          else next_state = REQUEST_DENIED;
         end
-        ANTI_COLL: begin
-            if(anti_coll_done)
-                next_state = SELECT_CARD;
-        end
-        SELECT_CARD: begin
-            if(card_selected)
-                next_state = DO_RATS;
-        end
-        DO_RATS: begin
-            if(rats_done)
-                next_state = SELECT_PROG;
-        end
-        SELECT_PROG: begin
-            if(prog_selected)
-                next_state = AUTH_INIT;
-        end
-        AUTH_INIT: begin
-            if(auth_initialized)
-                next_state = GENERATE_CHALLENGE;
-        end
-        GENERATE_CHALLENGE: begin
-            if(challenge_generated)
-                next_state = AUTH;
-        end
-        AUTH: begin
-            if(authed)
-                next_state = GET_ID;
-        end
-        GET_ID: begin
-            if(id_retrieved)
-                next_state = VERIFY_ID;
-        end
-        VERIFY_ID: begin
-            if(id_verified) begin
-                if(id_valid)
-                    next_state = REQUEST_VALIDATED;
-                else
-                    next_state = REQUEST_DENIED;
-            end
-        end
+      end
     endcase
-end
+  end
 
-// Advancing the state
-always_ff @(posedge clk) begin
+  // Advancing the state
+  always_ff @(posedge clk) begin
     anti_coll <= 0;
     select_card <= 0;
     do_rats <= 0;
@@ -116,41 +107,32 @@ always_ff @(posedge clk) begin
     status_valid <= 0;
 
     if (rst || idle_clear) begin
-        state <= READY;
+      state <= READY;
     end else begin
-        state <= next_state;
+      state <= next_state;
 
-        case (next_state)
-            READY: begin
-            end
-            ANTI_COLL:
-                anti_coll <= (state != ANTI_COLL);
-            SELECT_CARD:
-                select_card <= (state != SELECT_CARD);
-            DO_RATS:
-                do_rats <= (state != DO_RATS);
-            SELECT_PROG:
-                select_prog <= (state != SELECT_PROG);
-            AUTH_INIT:
-                auth_init <= (state != AUTH_INIT);
-            GENERATE_CHALLENGE:
-                generate_challenge <= (state != GENERATE_CHALLENGE);
-            AUTH:
-                auth <= (state != AUTH);
-            GET_ID:
-                get_id <= (state != GET_ID);
-            VERIFY_ID:
-                verify_id <= (state != VERIFY_ID);
-            REQUEST_VALIDATED: begin
-                status <= 1;
-                status_valid <= (state != REQUEST_VALIDATED);
-            end
-            REQUEST_DENIED: begin
-                status <= 0;
-                status_valid <= (state != REQUEST_DENIED);
-            end
-        endcase
+      case (next_state)
+        READY: begin
+        end
+        ANTI_COLL: anti_coll <= (state != ANTI_COLL);
+        SELECT_CARD: select_card <= (state != SELECT_CARD);
+        DO_RATS: do_rats <= (state != DO_RATS);
+        SELECT_PROG: select_prog <= (state != SELECT_PROG);
+        AUTH_INIT: auth_init <= (state != AUTH_INIT);
+        GENERATE_CHALLENGE: generate_challenge <= (state != GENERATE_CHALLENGE);
+        AUTH: auth <= (state != AUTH);
+        GET_ID: get_id <= (state != GET_ID);
+        VERIFY_ID: verify_id <= (state != VERIFY_ID);
+        REQUEST_VALIDATED: begin
+          status <= 1;
+          status_valid <= (state != REQUEST_VALIDATED);
+        end
+        REQUEST_DENIED: begin
+          status <= 0;
+          status_valid <= (state != REQUEST_DENIED);
+        end
+      endcase
     end
-end
+  end
 
 endmodule
