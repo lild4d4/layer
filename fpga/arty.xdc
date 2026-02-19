@@ -123,6 +123,8 @@ connect_debug_port u_ila_0/probe24 [get_nets [list rst_IBUF]]
 connect_debug_port u_ila_0/probe23 [get_nets [list p_0_in]]
 connect_debug_port u_ila_0/probe24 [get_nets [list rst_o_OBUF]]
 
+
+
 create_debug_core u_ila_0 ila
 set_property ALL_PROBE_SAME_MU true [get_debug_cores u_ila_0]
 set_property ALL_PROBE_SAME_MU_CNT 1 [get_debug_cores u_ila_0]
@@ -135,20 +137,20 @@ set_property C_TRIGOUT_EN false [get_debug_cores u_ila_0]
 set_property port_width 1 [get_debug_ports u_ila_0/clk]
 connect_debug_port u_ila_0/clk [get_nets [list clk_IBUF_BUFG]]
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe0]
-set_property port_width 5 [get_debug_ports u_ila_0/probe0]
-connect_debug_port u_ila_0/probe0 [get_nets [list {spi_dut/u_mfrc_top/u_mfrc_core/state[0]} {spi_dut/u_mfrc_top/u_mfrc_core/state[1]} {spi_dut/u_mfrc_top/u_mfrc_core/state[2]} {spi_dut/u_mfrc_top/u_mfrc_core/state[3]} {spi_dut/u_mfrc_top/u_mfrc_core/state[4]}]]
+set_property port_width 4 [get_debug_ports u_ila_0/probe0]
+connect_debug_port u_ila_0/probe0 [get_nets [list {spi_dut/u_mfrc_top/state[0]} {spi_dut/u_mfrc_top/state[1]} {spi_dut/u_mfrc_top/state[2]} {spi_dut/u_mfrc_top/state[3]}]]
 create_debug_port u_ila_0 probe
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe1]
-set_property port_width 3 [get_debug_ports u_ila_0/probe1]
-connect_debug_port u_ila_0/probe1 [get_nets [list {mfrc_rx_last_bits[0]} {mfrc_rx_last_bits[1]} {mfrc_rx_last_bits[2]}]]
+set_property port_width 2 [get_debug_ports u_ila_0/probe1]
+connect_debug_port u_ila_0/probe1 [get_nets [list {spi_dut/u_mfrc_top/u_mfrc_reg_if/state[0]} {spi_dut/u_mfrc_top/u_mfrc_reg_if/state[1]}]]
 create_debug_port u_ila_0 probe
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe2]
-set_property port_width 2 [get_debug_ports u_ila_0/probe2]
-connect_debug_port u_ila_0/probe2 [get_nets [list {spi_dut/u_mfrc_top/u_mfrc_reg_if/state[0]} {spi_dut/u_mfrc_top/u_mfrc_reg_if/state[1]}]]
+set_property port_width 6 [get_debug_ports u_ila_0/probe2]
+connect_debug_port u_ila_0/probe2 [get_nets [list {spi_dut/u_eeprom_ctrl/u_eeprom_spi/state[0]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/state[1]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/state[2]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/state[3]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/state[4]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/state[5]}]]
 create_debug_port u_ila_0 probe
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe3]
-set_property port_width 4 [get_debug_ports u_ila_0/probe3]
-connect_debug_port u_ila_0/probe3 [get_nets [list {spi_dut/u_mfrc_top/state[0]} {spi_dut/u_mfrc_top/state[1]} {spi_dut/u_mfrc_top/state[2]} {spi_dut/u_mfrc_top/state[3]}]]
+set_property port_width 7 [get_debug_ports u_ila_0/probe3]
+connect_debug_port u_ila_0/probe3 [get_nets [list {spi_dut/u_eeprom_ctrl/u_eeprom_spi/lat_addr[0]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/lat_addr[1]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/lat_addr[2]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/lat_addr[3]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/lat_addr[4]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/lat_addr[5]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/lat_addr[6]}]]
 create_debug_port u_ila_0 probe
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe4]
 set_property port_width 4 [get_debug_ports u_ila_0/probe4]
@@ -159,28 +161,28 @@ set_property port_width 3 [get_debug_ports u_ila_0/probe5]
 connect_debug_port u_ila_0/probe5 [get_nets [list {mfrc_tx_last_bits[0]} {mfrc_tx_last_bits[1]} {mfrc_tx_last_bits[2]}]]
 create_debug_port u_ila_0 probe
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe6]
-set_property port_width 5 [get_debug_ports u_ila_0/probe6]
-connect_debug_port u_ila_0/probe6 [get_nets [list {mfrc_rx_len[0]} {mfrc_rx_len[1]} {mfrc_rx_len[2]} {mfrc_rx_len[3]} {mfrc_rx_len[4]}]]
+set_property port_width 6 [get_debug_ports u_ila_0/probe6]
+connect_debug_port u_ila_0/probe6 [get_nets [list {spi_dut/u_eeprom_ctrl/state[0]} {spi_dut/u_eeprom_ctrl/state[1]} {spi_dut/u_eeprom_ctrl/state[2]} {spi_dut/u_eeprom_ctrl/state[3]} {spi_dut/u_eeprom_ctrl/state[4]} {spi_dut/u_eeprom_ctrl/state[5]}]]
 create_debug_port u_ila_0 probe
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe7]
-set_property port_width 16 [get_debug_ports u_ila_0/probe7]
-connect_debug_port u_ila_0/probe7 [get_nets [list {mfrc_atqa[0]} {mfrc_atqa[1]} {mfrc_atqa[2]} {mfrc_atqa[3]} {mfrc_atqa[4]} {mfrc_atqa[5]} {mfrc_atqa[6]} {mfrc_atqa[7]} {mfrc_atqa[8]} {mfrc_atqa[9]} {mfrc_atqa[10]} {mfrc_atqa[11]} {mfrc_atqa[12]} {mfrc_atqa[13]} {mfrc_atqa[14]} {mfrc_atqa[15]}]]
+set_property port_width 5 [get_debug_ports u_ila_0/probe7]
+connect_debug_port u_ila_0/probe7 [get_nets [list {mfrc_tx_len[0]} {mfrc_tx_len[1]} {mfrc_tx_len[2]} {mfrc_tx_len[3]} {mfrc_tx_len[4]}]]
 create_debug_port u_ila_0 probe
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe8]
-set_property port_width 5 [get_debug_ports u_ila_0/probe8]
-connect_debug_port u_ila_0/probe8 [get_nets [list {mfrc_tx_len[0]} {mfrc_tx_len[1]} {mfrc_tx_len[2]} {mfrc_tx_len[3]} {mfrc_tx_len[4]}]]
+set_property port_width 16 [get_debug_ports u_ila_0/probe8]
+connect_debug_port u_ila_0/probe8 [get_nets [list {mfrc_atqa[0]} {mfrc_atqa[1]} {mfrc_atqa[2]} {mfrc_atqa[3]} {mfrc_atqa[4]} {mfrc_atqa[5]} {mfrc_atqa[6]} {mfrc_atqa[7]} {mfrc_atqa[8]} {mfrc_atqa[9]} {mfrc_atqa[10]} {mfrc_atqa[11]} {mfrc_atqa[12]} {mfrc_atqa[13]} {mfrc_atqa[14]} {mfrc_atqa[15]}]]
 create_debug_port u_ila_0 probe
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe9]
-set_property port_width 7 [get_debug_ports u_ila_0/probe9]
-connect_debug_port u_ila_0/probe9 [get_nets [list {spi_dut/u_eeprom_ctrl/u_eeprom_spi/lat_addr[0]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/lat_addr[1]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/lat_addr[2]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/lat_addr[3]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/lat_addr[4]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/lat_addr[5]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/lat_addr[6]}]]
+set_property port_width 5 [get_debug_ports u_ila_0/probe9]
+connect_debug_port u_ila_0/probe9 [get_nets [list {spi_dut/u_mfrc_top/u_mfrc_core/state[0]} {spi_dut/u_mfrc_top/u_mfrc_core/state[1]} {spi_dut/u_mfrc_top/u_mfrc_core/state[2]} {spi_dut/u_mfrc_top/u_mfrc_core/state[3]} {spi_dut/u_mfrc_top/u_mfrc_core/state[4]}]]
 create_debug_port u_ila_0 probe
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe10]
-set_property port_width 6 [get_debug_ports u_ila_0/probe10]
-connect_debug_port u_ila_0/probe10 [get_nets [list {spi_dut/u_eeprom_ctrl/state[0]} {spi_dut/u_eeprom_ctrl/state[1]} {spi_dut/u_eeprom_ctrl/state[2]} {spi_dut/u_eeprom_ctrl/state[3]} {spi_dut/u_eeprom_ctrl/state[4]} {spi_dut/u_eeprom_ctrl/state[5]}]]
+set_property port_width 5 [get_debug_ports u_ila_0/probe10]
+connect_debug_port u_ila_0/probe10 [get_nets [list {mfrc_rx_len[0]} {mfrc_rx_len[1]} {mfrc_rx_len[2]} {mfrc_rx_len[3]} {mfrc_rx_len[4]}]]
 create_debug_port u_ila_0 probe
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe11]
-set_property port_width 6 [get_debug_ports u_ila_0/probe11]
-connect_debug_port u_ila_0/probe11 [get_nets [list {spi_dut/u_eeprom_ctrl/u_eeprom_spi/state[0]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/state[1]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/state[2]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/state[3]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/state[4]} {spi_dut/u_eeprom_ctrl/u_eeprom_spi/state[5]}]]
+set_property port_width 3 [get_debug_ports u_ila_0/probe11]
+connect_debug_port u_ila_0/probe11 [get_nets [list {mfrc_rx_last_bits[0]} {mfrc_rx_last_bits[1]} {mfrc_rx_last_bits[2]}]]
 create_debug_port u_ila_0 probe
 set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe12]
 set_property port_width 1 [get_debug_ports u_ila_0/probe12]
