@@ -69,18 +69,20 @@ module layr_controller (
         if (rats_done) next_state = SELECT_PROG;
       end
       SELECT_PROG: begin
-        if (prog_selected) next_state = AUTH_INIT;
+        // DEBUG: skip auth, go straight to GET_ID
+        if (prog_selected) next_state = GET_ID;
       end
-      AUTH_INIT: begin
-        if (auth_initialized) next_state = GENERATE_CHALLENGE;
-      end
-      GENERATE_CHALLENGE: begin
-        if (challenge_generated) next_state = AUTH;
-      end
-      AUTH: begin
-        if (authed) next_state = GET_ID;
-      end
+      // AUTH_INIT: begin
+      //   if (auth_initialized) next_state = GENERATE_CHALLENGE;
+      // end
+      // GENERATE_CHALLENGE: begin
+      //   if (challenge_generated) next_state = AUTH;
+      // end
+      // AUTH: begin
+      //   if (authed) next_state = GET_ID;
+      // end
       GET_ID: begin
+        // DEBUG: go to VERIFY_ID for EEPROM compare
         if (id_retrieved) next_state = VERIFY_ID;
       end
       VERIFY_ID: begin

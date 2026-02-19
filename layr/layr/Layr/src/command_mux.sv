@@ -193,8 +193,8 @@ module command_mux (
             mfrc_tx_data <= {i_block_pcb, cmd(8'h11, chip_challenge), 80'd0};
           end
           GET_ID: begin
-            mfrc_tx_len  <= 5'd21;
-            mfrc_tx_data <= {i_block_pcb, cmd(8'h12, 128'd0), 80'd0};
+            mfrc_tx_len  <= 5'd5;
+            mfrc_tx_data <= {i_block_pcb, CLA, 8'h12, 8'h00, 8'h00, 8'h00, 208'd0};
           end
           default: begin
           end
