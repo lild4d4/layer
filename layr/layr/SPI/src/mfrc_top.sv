@@ -37,6 +37,7 @@ module mfrc_top (
     input  wire [  4:0] tx_len,        // byte count - 1
     input  wire [255:0] tx_data,       // payload (byte 0 = [255:248])
     input  wire [  2:0] tx_last_bits,  // valid bits in last byte (0=all 8)
+    input  wire [  1:0] tx_kind,
 
     // -- RX interface (from card) --
     output reg          rx_valid,
@@ -192,7 +193,21 @@ module mfrc_top (
     S_EXT_DONE       = 6'd45,  // Signal RX result
 
     // Delay between polls
-    S_POLL_DELAY     = 6'd46;
+    S_POLL_DELAY     = 6'd46,
+
+    // RATS-specific pre/post register sequence
+    S_PRE_RATS_TXMODE_WR      = 6'd47,
+    S_PRE_RATS_TXMODE_WR_WAIT = 6'd48,
+    S_RATS_PREP               = 6'd49,
+    S_RATS_PREP_WAIT          = 6'd50,
+    S_POST_RATS_RXMODE_WR     = 6'd51,
+    S_POST_RATS_RXMODE_WR_WAIT = 6'd52,
+    S_POST_RATS_WR            = 6'd53,
+    S_POST_RATS_WR_WAIT       = 6'd54,
+    S_POST_RATS_TMODE_WR      = 6'd55,
+    S_POST_RATS_TMODE_WR_WAIT = 6'd56,
+    S_POST_RATS_TPRES_WR      = 6'd57,
+    S_POST_RATS_TPRES_WR_WAIT = 6'd58;
 
   (* MARK_DEBUG = "TRUE" *) reg [5:0] state;
 
@@ -202,6 +217,7 @@ module mfrc_top (
   reg [255:0] trx_tx_data;     // data to send to card
   reg [  4:0] trx_tx_len;      // bytes - 1
   reg [  2:0] trx_tx_last_bits;// valid bits in last byte
+  reg [  1:0] trx_kind;        // command kind (normal/rats)
   reg [255:0] trx_rx_data;     // data received from card
   reg [  4:0] trx_rx_len;      // bytes received - 1
   reg [  2:0] trx_rx_last_bits;
@@ -319,6 +335,7 @@ module mfrc_top (
       trx_tx_data      <= 256'd0;
       trx_tx_len       <= 5'd0;
       trx_tx_last_bits <= 3'd0;
+      trx_kind         <= 2'd0;
       trx_rx_data      <= 256'd0;
       trx_rx_len       <= 5'd0;
       trx_rx_last_bits <= 3'd0;
@@ -493,6 +510,7 @@ module mfrc_top (
           trx_tx_data      <= {8'h26, 248'd0};  // REQA command
           trx_tx_len       <= 5'd0;              // 1 byte
           trx_tx_last_bits <= 3'd7;              // 7-bit frame
+          trx_kind         <= 2'd0;
           trx_is_poll      <= 1'b1;
           trx_ok           <= 1'b0;
           fifo_idx         <= 5'd0;
@@ -541,6 +559,7 @@ module mfrc_top (
           trx_tx_data      <= tx_data;
           trx_tx_len       <= tx_len;
           trx_tx_last_bits <= tx_last_bits;
+          trx_kind         <= tx_kind;
           trx_is_poll      <= 1'b0;
           trx_ok           <= 1'b0;
           fifo_idx         <= 5'd0;
@@ -549,7 +568,10 @@ module mfrc_top (
           trx_rx_last_bits <= 3'd0;
           ready            <= 1'b0;
           tx_ready         <= 1'b0;
-          state            <= S_TRX_IDLE_CMD;
+          if (tx_kind == 2'd1)
+            state <= S_PRE_RATS_TXMODE_WR;
+          else
+            state <= S_TRX_IDLE_CMD;
         end
 
         S_EXT_DONE: begin
@@ -562,6 +584,81 @@ module mfrc_top (
           tx_ready     <= 1'b1;
           delay_ctr    <= POLL_DELAY;
           state        <= S_POLL_DELAY;
+        end
+
+        // ============================================================
+        // RATS-specific register setup/restore (Arduino doRATS)
+        // ============================================================
+        S_PRE_RATS_TXMODE_WR: begin
+          if (reg_req_ready) begin
+            issue_write(R_TX_MODE, 8'h80);
+            state <= S_PRE_RATS_TXMODE_WR_WAIT;
+          end
+        end
+
+        S_PRE_RATS_TXMODE_WR_WAIT: begin
+          if (reg_resp_valid)
+            state <= S_RATS_PREP;
+        end
+
+        S_RATS_PREP: begin
+          if (reg_req_ready) begin
+            issue_write(R_RX_MODE, 8'h00);
+            state <= S_RATS_PREP_WAIT;
+          end
+        end
+
+        S_RATS_PREP_WAIT: begin
+          if (reg_resp_valid)
+            state <= S_TRX_IDLE_CMD;
+        end
+
+        S_POST_RATS_RXMODE_WR: begin
+          if (reg_req_ready) begin
+            issue_write(R_RX_MODE, 8'h80);
+            state <= S_POST_RATS_RXMODE_WR_WAIT;
+          end
+        end
+
+        S_POST_RATS_RXMODE_WR_WAIT: begin
+          if (reg_resp_valid)
+            state <= S_POST_RATS_WR;
+        end
+
+        S_POST_RATS_WR: begin
+          if (reg_req_ready) begin
+            issue_write(R_BIT_FRAMING, 8'h00);
+            state <= S_POST_RATS_WR_WAIT;
+          end
+        end
+
+        S_POST_RATS_WR_WAIT: begin
+          if (reg_resp_valid)
+            state <= S_POST_RATS_TMODE_WR;
+        end
+
+        S_POST_RATS_TMODE_WR: begin
+          if (reg_req_ready) begin
+            issue_write(R_T_MODE, 8'h8D);
+            state <= S_POST_RATS_TMODE_WR_WAIT;
+          end
+        end
+
+        S_POST_RATS_TMODE_WR_WAIT: begin
+          if (reg_resp_valid)
+            state <= S_POST_RATS_TPRES_WR;
+        end
+
+        S_POST_RATS_TPRES_WR: begin
+          if (reg_req_ready) begin
+            issue_write(R_T_PRESCALER, 8'h3E);
+            state <= S_POST_RATS_TPRES_WR_WAIT;
+          end
+        end
+
+        S_POST_RATS_TPRES_WR_WAIT: begin
+          if (reg_resp_valid)
+            state <= S_EXT_DONE;
         end
 
         // ============================================================
@@ -800,6 +897,8 @@ module mfrc_top (
         S_TRX_DONE: begin
           if (trx_is_poll) begin
             state <= S_POLL_WAIT;
+          end else if (trx_kind == 2'd1 && trx_ok) begin
+            state <= S_POST_RATS_RXMODE_WR;
           end else begin
             state <= S_EXT_DONE;
           end

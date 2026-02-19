@@ -18,15 +18,10 @@ module chip(
   wire layr_status;
   wire layr_status_valid;
 
-  // Tie off EEPROM interface signals
-  wire         eeprom_start;
+  // EEPROM interface signals
   wire         eeprom_busy;
   wire         eeprom_done;
-  wire         eeprom_get_key;
   wire [127:0] eeprom_rbuffer;
-
-  assign eeprom_start   = 1'b0;
-  assign eeprom_get_key = 1'b0;
 
   // Tie off MFRC interface signals
   wire         mfrc_tx_valid;
@@ -34,6 +29,7 @@ module chip(
   wire [  4:0] mfrc_tx_len;
   wire [255:0] mfrc_tx_data;
   wire [  2:0] mfrc_tx_last_bits;
+  wire [  1:0] mfrc_tx_kind;
 
   wire         mfrc_rx_valid;
   wire [  4:0] mfrc_rx_len;
@@ -66,11 +62,11 @@ module chip(
       .mfrc_atqa(mfrc_atqa),
 
 
-      // eeprom interface (tied off)
-      .eeprom_start(eeprom_start),
+      // eeprom interface
+      .eeprom_start(auth_eeprom_start),
       .eeprom_busy(eeprom_busy),
       .eeprom_done(eeprom_done),
-      .eeprom_get_key(eeprom_get_key),
+      .eeprom_get_key(auth_eeprom_get_key),
       .eeprom_rbuffer(eeprom_rbuffer),
 
       // mfrc interface (tied off)
@@ -79,6 +75,7 @@ module chip(
       .mfrc_tx_len(mfrc_tx_len),
       .mfrc_tx_data(mfrc_tx_data),
       .mfrc_tx_last_bits(mfrc_tx_last_bits),
+      .mfrc_tx_kind(mfrc_tx_kind),
 
       .mfrc_rx_valid(mfrc_rx_valid),
       .mfrc_rx_len(mfrc_rx_len),
@@ -105,6 +102,7 @@ module chip(
       .mfrc_tx_len(mfrc_tx_len),
       .mfrc_tx_data(mfrc_tx_data),
       .mfrc_tx_last_bits(mfrc_tx_last_bits),
+      .mfrc_tx_kind(mfrc_tx_kind),
 
       .mfrc_rx_valid(mfrc_rx_valid),
       .mfrc_rx_len(mfrc_rx_len),
@@ -139,4 +137,3 @@ module chip(
   
 
 endmodule
-

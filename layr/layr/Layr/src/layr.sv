@@ -10,6 +10,7 @@ module layr(
     output  wire [  4:0] mfrc_tx_len,
     output  wire [255:0] mfrc_tx_data,
     output  wire [  2:0] mfrc_tx_last_bits,
+    output  wire [  1:0] mfrc_tx_kind,
 
     // mfrc RX interface (from card)
     input wire         mfrc_rx_valid,
@@ -28,8 +29,8 @@ module layr(
     output logic eeprom_get_key
 );
 
-logic select_prog, auth_init, generate_challenge, auth, get_id, verify_id, authed;
-logic prog_selected, auth_initialized, challenge_generated, authenticated, id_retrieved, id_verified, id_valid;
+logic anti_coll, select_card, do_rats, select_prog, auth_init, generate_challenge, auth, get_id, verify_id, authed;
+logic anti_coll_done, card_selected, rats_done, prog_selected, auth_initialized, challenge_generated, authenticated, id_retrieved, id_verified, id_valid;
 
 logic [127:0] id_cipher;
 logic [127:0] card_cipher;
@@ -46,6 +47,9 @@ layr_controller controller(
     .idle_clear(idle_clear),
 
     .start(card_present_i),
+    .anti_coll_done(anti_coll_done),
+    .card_selected(card_selected),
+    .rats_done(rats_done),
     .select_prog(select_prog),
     .auth_initialized(auth_initialized),
     .challenge_generated(challenge_generated),
@@ -54,6 +58,9 @@ layr_controller controller(
     .id_verified(id_verified),
     .id_valid(id_valid),
 
+    .anti_coll(anti_coll),
+    .select_card(select_card),
+    .do_rats(do_rats),
     .prog_selected(prog_selected),
     .auth_init(auth_init),
     .generate_challenge(generate_challenge),
@@ -71,6 +78,9 @@ command_mux mux(
     .idle_clear(idle_clear),
 
     .select_prog(select_prog),
+    .anti_coll(anti_coll),
+    .select_card(select_card),
+    .do_rats(do_rats),
     .auth_init(auth_init),
     .auth(auth),
     .get_id(get_id),
@@ -82,12 +92,16 @@ command_mux mux(
     .mfrc_tx_len(mfrc_tx_len),
     .mfrc_tx_data(mfrc_tx_data),
     .mfrc_tx_last_bits(mfrc_tx_last_bits),
+    .mfrc_tx_kind(mfrc_tx_kind),
 
     .mfrc_rx_valid(mfrc_rx_valid),
     .mfrc_rx_len(mfrc_rx_len),
     .mfrc_rx_data(mfrc_rx_data),
     .mfrc_rx_last_bits(mfrc_rx_last_bits),
 
+    .anti_coll_done(anti_coll_done),
+    .card_selected(card_selected),
+    .rats_done(rats_done),
     .prog_selected(prog_selected),
     .auth_initialized(auth_initialized),
     .card_challenge(card_cipher),

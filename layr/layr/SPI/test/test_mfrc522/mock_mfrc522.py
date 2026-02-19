@@ -671,6 +671,33 @@ class Mfrc522SpiSlave(SpiSlaveBase):
                 cocotb.log.debug(f"MFRC522: SELECT UID mismatch")
                 return b"", 0
 
+        # RATS (ISO14443-4 activation)
+        if req_stripped == b"\xe0\x50":
+            # Typical ATS observed on hardware logs (includes CRC_A)
+            cocotb.log.debug("MFRC522: RATS received")
+            return bytes.fromhex("0A788091028073C82110C392"), 0
+
+        # Minimal ISO-DEP I-Block support for APDU exchange smoke tests.
+        if len(req_stripped) >= 2 and req_stripped[0] in (0x02, 0x03):
+            inf = req_stripped[1:]
+
+            # SELECT application
+            if inf == bytes.fromhex("00A4040006F000000CDC00"):
+                return bytes([req_stripped[0] ^ 0x01, 0x90, 0x00]), 0
+
+            # Generic ACK for AUTH commands in protocol-level tests
+            if len(inf) >= 2 and inf[0] == 0x80 and inf[1] in (0x10, 0x11):
+                # For AUTH_INIT return deterministic 16-byte payload after PCB
+                if inf[1] == 0x10:
+                    payload = bytes.fromhex("00112233445566778899AABBCCDDEEFF")
+                    return bytes([req_stripped[0] ^ 0x01]) + payload, 0
+                return bytes([req_stripped[0] ^ 0x01, 0x90, 0x00]), 0
+
+            # GET_ID mock payload
+            if len(inf) >= 2 and inf[0] == 0x80 and inf[1] == 0x12:
+                payload = bytes.fromhex("112233445566778899AABBCCDDEEFF00")
+                return bytes([req_stripped[0] ^ 0x01]) + payload, 0
+
         # Unknown command
         cocotb.log.debug(
             f"MFRC522: Unknown PICC command: {req.hex() if req else '(empty)'}, tx_last_bits={tx_last_bits}"

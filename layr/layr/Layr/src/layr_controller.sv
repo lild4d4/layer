@@ -9,6 +9,9 @@ module layr_controller(
 
     input logic start,
 
+    input logic anti_coll_done,
+    input logic card_selected,
+    input logic rats_done,
     input logic prog_selected,
     input logic auth_initialized,
     input logic challenge_generated,
@@ -17,6 +20,9 @@ module layr_controller(
     input logic id_verified,
     input logic id_valid,
 
+    output logic anti_coll,
+    output logic select_card,
+    output logic do_rats,
     output logic select_prog,
     output logic auth_init,
     output logic generate_challenge,
@@ -28,7 +34,20 @@ module layr_controller(
     output logic status_valid
 );
 
-enum {READY, SELECT_PROG, AUTH_INIT, GENERATE_CHALLENGE, AUTH, GET_ID, VERIFY_ID, REQUEST_VALIDATED, REQUEST_DENIED} state, next_state;
+enum {
+    READY,
+    ANTI_COLL,
+    SELECT_CARD,
+    DO_RATS,
+    SELECT_PROG,
+    AUTH_INIT,
+    GENERATE_CHALLENGE,
+    AUTH,
+    GET_ID,
+    VERIFY_ID,
+    REQUEST_VALIDATED,
+    REQUEST_DENIED
+} state, next_state;
 
 // Driving the state
 always_comb begin
@@ -37,6 +56,18 @@ always_comb begin
     case (state)
         READY: begin
             if(start)
+                next_state = ANTI_COLL;
+        end
+        ANTI_COLL: begin
+            if(anti_coll_done)
+                next_state = SELECT_CARD;
+        end
+        SELECT_CARD: begin
+            if(card_selected)
+                next_state = DO_RATS;
+        end
+        DO_RATS: begin
+            if(rats_done)
                 next_state = SELECT_PROG;
         end
         SELECT_PROG: begin
@@ -72,6 +103,9 @@ end
 
 // Advancing the state
 always_ff @(posedge clk) begin
+    anti_coll <= 0;
+    select_card <= 0;
+    do_rats <= 0;
     select_prog <= 0;
     auth_init <= 0;
     generate_challenge <= 0;
@@ -89,6 +123,12 @@ always_ff @(posedge clk) begin
         case (next_state)
             READY: begin
             end
+            ANTI_COLL:
+                anti_coll <= (state != ANTI_COLL);
+            SELECT_CARD:
+                select_card <= (state != SELECT_CARD);
+            DO_RATS:
+                do_rats <= (state != DO_RATS);
             SELECT_PROG:
                 select_prog <= (state != SELECT_PROG);
             AUTH_INIT:

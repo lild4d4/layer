@@ -116,20 +116,51 @@ async def run_validation(dut, *, key: bytes, card_id: bytes, expected_id: bytes,
     await RisingEdge(dut.clk)
     dut.card_present_i.value = 0
 
-    await await_tx_valid(dut, "Select Prog Command")
-    assert int(dut.mfrc_tx_len.value) == 10  # 11 bytes
-    select_frame = int(dut.mfrc_tx_data.value) >> (256 - 11 * 8)
-    assert select_frame == 0x00A4040006F000000CDC00, "Expected chip select command"
+    await await_tx_valid(dut, "ANTICOLL Command")
+    assert int(dut.mfrc_tx_len.value) == 1
+    anti_coll_frame = int(dut.mfrc_tx_data.value) >> (256 - 2 * 8)
+    assert anti_coll_frame == 0x9320
     assert dut.busy.value == 1, "Expected the layer controller to be busy"
 
-    await send_rx_response(dut, 0)  # response content unused for SELECT_PROG
+    uid = [0xDE, 0xAD, 0xBE, 0xEF]
+    bcc = uid[0] ^ uid[1] ^ uid[2] ^ uid[3]
+    await send_rx_bytes(dut, uid + [bcc])
+
+    await await_tx_valid(dut, "SELECT CARD Command")
+    assert int(dut.mfrc_tx_len.value) == 8  # 9 bytes
+    select_card_frame = int(dut.mfrc_tx_data.value) >> (256 - 9 * 8)
+    assert (select_card_frame >> 56) & 0xFFFF == 0x9370
+    assert (select_card_frame >> 16) & 0xFFFFFFFFFF == int.from_bytes(
+        bytes(uid + [bcc]), byteorder="big"
+    )
+
+    await send_rx_bytes(dut, [0x08, 0x00, 0x00])
+
+    await await_tx_valid(dut, "RATS Command")
+    assert int(dut.mfrc_tx_len.value) == 1  # 2 bytes
+    rats_frame = int(dut.mfrc_tx_data.value) >> (256 - 2 * 8)
+    assert rats_frame == 0xE050
+    assert int(dut.mfrc_tx_kind.value) == 1
+
+    await send_rx_bytes(dut, [0x05, 0x78, 0x80, 0x70, 0x00])
+
+    await await_tx_valid(dut, "Select Prog Command")
+    assert int(dut.mfrc_tx_len.value) == 11  # 12 bytes (I-Block + 11-byte APDU)
+    select_frame = int(dut.mfrc_tx_data.value) >> (256 - 12 * 8)
+    assert select_frame == 0x0200A4040006F000000CDC00, (
+        "Expected chip select command in I-Block"
+    )
+
+    await send_rx_bytes(dut, [0x02, 0x90, 0x00])
 
     assert int(dut.mfrc_tx_valid.value) == 0
     await await_tx_valid(dut, "Auth_Init Command")
-    assert int(dut.mfrc_tx_len.value) == 20  # 21 bytes
-    auth_init_frame = int(dut.mfrc_tx_data.value) >> 88
+    assert int(dut.mfrc_tx_len.value) == 21  # 22 bytes (I-Block + 21-byte APDU)
+    auth_init_frame = int(dut.mfrc_tx_data.value) >> 80
+    pcb = (auth_init_frame >> 168) & 0xFF
     cla = (auth_init_frame >> 160) & 0xFF
     ins = (auth_init_frame >> 152) & 0xFF
+    assert pcb == 0x03
     assert cla == 0x80
     assert ins == 0x10
 
@@ -138,7 +169,7 @@ async def run_validation(dut, *, key: bytes, card_id: bytes, expected_id: bytes,
     rc = bytes.fromhex("1111cafEaffe1111")
     plain = rc + (b"\x00" * 8)
     card_cipher = AES.new(key, AES.MODE_ECB).encrypt(plain)
-    await send_rx_response(dut, _u128_from_bytes(card_cipher))
+    await send_rx_bytes(dut, [0x02] + list(card_cipher))
 
     assert dut.chip_cypher.value == 0, "Expected the challenge not to be set yet"
     assert int(dut.mfrc_tx_valid.value) == 0
@@ -155,23 +186,27 @@ async def run_validation(dut, *, key: bytes, card_id: bytes, expected_id: bytes,
     )
 
     await await_tx_valid(dut, "Auth Command")
-    cmd = int(dut.mfrc_tx_data.value) >> 88
+    cmd = int(dut.mfrc_tx_data.value) >> 80
+    pcb = (cmd >> 168) & 0xFF
     cla = (cmd >> 160) & 0xFF
     ins = (cmd >> 152) & 0xFF
     payload = cmd & ((1 << 128) - 1)
 
+    assert pcb == 0x02
     assert cla == 0x80, f"Expected CLA=0x80, got {cla:#x}"
     assert ins == 0x11, f"Expected INS=0x11, got {ins:#x}"
     assert payload == int(dut.chip_cypher.value), "AUTH payload != chip_cypher"
 
-    await send_rx_response(dut, 0)
+    await send_rx_bytes(dut, [0x03, 0x90, 0x00])
 
     assert int(dut.mfrc_tx_valid.value) == 0
 
     await await_tx_valid(dut, "Get Id")
-    get_id_frame = int(dut.mfrc_tx_data.value) >> 88
+    get_id_frame = int(dut.mfrc_tx_data.value) >> 80
+    pcb = (get_id_frame >> 168) & 0xFF
     cla = (get_id_frame >> 160) & 0xFF
     ins = (get_id_frame >> 152) & 0xFF
+    assert pcb == 0x03
     assert cla == 0x80
     assert ins == 0x12
 
@@ -180,7 +215,7 @@ async def run_validation(dut, *, key: bytes, card_id: bytes, expected_id: bytes,
         16, byteorder="big", signed=False
     )
     id_cipher = AES.new(session_key, AES.MODE_ECB).encrypt(card_id)
-    await send_rx_response(dut, _u128_from_bytes(id_cipher))
+    await send_rx_bytes(dut, [0x02] + list(id_cipher))
 
     await await_status_valid(dut)
     result = dut.status.value
@@ -191,9 +226,12 @@ async def run_validation(dut, *, key: bytes, card_id: bytes, expected_id: bytes,
     return result
 
 
-async def send_rx_response(dut, value_u128: int):
-    dut.mfrc_rx_data.value = (int(value_u128) & ((1 << 128) - 1)) << 128
-    dut.mfrc_rx_len.value = 15  # 16 bytes
+async def send_rx_bytes(dut, values: list[int]):
+    value = 0
+    for b in values:
+        value = (value << 8) | (b & 0xFF)
+    dut.mfrc_rx_data.value = value << (256 - len(values) * 8)
+    dut.mfrc_rx_len.value = len(values) - 1
     dut.mfrc_rx_last_bits.value = 0
     dut.mfrc_rx_valid.value = 1
     # Hold long enough for the DUT to advance SEND -> WAIT_RX and sample rx_valid.
