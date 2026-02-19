@@ -50,8 +50,8 @@ module chip(
   wire        auth_eeprom_get_key;     // driven by auth
 
   // results
-  wire        unlocked;
-  wire        forbidden;
+  reg        unlocked;
+  reg        forbidden;
 
   spi_top u_spi (
       .clk(clk),

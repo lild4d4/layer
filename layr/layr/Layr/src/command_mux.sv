@@ -129,6 +129,8 @@ always_ff @(posedge clk or posedge rst) begin
                         mfrc_tx_len <= 5'd20;
                         mfrc_tx_data <= {cmd(8'h12, 128'd0), 88'd0};
                     end
+                default: begin
+                end
             endcase
         end
 
@@ -170,7 +172,7 @@ always_ff @(posedge clk or posedge rst) begin
         id_cipher <= 0;
     end else begin
         if (mfrc_rx_valid) begin
-            unique case (active_transmission)
+            case (active_transmission)
                 SELECT_PROG: begin
                     prog_selected <= 1;
                 end
@@ -184,6 +186,8 @@ always_ff @(posedge clk or posedge rst) begin
                 GET_ID: begin
                     id_retrieved <= 1;
                     id_cipher <= mfrc_rx_data[255:128];
+                end
+                default: begin
                 end
             endcase
         end
