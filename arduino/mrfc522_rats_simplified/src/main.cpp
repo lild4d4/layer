@@ -374,6 +374,15 @@ bool sendIBlock(byte *payload, byte payloadLen, byte *response,
   Serial.print(F("[I-Block PCB] 0x"));
   Serial.println(iBlockPCB, HEX);
 
+  Serial.print(F("[I-Block TX] "));
+  for (byte i = 0; i < payloadLen; i++) {
+    if (payload[i] < 0x10)
+      Serial.print("0");
+    Serial.print(payload[i], HEX);
+    Serial.print(" ");
+  }
+  Serial.println();
+
   byte frame[payloadLen + 1];
   frame[0] = iBlockPCB;
   memcpy(frame + 1, payload, payloadLen);
@@ -382,6 +391,17 @@ bool sendIBlock(byte *payload, byte payloadLen, byte *response,
                                nullptr, 0, false) == 1;
   delay(5);
   if (ok) {
+    if (response && responseLen) {
+      Serial.print(F("[I-Block RX from MFRC522] "));
+      for (byte i = 0; i < *responseLen; i++) {
+        if (response[i] < 0x10)
+          Serial.print("0");
+        Serial.print(response[i], HEX);
+        Serial.print(" ");
+      }
+      Serial.println();
+    }
+
     Serial.print(F("[I-Block] PCB toggled to 0x"));
     iBlockPCB ^= 0x01;
     Serial.println(iBlockPCB, HEX);
