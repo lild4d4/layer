@@ -117,7 +117,7 @@ module mfrc_reg_if (
               spi_r_len <= 6'd0;
 
               spi_tx_data[255:248] <= addr_byte_wr;
-              for (i = 0; i < 32; i = i + 1) begin
+              for (i = 0; i < 31; i = i + 1) begin
                 if (i[4:0] <= lat_len)
                   spi_tx_data[247 - i*8 -: 8] <= lat_wdata[255 - i*8 -: 8];
               end
