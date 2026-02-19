@@ -35,12 +35,15 @@ logic [127:0] id_cipher;
 logic [127:0] card_cipher;
 logic [127:0] chip_cypher, chip_cypher_new;
 
-logic rst_;
-assign rst_ = rst | (~busy & ~card_present_i);
+// Use a synchronous (clocked) idle clear to reset one-shot flags/state machines
+// while idle, without introducing a derived async reset.
+logic idle_clear;
+assign idle_clear = (~busy) & (~card_present_i);
 
 layr_controller controller(
     .clk(clk),
-    .rst(rst_),
+    .rst(rst),
+    .idle_clear(idle_clear),
 
     .start(card_present_i),
     .select_prog(select_prog),
@@ -64,7 +67,8 @@ layr_controller controller(
 
 command_mux mux(
     .clk(clk),
-    .rst(rst_),
+    .rst(rst),
+    .idle_clear(idle_clear),
 
     .select_prog(select_prog),
     .auth_init(auth_init),
@@ -96,7 +100,8 @@ command_mux mux(
 
 layr_auth auth_i(
     .clk(clk),
-    .rst(rst_),
+    .rst(rst),
+    .idle_clear(idle_clear),
 
     .generate_challenge(generate_challenge),
     .verify_id(verify_id),
@@ -118,14 +123,20 @@ layr_auth auth_i(
 );
 
 always_ff @(posedge clk) begin
-    if(rst) busy <= 0;
-    else begin
-        if (card_present_i) busy <= 1;
-        else if (status_valid) busy <= 0;
-    end;
+    if (rst) begin
+        busy <= 1'b0;
+        chip_cypher <= '0;
+    end else begin
+        // Synchronous clear while idle (keeps internal state clean between cards)
+        if (idle_clear) begin
+            chip_cypher <= '0;
+        end else if (challenge_generated) begin
+            chip_cypher <= chip_cypher_new;
+        end
 
-    if(rst_) chip_cypher <= 0;
-    else if (challenge_generated) chip_cypher <= chip_cypher_new;
+        if (card_present_i) busy <= 1'b1;
+        else if (status_valid) busy <= 1'b0;
+    end
 end
 
 

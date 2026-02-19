@@ -10,6 +10,7 @@
 module command_mux(
     input logic clk,
     input logic rst,
+    input logic idle_clear,
 
     input logic select_prog,
     input logic auth_init,
@@ -88,8 +89,8 @@ always_comb begin
 end
 
 // TX datapath
-always_ff @(posedge clk or posedge rst) begin
-    if (rst) begin
+always_ff @(posedge clk) begin
+    if (rst || idle_clear) begin
         mfrc_tx_valid <= 1'b0;
         mfrc_tx_len <= '0;
         mfrc_tx_data <= '0;
@@ -149,8 +150,8 @@ end
 
 
 // update the state maching
-always_ff @(posedge clk or posedge rst) begin
-    if (rst) begin
+always_ff @(posedge clk) begin
+    if (rst || idle_clear) begin
         state <= READY;
         active_transmission <= AUTH_INIT;
     end else begin
@@ -160,8 +161,8 @@ always_ff @(posedge clk or posedge rst) begin
 end
 
 // assign the response to the corresponding output
-always_ff @(posedge clk or posedge rst) begin
-    if (rst) begin
+always_ff @(posedge clk) begin
+    if (rst || idle_clear) begin
         auth_initialized <= 0;
         card_challenge <= 0;
         prog_selected <= 0;

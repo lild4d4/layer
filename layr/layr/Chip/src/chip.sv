@@ -49,6 +49,9 @@ module chip(
   wire        auth_eeprom_start;       // driven by auth
   wire        auth_eeprom_get_key;     // driven by auth
 
+  wire        mfrc_ready,mfrc_init_done;
+  wire [15:0] mfrc_atqa;
+
   // results
   reg        unlocked;
   reg        forbidden;
@@ -56,6 +59,12 @@ module chip(
   spi_top u_spi (
       .clk(clk),
       .rst(rst),
+
+      .mfrc_ready(mfrc_ready),
+      .mfrc_init_done(mfrc_init_done),
+      .mfrc_card_present(mfrc_card_present),
+      .mfrc_atqa(mfrc_atqa),
+
 
       // eeprom interface (tied off)
       .eeprom_start(eeprom_start),
@@ -65,7 +74,6 @@ module chip(
       .eeprom_rbuffer(eeprom_rbuffer),
 
       // mfrc interface (tied off)
-      .mfrc_card_present(mfrc_card_present),
       .mfrc_tx_valid(mfrc_tx_valid),
       .mfrc_tx_ready(mfrc_tx_ready),
       .mfrc_tx_len(mfrc_tx_len),

@@ -47,10 +47,11 @@ async def reset(dut):
 @cocotb.test()
 async def test_happy_path(dut):
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
-    await reset(dut)
     key = bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c")
     card_id = bytes.fromhex("d0d23f18251c6087566de7b7deab7774")
-    result = await run_validation(dut, key=key, card_id=card_id, expected_id=card_id)
+    result = await run_validation(
+        dut, key=key, card_id=card_id, expected_id=card_id, rst=True
+    )
     assert result == 1, "Expected the id to be valid"
 
 
@@ -62,7 +63,7 @@ async def test_happy_invalid(dut):
     card_id = bytes.fromhex("d0d23f18251c6087566de7b7deab7774")
     expected_id = card_id[:-1] + b"\xff"
     result = await run_validation(
-        dut, key=key, card_id=card_id, expected_id=expected_id
+        dut, key=key, card_id=card_id, expected_id=expected_id, rst=True
     )
     assert result == 0, "Expected the id to be invalid"
 
@@ -101,14 +102,17 @@ async def _eeprom_model(dut, *, key: bytes, expected_id: bytes):
             in_flight = False
 
 
-async def run_validation(dut, *, key: bytes, card_id: bytes, expected_id: bytes):
+async def run_validation(dut, *, key: bytes, card_id: bytes, expected_id: bytes, rst):
     # Start EEPROM model for this session
     eeprom_task = cocotb.start_soon(
         _eeprom_model(dut, key=key, expected_id=expected_id)
     )
 
+    if rst:
+        await reset(dut)
     assert int(dut.mfrc_tx_valid.value) == 0
     dut.card_present_i.value = 1
+
     await RisingEdge(dut.clk)
     dut.card_present_i.value = 0
 
@@ -268,10 +272,7 @@ async def test_multiple_happy_sessions(dut):
         expected_id = card_id if valid else (card_id[:-1] + b"\xff")
 
         result = await run_validation(
-            dut,
-            key=key,
-            card_id=card_id,
-            expected_id=expected_id,
+            dut, key=key, card_id=card_id, expected_id=expected_id, rst=i == 0
         )
         assert int(result) == valid, f"Expected validation={valid} for session {i}"
 

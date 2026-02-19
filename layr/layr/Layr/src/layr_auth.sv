@@ -4,6 +4,7 @@ This module handles the interface to the auth module.
 module layr_auth(
     input logic clk,
     input logic rst,
+    input logic idle_clear,
 
     input logic generate_challenge,
     input logic verify_id,
@@ -55,10 +56,15 @@ end
 
 // update the input data for the auth
 always_ff @(posedge clk) begin
-    if(rst)begin
+    if(rst || idle_clear)begin
         state <= READY;
         auth_data_in <= '0;
         operation <= '0;
+        start <= 0;
+        chip_challenge_generated <= 0;
+        chip_challenge <= 0;
+        id_verified <= 0;
+        id_valid <= 0;
     end else begin
         state <= next_state;
         start <= 0;
@@ -68,33 +74,20 @@ always_ff @(posedge clk) begin
                 operation <= '0;
                 start <= '1;
             end else if(verify_id) begin
-                auth_data_in = id_cipher;
+                auth_data_in <= id_cipher;
                 operation <= 1;
                 start <= '1;
             end
         end
-    end
-end
-
-// process output data from auth
-always_ff @(posedge clk) begin
-    if(rst) begin
-        chip_challenge_generated <= 0;
-        chip_challenge <= 0;
-        id_verified <= 0;
-        id_valid <= 0;
-        start <= 0;
-    end
-end
-
-always_ff @(posedge clk) begin
-    if(auth_valid) begin
-        if(operation==0) begin
-            chip_challenge <= auth_data_out;
-            chip_challenge_generated <= 1;
-        end else begin
-            id_valid <= auth_data_out[0];
-            id_verified <= 1;
+        // process output data from auth
+        if(auth_valid) begin
+            if(operation==0) begin
+                chip_challenge <= auth_data_out;
+                chip_challenge_generated <= 1;
+            end else begin
+                id_valid <= auth_data_out[0];
+                id_verified <= 1;
+            end
         end
     end
 end

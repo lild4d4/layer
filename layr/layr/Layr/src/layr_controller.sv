@@ -5,6 +5,7 @@ Including the handshakes with the nfc card and the local computations required f
 module layr_controller(
     input logic clk,
     input logic rst,
+    input logic idle_clear,
 
     input logic start,
 
@@ -80,7 +81,7 @@ always_ff @(posedge clk) begin
     status <= 0;
     status_valid <= 0;
 
-    if (rst) begin
+    if (rst || idle_clear) begin
         state <= READY;
     end else begin
         state <= next_state;
