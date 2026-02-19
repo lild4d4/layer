@@ -29,8 +29,8 @@ module layr(
     output logic eeprom_get_key
 );
 
-logic anti_coll, select_card, do_rats, select_prog, auth_init, generate_challenge, auth, get_id, verify_id, authed;
-logic anti_coll_done, card_selected, rats_done, prog_selected, auth_initialized, challenge_generated, authenticated, id_retrieved, id_verified, id_valid;
+(* MARK_DEBUG = "TRUE" *) logic anti_coll, select_card, do_rats, select_prog, auth_init, generate_challenge, auth, get_id, verify_id, authed;
+(* MARK_DEBUG = "TRUE" *) logic anti_coll_done, card_selected, rats_done, prog_selected, auth_initialized, challenge_generated, id_retrieved, id_verified, id_valid;
 
 logic [127:0] id_cipher;
 logic [127:0] card_cipher;

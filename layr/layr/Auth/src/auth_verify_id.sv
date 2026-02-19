@@ -31,7 +31,7 @@ module auth_verify_id (
     CHECK_ID
   } state_t;
 
-  state_t state, next_state;
+  (* MARK_DEBUG = "TRUE" *) state_t state, next_state;
 
   wire  aes_handler_valid;
 

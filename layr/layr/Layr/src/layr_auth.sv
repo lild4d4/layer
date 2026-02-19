@@ -37,7 +37,7 @@ module layr_auth (
     DONE
   } state_t;
 
-  state_t state, next_state;
+  (* MARK_DEBUG = "TRUE" *) state_t state, next_state;
 
   always_comb begin
     next_state = state;

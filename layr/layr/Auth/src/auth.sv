@@ -60,7 +60,7 @@ module auth (
     VERIFY_ID
   } state_t;
 
-  state_t state, next_state;
+  (* MARK_DEBUG = "TRUE" *) state_t state, next_state;
 
   wire encdec;
   wire verify_encdec;

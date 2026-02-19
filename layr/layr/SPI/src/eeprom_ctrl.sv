@@ -85,8 +85,8 @@ module eeprom_ctrl (
         end
 
         S_GET_KEY: begin
-          // hard coded to key A for now
-          eeprom_addr <= AddrKeyA;
+          // hard coded to key B for now
+          eeprom_addr <= AddrKeyB;
           eeprom_start <= 1'b1;
 
           state <= S_WAIT_EEPROM;
@@ -94,8 +94,8 @@ module eeprom_ctrl (
 
 
         S_GET_ID: begin
-          // hard coded to id A for now
-          eeprom_addr <= AddrIdA;
+          // hard coded to id B for now
+          eeprom_addr <= AddrIdB;
           eeprom_start <= 1'b1;
 
           state <= S_WAIT_EEPROM;

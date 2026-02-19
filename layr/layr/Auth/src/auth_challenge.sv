@@ -16,7 +16,7 @@ module auth_challenge (
     output reg [127:0] session_key_o
 );
 
-  typedef enum logic [5:0] {
+ typedef enum logic [5:0] {
     IDLE,
     DECRYPT,
     GET_RANDOM,
@@ -24,7 +24,7 @@ module auth_challenge (
     ENCRYPT_CHALLENGE
   } state_t;
 
-  state_t state, next_state;
+ (* MARK_DEBUG = "TRUE" *) state_t state, next_state;
 
   wire random_valid;
   wire random_ready;
