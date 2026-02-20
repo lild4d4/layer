@@ -1,0 +1,28 @@
+@startuml Auth_Challenge_FSM
+
+skinparam state {
+    BackgroundColor LightGreen
+    BorderColor DarkGreen
+    FontSize 12
+}
+
+title Challenge Generator (auth_challenge) - FSM
+
+[*] --> IDLE : rst
+
+state IDLE : wait ready
+state DECRYPT : encdec=0\nblock=input_cipher\nrun auth_aes_handler
+state GET_RANDOM : pulse random_load\nwait random_valid\nrt=random_value\nsession_key={rc,rt}
+state ENCRYPT_CHALLENGE : encdec=1\nblock={rt,rc}\nrun auth_aes_handler
+
+IDLE --> DECRYPT : ready
+DECRYPT --> GET_RANDOM : aes_handler_valid\nrc=aes_core_result[127:64]
+GET_RANDOM --> ENCRYPT_CHALLENGE : random_valid
+ENCRYPT_CHALLENGE --> IDLE : aes_handler_valid\nchallenge_o=aes_core_result\nvalid_o=1
+
+note right of DECRYPT
+  Uses auth_aes_handler for the
+  init/ready/next/result handshake.
+end note
+
+@enduml

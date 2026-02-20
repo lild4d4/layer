@@ -1,0 +1,37 @@
+@startuml SPI_Ctrl_FSM
+
+skinparam state {
+    BackgroundColor LightGreen
+    BorderColor DarkGreen
+    FontSize 12
+}
+
+title SPI Controller (spi_ctrl) – State Machine
+
+[*] --> S_IDLE : rst
+
+state S_IDLE : busy = 0\ncs0 = 1, cs1 = 1\nWait for go pulse
+state S_SS_ON : Assert selected CS\nLoad first TX byte or 0x00
+state S_START : Pulse spi_start\nWait for spi_busy_rec
+state S_WAIT : Wait for spi_done_rec\nCapture RX / advance counters
+state S_DONE : Deassert cs0, cs1\ndone = 1, busy = 0
+
+S_IDLE --> S_SS_ON : go_rec & (w_len≠0 | r_len≠0)\n[latch w_cnt, r_cnt, cs_sel]
+
+S_SS_ON --> S_START : [cs asserted, byte loaded]
+
+S_START --> S_WAIT : spi_busy_rec
+
+S_WAIT --> S_START : spi_done_rec &\nwrite phase: w_cnt > 1\n[next TX byte, byte_idx++]
+
+S_WAIT --> S_START : spi_done_rec &\nwrite phase: w_cnt == 1 & r_cnt ≠ 0\n[switch to read phase, byte_idx=0]
+
+S_WAIT --> S_DONE : spi_done_rec &\nwrite phase: w_cnt == 1 & r_cnt == 0
+
+S_WAIT --> S_START : spi_done_rec &\nread phase: r_cnt > 1\n[store rx byte, byte_idx++]
+
+S_WAIT --> S_DONE : spi_done_rec &\nread phase: r_cnt == 1\n[store last rx byte]
+
+S_DONE --> S_IDLE
+
+@enduml

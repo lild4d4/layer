@@ -1,0 +1,27 @@
+@startuml Auth_Random_FSM
+
+skinparam state {
+    BackgroundColor LightGreen
+    BorderColor DarkGreen
+    FontSize 12
+}
+
+title Random Generator (auth_random) - Counter/LFSR Sequencer
+
+[*] --> READY : rst
+
+state READY : ready=1\nvalid=0\nbusy=0\nwait load
+state MIXING : ready=0\nvalid=0\nbusy=1\nadvance LFSR each cycle\nincrement counter
+state DONE_PULSE : valid=1 (if busy)\nready=1\nbusy=0\ncounter reset
+
+READY --> MIXING : load\nstate<=seed ^ state\ncounter=0
+MIXING --> DONE_PULSE : counter == 16
+DONE_PULSE --> READY : next cycle
+
+note right of MIXING
+  Internal implementation is a single always_ff
+  process with busy/counter as phase control.
+  This diagram shows the equivalent FSM view.
+end note
+
+@enduml

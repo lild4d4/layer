@@ -1,0 +1,29 @@
+@startuml SPI_Top_FSM
+
+skinparam state {
+    BackgroundColor LightGreen
+    BorderColor DarkGreen
+    FontSize 12
+}
+
+title SPI Top (spi_top) - Integration-Level Execution View
+
+[*] --> RUN : rst deasserted
+
+state RUN : Structural top-level wrapper\nNo internal state register\nSubmodules run concurrently
+
+RUN --> RUN : route EEPROM request to eeprom_ctrl
+RUN --> RUN : route MFRC request to mfrc_top
+RUN --> RUN : shared bus arbitration in spi_arb
+
+note right of RUN
+  spi_top instantiates and wires:
+  - eeprom_ctrl (Client A)
+  - mfrc_top (Client B)
+  - spi_arb (shared SPI bus)
+
+  This module has no explicit FSM;
+  behavior is continuous composition.
+end note
+
+@enduml

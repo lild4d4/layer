@@ -1,0 +1,163 @@
+@startuml MFRC_Top_FSM
+
+skinparam state {
+    BackgroundColor LightGreen
+    BorderColor DarkGreen
+    FontSize 12
+}
+
+title MFRC Top Controller (mfrc_top) - Hierarchical FSM View
+
+[*] --> S_IDLE : rst
+S_IDLE --> S_INIT_RESET
+
+state "INIT phase" as INIT {
+  state S_INIT_RESET
+  state S_INIT_RESET_W
+  state S_INIT_RESET_RD
+  state S_INIT_RESET_CHK
+  state S_INIT_REG
+  state S_INIT_REG_W
+  state S_INIT_ANT_RD
+  state S_INIT_ANT_CHK
+  state S_INIT_ANT_WR
+  state S_INIT_ANT_W
+  state S_INIT_DONE
+
+  S_INIT_RESET --> S_INIT_RESET_W : issue soft reset write
+  S_INIT_RESET_W --> S_INIT_RESET_RD : reg_resp_valid
+  S_INIT_RESET_RD --> S_INIT_RESET_CHK : reset wait elapsed + issue read
+  S_INIT_RESET_CHK --> S_INIT_REG : reset bit cleared
+  S_INIT_RESET_CHK --> S_INIT_RESET_RD : still resetting
+  S_INIT_REG --> S_INIT_REG_W : write init table entry
+  S_INIT_REG_W --> S_INIT_REG : next init entry
+  S_INIT_REG --> S_INIT_ANT_RD : init table complete
+  S_INIT_ANT_RD --> S_INIT_ANT_CHK : read TxControl
+  S_INIT_ANT_CHK --> S_INIT_ANT_WR : antenna bits not set
+  S_INIT_ANT_CHK --> S_INIT_DONE : antenna already enabled
+  S_INIT_ANT_WR --> S_INIT_ANT_W : write TxControl|0x03
+  S_INIT_ANT_W --> S_INIT_DONE : reg_resp_valid
+}
+
+S_INIT_DONE --> S_POLL_SETUP
+
+state "POLL / EXT arbitration" as POLL {
+  state S_POLL_SETUP
+  state S_POLL_SETUP_W
+  state S_POLL_TRX_PREP
+  state S_POLL_WAIT
+  state S_POLL_DELAY
+  state S_EXT_ACCEPT
+  state S_EXT_DONE
+
+  S_POLL_SETUP --> S_POLL_SETUP_W : write poll setup register
+  S_POLL_SETUP_W --> S_POLL_SETUP : next setup entry
+  S_POLL_SETUP --> S_POLL_TRX_PREP : setup complete
+  S_POLL_SETUP --> S_EXT_ACCEPT : tx_valid & tx_ready
+  S_POLL_TRX_PREP --> S_TRX_IDLE_CMD : prepare REQA transaction
+  S_POLL_WAIT --> S_POLL_DELAY : consume trx_ok / ATQA
+  S_POLL_DELAY --> S_POLL_SETUP : delay elapsed
+  S_POLL_DELAY --> S_EXT_ACCEPT : tx_valid & tx_ready
+  S_EXT_ACCEPT --> S_PRE_RATS_TXMODE_WR : tx_kind==RATS
+  S_EXT_ACCEPT --> S_TRX_IDLE_CMD : normal tx
+  S_EXT_DONE --> S_POLL_DELAY
+}
+
+state "RATS pre/post" as RATS {
+  state S_PRE_RATS_TXMODE_WR
+  state S_PRE_RATS_TXMODE_WR_WAIT
+  state S_RATS_PREP
+  state S_RATS_PREP_WAIT
+  state S_POST_RATS_RXMODE_WR
+  state S_POST_RATS_RXMODE_WR_WAIT
+  state S_POST_RATS_WR
+  state S_POST_RATS_WR_WAIT
+  state S_POST_RATS_TMODE_WR
+  state S_POST_RATS_TMODE_WR_WAIT
+  state S_POST_RATS_TPRES_WR
+  state S_POST_RATS_TPRES_WR_WAIT
+
+  S_PRE_RATS_TXMODE_WR --> S_PRE_RATS_TXMODE_WR_WAIT : write TxMode=0x80
+  S_PRE_RATS_TXMODE_WR_WAIT --> S_RATS_PREP : reg_resp_valid
+  S_RATS_PREP --> S_RATS_PREP_WAIT : write RxMode=0x00
+  S_RATS_PREP_WAIT --> S_TRX_IDLE_CMD : reg_resp_valid
+
+  S_POST_RATS_RXMODE_WR --> S_POST_RATS_RXMODE_WR_WAIT
+  S_POST_RATS_RXMODE_WR_WAIT --> S_POST_RATS_WR
+  S_POST_RATS_WR --> S_POST_RATS_WR_WAIT
+  S_POST_RATS_WR_WAIT --> S_POST_RATS_TMODE_WR
+  S_POST_RATS_TMODE_WR --> S_POST_RATS_TMODE_WR_WAIT
+  S_POST_RATS_TMODE_WR_WAIT --> S_POST_RATS_TPRES_WR
+  S_POST_RATS_TPRES_WR --> S_POST_RATS_TPRES_WR_WAIT
+  S_POST_RATS_TPRES_WR_WAIT --> S_EXT_DONE
+}
+
+state "Transceive engine" as TRX {
+  state S_TRX_IDLE_CMD
+  state S_TRX_IDLE_W
+  state S_TRX_CLR_IRQ
+  state S_TRX_CLR_W
+  state S_TRX_FLUSH
+  state S_TRX_FLUSH_W
+  state S_TRX_FIFO_LOAD
+  state S_TRX_FIFO_W
+  state S_TRX_BITFRAME
+  state S_TRX_BITFRAME_W
+  state S_TRX_START_CMD
+  state S_TRX_START_W
+  state S_TRX_RD_BF
+  state S_TRX_RD_BF_W
+  state S_TRX_SET_START
+  state S_TRX_SET_START_W
+  state S_TRX_POLL_IRQ
+  state S_TRX_POLL_IRQ_W
+  state S_TRX_CHK_ERR
+  state S_TRX_CHK_ERR_W
+  state S_TRX_RD_FIFO_LEN
+  state S_TRX_RD_FIFO_LEN_W
+  state S_TRX_RD_FIFO
+  state S_TRX_RD_FIFO_W
+  state S_TRX_RD_CTRL
+  state S_TRX_RD_CTRL_W
+  state S_TRX_DONE
+
+  S_TRX_IDLE_CMD --> S_TRX_IDLE_W
+  S_TRX_IDLE_W --> S_TRX_CLR_IRQ
+  S_TRX_CLR_IRQ --> S_TRX_CLR_W
+  S_TRX_CLR_W --> S_TRX_FLUSH
+  S_TRX_FLUSH --> S_TRX_FLUSH_W
+  S_TRX_FLUSH_W --> S_TRX_FIFO_LOAD
+  S_TRX_FIFO_LOAD --> S_TRX_FIFO_W : load next TX byte
+  S_TRX_FIFO_W --> S_TRX_FIFO_LOAD
+  S_TRX_FIFO_LOAD --> S_TRX_BITFRAME : FIFO load complete
+  S_TRX_BITFRAME --> S_TRX_BITFRAME_W
+  S_TRX_BITFRAME_W --> S_TRX_START_CMD
+  S_TRX_START_CMD --> S_TRX_START_W
+  S_TRX_START_W --> S_TRX_RD_BF
+  S_TRX_RD_BF --> S_TRX_RD_BF_W
+  S_TRX_RD_BF_W --> S_TRX_SET_START
+  S_TRX_SET_START --> S_TRX_SET_START_W
+  S_TRX_SET_START_W --> S_TRX_POLL_IRQ
+  S_TRX_POLL_IRQ --> S_TRX_POLL_IRQ_W : issue IRQ read
+  S_TRX_POLL_IRQ --> S_TRX_DONE : software timeout
+  S_TRX_POLL_IRQ_W --> S_TRX_CHK_ERR : RX/IDLE IRQ set
+  S_TRX_POLL_IRQ_W --> S_TRX_DONE : TIMER IRQ
+  S_TRX_POLL_IRQ_W --> S_TRX_POLL_IRQ : keep polling
+  S_TRX_CHK_ERR --> S_TRX_CHK_ERR_W
+  S_TRX_CHK_ERR_W --> S_TRX_DONE : error bits set
+  S_TRX_CHK_ERR_W --> S_TRX_RD_FIFO_LEN : no error
+  S_TRX_RD_FIFO_LEN --> S_TRX_RD_FIFO_LEN_W
+  S_TRX_RD_FIFO_LEN_W --> S_TRX_DONE : fifo count zero
+  S_TRX_RD_FIFO_LEN_W --> S_TRX_RD_FIFO : fifo count > 0
+  S_TRX_RD_FIFO --> S_TRX_RD_FIFO_W : read next FIFO byte
+  S_TRX_RD_FIFO_W --> S_TRX_RD_FIFO
+  S_TRX_RD_FIFO --> S_TRX_RD_CTRL : fifo read complete
+  S_TRX_RD_CTRL --> S_TRX_RD_CTRL_W
+  S_TRX_RD_CTRL_W --> S_TRX_DONE : trx_ok=1
+}
+
+S_TRX_DONE --> S_POLL_WAIT : trx_is_poll
+S_TRX_DONE --> S_POST_RATS_RXMODE_WR : !trx_is_poll & trx_kind==RATS & trx_ok
+S_TRX_DONE --> S_EXT_DONE : other external command paths
+
+@enduml

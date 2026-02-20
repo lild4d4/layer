@@ -1,0 +1,28 @@
+@startuml EEPROM_SPI_FSM
+
+skinparam state {
+    BackgroundColor LightGreen
+    BorderColor DarkGreen
+    FontSize 12
+}
+
+title EEPROM SPI Bridge (eeprom_spi) - Read Transaction FSM
+
+[*] --> S_IDLE : rst
+
+state S_IDLE : eeprom_busy=0\nwait eeprom_start\nlatch eeprom_addr
+state S_READ_0 : if !spi_busy\nset spi_w_len=2, spi_r_len=16\nTX: OPREAD + addr\nspi_start=1 (pulse)
+state S_READ_1 : wait spi_done\ncopy spi_rx_data[255:128]\ninto eeprom_rdata
+
+S_IDLE --> S_READ_0 : eeprom_start
+S_READ_0 --> S_READ_1 : !spi_busy & spi_start pulsed
+S_READ_1 --> S_IDLE : spi_done\neeprom_done=1 (one cycle)
+
+note right of S_READ_0
+  EEPROM read sequence:
+  1) opcode 0x03
+  2) 1-byte address
+  3) 16-byte readback
+end note
+
+@enduml

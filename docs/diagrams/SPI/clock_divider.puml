@@ -1,0 +1,25 @@
+@startuml Clock_Divider_FSM
+
+skinparam state {
+    BackgroundColor LightGreen
+    BorderColor DarkGreen
+    FontSize 12
+}
+
+title Clock Divider (clock_divider) - Counter-Based Sequencer
+
+[*] --> RUN : rst deasserted
+
+state RUN : pos_count/neg_count free-run\nrollover at div_num-1\nclk_out = (pos_count > div_num>>1) | (neg_count > div_num>>1)
+
+RUN --> RUN : each posedge clk\nupdate pos_count
+RUN --> RUN : each negedge clk\nupdate neg_count
+RUN --> RUN : rst asserted\npos_count=0, neg_count=0
+
+note right of RUN
+  This module does not use an explicit FSM enum.
+  Behavior is equivalent to a single RUN state
+  with two phase counters (posedge/negedge).
+end note
+
+@enduml

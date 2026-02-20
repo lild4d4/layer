@@ -1,0 +1,46 @@
+@startuml SPI_Arb_FSM
+
+skinparam state {
+    BackgroundColor LightGreen
+    BorderColor DarkGreen
+    FontSize 12
+}
+
+title SPI Arbiter (spi_arb) – Round-Robin State Machine
+
+[*] --> IDLE : rst
+
+state IDLE : busy = 0\nMonitor a_req, b_req\n(live go | pending)
+
+state GRANT : ctrl_go = 1\nLatch winner's data\ngrant_hold = grant_pick\nrr_pref flips
+
+state BUSY_XFER : busy = 1\nRoute busy/done to granted client\nLatch incoming requests\nfrom other client as pending
+
+state COMPLETE : ctrl_done received\nbusy = 0\nRoute done + rx_data\nto granted client
+
+note right of IDLE
+  <b>Arbitration (combinational):</b>
+  grant_pick =
+    both request → rr_pref (round-robin)
+    only A       → 0 (A wins)
+    only B       → 1 (B wins)
+end note
+
+note right of BUSY_XFER
+  <b>Pending latch:</b>
+  If the losing client pulses go
+  during a transfer, the request
+  is stored as pending and will
+  be served next.
+end note
+
+IDLE --> GRANT : a_req | b_req
+
+GRANT --> BUSY_XFER : [latch held_wlen, held_rlen,\nheld_tx_data, held_cs_sel]
+
+BUSY_XFER --> COMPLETE : ctrl_done\n(from spi_ctrl)
+
+COMPLETE --> GRANT : a_req | b_req\n[pending request ready]
+COMPLETE --> IDLE : !a_req & !b_req
+
+@enduml

@@ -1,0 +1,26 @@
+@startuml EEPROM_Ctrl_FSM
+
+skinparam state {
+    BackgroundColor LightGreen
+    BorderColor DarkGreen
+    FontSize 12
+}
+
+title EEPROM Controller (eeprom_ctrl) - State Machine
+
+[*] --> S_IDLE : rst
+
+state S_IDLE : busy=0\ndone auto-cleared\nwait start
+state S_GET_KEY : eeprom_addr=AddrKeyB\neeprom_start=1 (pulse)
+state S_GET_ID : eeprom_addr=AddrIdB\neeprom_start=1 (pulse)
+state S_WAIT_EEPROM : wait eeprom_done\nbuffer<=eeprom_rdata
+
+S_IDLE --> S_GET_KEY : start & get_key
+S_IDLE --> S_GET_ID : start & !get_key
+
+S_GET_KEY --> S_WAIT_EEPROM
+S_GET_ID --> S_WAIT_EEPROM
+
+S_WAIT_EEPROM --> S_IDLE : eeprom_done\ndone=1 (one cycle)
+
+@enduml

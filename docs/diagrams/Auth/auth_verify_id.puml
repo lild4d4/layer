@@ -1,0 +1,25 @@
+@startuml Auth_Verify_ID_FSM
+
+skinparam state {
+    BackgroundColor LightGreen
+    BorderColor DarkGreen
+    FontSize 12
+}
+
+title ID Verifier (auth_verify_id) - FSM
+
+[*] --> IDLE : rst
+
+state IDLE : wait ready
+state DECRYPT : encdec=0\nblock=input_cipher\nrun auth_aes_handler
+state GET_ID : if !eeprom_busy\neeprom_start=1\neeprom_get_key=0
+state WAIT_FOR_ID : wait eeprom_done\nexpected_id=eeprom_buffer
+state CHECK_ID : valid=1\nid_valid=(id==expected_id)
+
+IDLE --> DECRYPT : ready
+DECRYPT --> GET_ID : aes_handler_valid\nid=aes_core_result
+GET_ID --> WAIT_FOR_ID : eeprom_start pulsed
+WAIT_FOR_ID --> CHECK_ID : eeprom_done
+CHECK_ID --> IDLE
+
+@enduml

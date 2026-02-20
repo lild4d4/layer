@@ -1,0 +1,35 @@
+@startuml Auth_Top_FSM
+
+skinparam state {
+    BackgroundColor LightGreen
+    BorderColor DarkGreen
+    FontSize 12
+}
+
+title Auth Top (auth) - Operation FSM
+
+[*] --> GET_KEY : rst
+
+state GET_KEY : if !eeprom_busy\neeprom_get_key=1\neeprom_start=1
+state WAIT_FOR_KEY : wait eeprom_done\ninput_key=eeprom_buffer
+state IDLE : wait start_i
+state GENERATE_CHALLENGE : start auth_challenge\nwhen done: session_key<=session_key_o\ndata_o<=challenge_o\nvalid_o=1
+state VERIFY_ID : start auth_verify_id\nwhen done: data_o[0]<=id_valid\nvalid_o=1
+
+GET_KEY --> WAIT_FOR_KEY : eeprom_start pulsed
+WAIT_FOR_KEY --> IDLE : eeprom_done
+
+IDLE --> GENERATE_CHALLENGE : start_i & operation_i==0
+IDLE --> VERIFY_ID : start_i & operation_i==1
+
+GENERATE_CHALLENGE --> IDLE : auth_challenge_valid
+VERIFY_ID --> IDLE : auth_verify_id_valid
+
+note right of IDLE
+  AES core and EEPROM are multiplexed
+  between child modules based on state:
+  - challenge path in GENERATE_CHALLENGE
+  - verify path in VERIFY_ID
+end note
+
+@enduml

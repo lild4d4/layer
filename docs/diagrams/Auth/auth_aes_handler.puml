@@ -1,0 +1,25 @@
+@startuml Auth_AES_Handler_FSM
+
+skinparam state {
+    BackgroundColor LightGreen
+    BorderColor DarkGreen
+    FontSize 12
+}
+
+title AES Handshake Helper (auth_aes_handler) - FSM
+
+[*] --> IDLE : rst
+
+state IDLE : wait ready
+state WRITE_INIT : aes_core_init=1 (pulse)
+state READ_READY : wait aes_core_ready
+state WRITE_BLOCK : aes_core_next=1 (pulse)
+state READ_VALID : wait result_valid\nvalid_o=1 then return
+
+IDLE --> WRITE_INIT : ready
+WRITE_INIT --> READ_READY
+READ_READY --> WRITE_BLOCK : aes_core_ready
+WRITE_BLOCK --> READ_VALID
+READ_VALID --> IDLE : result_valid
+
+@enduml

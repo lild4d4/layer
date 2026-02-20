@@ -1,0 +1,24 @@
+@startuml
+skinparam state {
+    BackgroundColor LightGreen
+    BorderColor DarkGreen
+    FontSize 12
+}
+
+[*] --> S_IDLE : reset
+
+state S_IDLE : sclk = 0\nbusy = 0
+state S_SETUP : sclk = 0\nmosi = shift_reg[7]
+state S_CAPTURE : sclk = 1\nshift data_out ← {data_out[6:0], miso}\nshift shift_reg ← {shift_reg[6:0], 0}
+state S_FINISH : sclk = 0\ndone = 1\nbusy = 0
+
+S_IDLE --> S_CAPTURE : clk_en & start\n[load shift_reg, bit_count=0]
+S_IDLE --> S_IDLE : !start | !clk_en
+
+S_SETUP --> S_CAPTURE : clk_en
+
+S_CAPTURE --> S_FINISH : clk_en & (bit_count == 7)
+S_CAPTURE --> S_SETUP : clk_en & (bit_count != 7)\n[bit_count++]
+
+S_FINISH --> S_IDLE : clk_en
+@enduml
