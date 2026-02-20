@@ -38,9 +38,7 @@ VERILOG_FILES:
   - ../SPI/src/eeprom_ctrl.sv
   - ../SPI/src/eeprom_spi.sv
   - ../SPI/src/mfrc_top.sv
-  - ../SPI/src/mfrc_core.sv
   - ../SPI/src/mfrc_reg_if.sv
-  - ../SPI/src/mfrc_reg_arb.sv
   - ../Layr/src/layr.sv
   - ../Layr/src/layr_controller.sv
   - ../Layr/src/command_mux.sv

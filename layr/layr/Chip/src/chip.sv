@@ -52,6 +52,10 @@ module chip(
   (* MARK_DEBUG = "TRUE" *) reg        unlocked;
   (* MARK_DEBUG = "TRUE" *) reg        forbidden;
 
+  localparam DISPLAY_CYCLES = 500_000_000; // 5 s @ 100 MHz
+  reg [29:0] display_cnt;
+  reg        layr_rst;
+
   spi_top u_spi (
       .clk(clk),
       .rst(rst),
