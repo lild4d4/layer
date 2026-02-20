@@ -86,8 +86,8 @@ async def setup(dut) -> AT25010B_EEPROM:
     cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     eeprom = AT25010B_EEPROM(build_spi_bus(dut))
 
-    eeprom.load_memory(KEY_A, offset=0x00)
-    eeprom.load_memory(ID_A, offset=0x40)
+    eeprom.load_memory(KEY_A, offset=0x10)
+    eeprom.load_memory(ID_A, offset=0x50)
 
     await reset_dut(dut)
     return eeprom

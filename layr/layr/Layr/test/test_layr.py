@@ -147,7 +147,7 @@ async def run_validation(dut, *, key: bytes, card_id: bytes, expected_id: bytes,
     await await_tx_valid(dut, "Select Prog Command")
     assert int(dut.mfrc_tx_len.value) == 11  # 12 bytes (I-Block + 11-byte APDU)
     select_frame = int(dut.mfrc_tx_data.value) >> (256 - 12 * 8)
-    assert select_frame == 0x0200A4040006F000000CDC00, (
+    assert select_frame == 0x0200A4040006F000000CDC01, (
         "Expected chip select command in I-Block"
     )
 

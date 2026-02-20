@@ -152,6 +152,9 @@ always_ff @(posedge clk) begin
     if (rst) begin
         busy <= 1'b0;
         chip_cypher <= '0;
+    end else if (soft_rst) begin
+        busy <= 1'b0;
+        chip_cypher <= '0;
     end else begin
         // Synchronous clear while idle (keeps internal state clean between cards)
         if (idle_clear) begin
