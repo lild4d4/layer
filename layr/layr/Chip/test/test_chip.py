@@ -90,8 +90,8 @@ async def _setup_env(dut, *, eeprom_id: bytes, card_id: bytes):
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
 
     eeprom = AT25010B_EEPROM(_build_bus(dut, 1))
-    eeprom.load_memory(KEY_A, offset=0x00)
-    eeprom.load_memory(eeprom_id, offset=0x40)
+    eeprom.load_memory(KEY_A, offset=0x10)
+    eeprom.load_memory(eeprom_id, offset=0x50)
 
     def get_session_key_bytes() -> bytes:
         key_u128 = int(dut.layr.auth_i.auth_i.session_key.value)
