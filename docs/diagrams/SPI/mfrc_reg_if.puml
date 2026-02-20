@@ -1,14 +1,13 @@
-@startuml MFRC_Reg_IF_FSM
+@startuml
 
 skinparam state {
     BackgroundColor LightGreen
     BorderColor DarkGreen
     FontSize 12
 }
-
 title MFRC Register Interface (mfrc_reg_if) - SPI Request FSM
 
-[*] --> S_IDLE : rst
+[*] -down-> S_IDLE : rst
 
 state S_IDLE : req_ready=1\nwait req_valid
 state S_SUBMIT : wait !spi_busy\ncompose SPI transfer\n(write burst or single read)
@@ -16,26 +15,20 @@ state S_WAIT : wait spi_done\ncollect response byte(s)
 state S_RD_NEXT : issue next 1-byte read\nfor burst read
 state S_DONE : resp_valid=1\nresp_ok=1\nreq_ready=1
 
-S_IDLE --> S_SUBMIT : req_valid & req_ready\n[latch req_* fields]
-
-S_SUBMIT --> S_WAIT : !spi_busy\nspi_go=1
-
-S_WAIT --> S_DONE : spi_done & lat_write
-S_WAIT --> S_DONE : spi_done & !lat_write & (byte_idx == lat_len)
-S_WAIT --> S_RD_NEXT : spi_done & !lat_write & (byte_idx < lat_len)
-
-S_RD_NEXT --> S_WAIT : !spi_busy\nspi_go=1
-
-S_DONE --> S_IDLE
+S_IDLE -down-> S_SUBMIT : req_valid & req_ready\n[latch req_* fields]
+S_SUBMIT -down-> S_WAIT : !spi_busy\nspi_go=1
+S_WAIT -down-> S_DONE : spi_done & lat_write
+S_WAIT -down-> S_DONE : spi_done & !lat_write & (byte_idx == lat_len)
+S_WAIT -right-> S_RD_NEXT : spi_done & !lat_write & (byte_idx < lat_len)
+S_RD_NEXT -left-> S_WAIT : !spi_busy\nspi_go=1
+S_DONE -up-> S_IDLE
 
 note right of S_SUBMIT
   WRITE path:
   w_len = 1 + byte_count
   r_len = 0
-
   READ path:
   repeated single-byte reads
   w_len = 1, r_len = 1
 end note
-
 @enduml
