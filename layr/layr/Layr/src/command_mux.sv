@@ -180,7 +180,7 @@ module command_mux (
               8'h00,
               8'h0C,
               8'hDC,
-              8'h00,
+              8'h01,
               160'd0
             };
           end

@@ -20,7 +20,6 @@ module auth_challenge (
     IDLE,
     DECRYPT,
     GET_RANDOM,
-    ENCRYPT_SESSION_KEY,
     ENCRYPT_CHALLENGE
   } state_t;
 
@@ -123,18 +122,8 @@ module auth_challenge (
           random_load = 1'b1;
         end else if (random_valid) begin
           next_rt = random_value;
-          next_state = ENCRYPT_SESSION_KEY;
-        end
-      end
-
-      ENCRYPT_SESSION_KEY: begin
-        encdec = 1'b1;
-        next_block = {rc, rt};
-
-        if (!aes_handler_valid) begin
-          aes_handler_ready = 1'b1;
-        end else if (aes_handler_valid) begin
-          next_session_key = aes_core_result;
+          // k_eph = rc || rt (raw concatenation, matching Java Card)
+          next_session_key = {rc, random_value};
           next_state = ENCRYPT_CHALLENGE;
         end
       end

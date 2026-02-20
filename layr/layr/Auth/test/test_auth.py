@@ -42,8 +42,8 @@ async def reset_dut(tester, cycles=2):
 
 @cocotb.test()
 async def auth_challenge__decrypt_input_cipher(dut):
-    key = b'\x2b\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c'
-    plain = b'\x6b\xc1\xbe\xe2\x2e\x40\x9f\x96\xe9\x3d\x7e\x11\x73\x93\x17\x2a'
+    key = b"\x2b\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c"
+    plain = b"\x6b\xc1\xbe\xe2\x2e\x40\x9f\x96\xe9\x3d\x7e\x11\x73\x93\x17\x2a"
     cipher = AES.new(key, AES.MODE_ECB)
     ciphertext = cipher.encrypt(plain)
 
@@ -55,8 +55,7 @@ async def auth_challenge__decrypt_input_cipher(dut):
     dut.start_i.value = 1
     dut.eeprom_busy.value = 0
     dut.eeprom_done.value = 1
-    dut.eeprom_buffer.value = int.from_bytes(key);
-
+    dut.eeprom_buffer.value = int.from_bytes(key)
     while True:
         await RisingEdge(dut.clk)
 
@@ -71,8 +70,8 @@ async def auth_challenge__decrypt_input_cipher(dut):
 
 @cocotb.test()
 async def auth_challenge__full_flow(dut):
-    key = b'\x2b\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c'
-    plain = b'\x11\x11\xca\xfe\xaf\xfe\x11\x11\x00\x00\x00\x00\x00\x00\x00\x00'
+    key = b"\x2b\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c"
+    plain = b"\x11\x11\xca\xfe\xaf\xfe\x11\x11\x00\x00\x00\x00\x00\x00\x00\x00"
     rc = plain[:8]
     cipher = AES.new(key, AES.MODE_ECB)
     ciphertext = cipher.encrypt(plain)
@@ -85,8 +84,7 @@ async def auth_challenge__full_flow(dut):
     dut.start_i.value = 1
     dut.eeprom_busy.value = 0
     dut.eeprom_done.value = 1
-    dut.eeprom_buffer.value = int.from_bytes(key);
-
+    dut.eeprom_buffer.value = int.from_bytes(key)
     while True:
         await RisingEdge(dut.clk)
 
@@ -100,18 +98,22 @@ async def auth_challenge__full_flow(dut):
             break
 
     challenge_raw = rt + rc
-    session_key_raw = rc + rt
     challenge = cipher.encrypt(challenge_raw)
-    session_key = cipher.encrypt(session_key_raw)
+    # k_eph = rc || rt (raw concatenation, no AES — matches Java Card)
+    session_key_raw = rc + rt
 
-    assert dut.data_o.value == int.from_bytes(challenge), f"challenge value mismatch: {hex(dut.data_o.value)} != {hex(int.from_bytes(challenge))}"
-    assert dut.u_auth_challenge.session_key.value == int.from_bytes(session_key), f"session key mismatch: {dut.u_auth_challenge.session_key.value} != {hex(int.from_bytes(session_key))}"
+    assert dut.data_o.value == int.from_bytes(challenge), (
+        f"challenge value mismatch: {hex(dut.data_o.value)} != {hex(int.from_bytes(challenge))}"
+    )
+    assert dut.u_auth_challenge.session_key.value == int.from_bytes(session_key_raw), (
+        f"session key mismatch: {hex(int(dut.u_auth_challenge.session_key.value))} != {hex(int.from_bytes(session_key_raw))}"
+    )
 
 
 @cocotb.test()
 async def auth_verify_id__valid_id(dut):
-    session_key = b'\xff\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c'
-    card_b_id = b'\xd0\xd2\x3f\x18\x25\x1c\x60\x87\x56\x6d\xe7\xb7\xde\xab\x77\x74'
+    session_key = b"\xff\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c"
+    card_b_id = b"\xd0\xd2\x3f\x18\x25\x1c\x60\x87\x56\x6d\xe7\xb7\xde\xab\x77\x74"
     cipher = AES.new(session_key, AES.MODE_ECB)
     ciphertext = cipher.encrypt(card_b_id)
 
@@ -126,7 +128,6 @@ async def auth_verify_id__valid_id(dut):
     dut.eeprom_done.value = 0
     dut.u_auth_verify_id.eeprom_start.value = 0
 
-    id_validated = 0
     id_validated_output = 0
     while True:
         await RisingEdge(dut.clk)
@@ -140,7 +141,8 @@ async def auth_verify_id__valid_id(dut):
 
         if dut.u_auth_verify_id.state.value == 2:
             # Wait two cycles while eeprom is still "busy"
-            for _ in range(2): await RisingEdge(dut.clk)
+            for _ in range(2):
+                await RisingEdge(dut.clk)
             dut.eeprom_busy.value = 0
 
             await RisingEdge(dut.clk)
@@ -150,7 +152,8 @@ async def auth_verify_id__valid_id(dut):
             dut.eeprom_busy.value = 1
 
             # Wait another few cycles, then provide a result
-            for _ in range(3): await RisingEdge(dut.clk)
+            for _ in range(3):
+                await RisingEdge(dut.clk)
             dut.eeprom_buffer.value = int.from_bytes(card_b_id)
             dut.eeprom_busy.value = 0
             dut.eeprom_done.value = 1
@@ -167,8 +170,8 @@ async def auth_verify_id__valid_id(dut):
 
 @cocotb.test()
 async def auth_verify_id__invalid_id(dut):
-    session_key = b'\xff\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c'
-    card_b_id = b'\xd0\xd2\x3f\x18\x25\x1c\x60\x87\x56\x6d\xe7\xb7\xde\xab\x77\x74'
+    session_key = b"\xff\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c"
+    card_b_id = b"\xd0\xd2\x3f\x18\x25\x1c\x60\x87\x56\x6d\xe7\xb7\xde\xab\x77\x74"
     cipher = AES.new(session_key, AES.MODE_ECB)
     ciphertext = cipher.encrypt(card_b_id)
 
@@ -197,7 +200,8 @@ async def auth_verify_id__invalid_id(dut):
 
         if dut.u_auth_verify_id.state.value == 2:
             # Wait two cycles while eeprom is still "busy"
-            for _ in range(2): await RisingEdge(dut.clk)
+            for _ in range(2):
+                await RisingEdge(dut.clk)
             dut.eeprom_busy.value = 0
 
             await RisingEdge(dut.clk)
@@ -207,8 +211,9 @@ async def auth_verify_id__invalid_id(dut):
             dut.eeprom_busy.value = 1
 
             # Wait another few cycles, then provide a result
-            for _ in range(3): await RisingEdge(dut.clk)
-            dut.eeprom_buffer.value = int.from_bytes(card_b_id[:15] + b'\xff')
+            for _ in range(3):
+                await RisingEdge(dut.clk)
+            dut.eeprom_buffer.value = int.from_bytes(card_b_id[:15] + b"\xff")
             dut.eeprom_busy.value = 0
             dut.eeprom_done.value = 1
             await RisingEdge(dut.clk)
@@ -253,9 +258,7 @@ def test_auth():
         timescale=("1ns", "1ps"),
     )
 
-    auth_init_runner.test(
-        hdl_toplevel="auth", test_module="test_auth", waves=True
-    )
+    auth_init_runner.test(hdl_toplevel="auth", test_module="test_auth", waves=True)
 
 
 if __name__ == "__main__":
