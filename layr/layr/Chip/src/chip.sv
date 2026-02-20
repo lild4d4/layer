@@ -52,9 +52,12 @@ module chip(
   (* MARK_DEBUG = "TRUE" *) reg        unlocked;
   (* MARK_DEBUG = "TRUE" *) reg        forbidden;
 
-  localparam DISPLAY_CYCLES = 500_000_000; // 5 s @ 100 MHz
-  reg [29:0] display_cnt;
+  localparam BUSY_TIMEOUT_CYCLES   = 50_000_000; // 0.5 s @ 100 MHz  (no result)
+  localparam DISPLAY_CYCLES        = 500_000_000; // 5 s @ 100 MHz  (success/fault)
+  reg [28:0] timer_cnt;
   reg        layr_rst;
+  reg        timer_running;
+  reg        got_result;      // 1 = success/fault latched, use 5 s; 0 = busy-only, use 1 s
 
   spi_top u_spi (
       .clk(clk),
@@ -124,13 +127,6 @@ module chip(
       .status(layr_status),
       .status_valid(layr_status_valid)
   );
-
-  localparam BUSY_TIMEOUT_CYCLES   = 50_000_000; // 0.5 s @ 100 MHz  (no result)
-  localparam DISPLAY_CYCLES        = 500_000_000; // 5 s @ 100 MHz  (success/fault)
-  reg [28:0] timer_cnt;
-  reg        layr_rst;
-  reg        timer_running;
-  reg        got_result;      // 1 = success/fault latched, use 5 s; 0 = busy-only, use 1 s
 
   assign status_unlock = unlocked;
   assign status_fault  = forbidden;
