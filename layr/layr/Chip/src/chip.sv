@@ -121,7 +121,7 @@ module chip(
       .status_valid(layr_status_valid)
   );
 
-  localparam BUSY_TIMEOUT_CYCLES   = 100_000_000; // 1 s @ 100 MHz  (no result)
+  localparam BUSY_TIMEOUT_CYCLES   = 50_000_000; // 0.5 s @ 100 MHz  (no result)
   localparam DISPLAY_CYCLES        = 500_000_000; // 5 s @ 100 MHz  (success/fault)
   reg [28:0] timer_cnt;
   reg        layr_rst;
