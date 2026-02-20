@@ -1,0 +1,32 @@
+@startuml
+skinparam state {
+    BackgroundColor LightGreen
+    BorderColor DarkGreen
+    FontSize 12
+}
+
+title MFRC Top Controller (mfrc_top) - Top-Level FSM
+
+[*] -down-> S_IDLE : rst
+
+state S_IDLE
+
+state "INIT" as INIT : soft reset → init table → antenna enable
+state "POLL / EXT" as POLL : poll setup → REQA → delay\naccepts external tx commands
+state "RATS Config" as RATS : pre: set TxMode/RxMode\npost: restore modes + timer
+state "Transceive Engine" as TRX : setup → FIFO load → start\n→ poll IRQ → read response
+
+S_IDLE -down-> INIT
+INIT -down-> POLL : init complete
+
+POLL -down-> TRX : REQA or\nnormal ext tx
+POLL -down-> RATS : tx_kind == RATS
+
+RATS -right-> TRX : pre-config done
+
+TRX -up-> POLL : trx_is_poll\n(REQA result)
+TRX -left-> RATS : RATS & trx_ok\n(post-config)
+TRX -up-> POLL : ext cmd done
+
+RATS -up-> POLL : post-config done
+@enduml
