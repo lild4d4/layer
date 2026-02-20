@@ -21,6 +21,7 @@ module layr(
     output logic status,                // 1 if the request has been successfully authorized.
     output logic status_valid,          // 1 if the status is valid.
     output logic busy,
+    input  logic soft_rst,              // synchronous reset: clears busy/state without disturbing async rst tree
 
     input logic eeprom_busy,
     input logic eeprom_done,
@@ -45,7 +46,7 @@ logic [127:0] chip_cypher, chip_cypher_new;
 // Use a synchronous (clocked) idle clear to reset one-shot flags/state machines
 // while idle, without introducing a derived async reset.
 logic idle_clear;
-assign idle_clear = (~busy) & (~card_present_i);
+assign idle_clear = (~busy & ~card_present_i) | soft_rst;
 
 layr_controller controller(
     .clk(clk),
