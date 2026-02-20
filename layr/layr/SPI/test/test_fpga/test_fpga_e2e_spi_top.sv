@@ -31,6 +31,7 @@ module test_2e2_fpga_top (
   logic [  4:0] mfrc_tx_len;
   logic [255:0] mfrc_tx_data;
   logic [  2:0] mfrc_tx_last_bits;
+  logic [  1:0] mfrc_tx_kind;
 
   // mfrc RX interface
   wire         mfrc_rx_valid;
@@ -59,6 +60,7 @@ module test_2e2_fpga_top (
     .mfrc_tx_len(mfrc_tx_len),
     .mfrc_tx_data(mfrc_tx_data),
     .mfrc_tx_last_bits(mfrc_tx_last_bits),
+    .mfrc_tx_kind(mfrc_tx_kind),
     .mfrc_rx_valid(mfrc_rx_valid),
     .mfrc_rx_len(mfrc_rx_len),
     .mfrc_rx_data(mfrc_rx_data),
@@ -101,6 +103,7 @@ module test_2e2_fpga_top (
       mfrc_tx_len <= 0;
       mfrc_tx_data <= 0;
       mfrc_tx_last_bits <= 0;
+      mfrc_tx_kind <= 0;
 
     end else begin
       eeprom_start <= 1'b0;          // default: pulse only one cycle

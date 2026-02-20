@@ -21,6 +21,7 @@ module spi_top (
     input  wire [  4:0] mfrc_tx_len,
     input  wire [255:0] mfrc_tx_data,
     input  wire [  2:0] mfrc_tx_last_bits,
+    input  wire [  1:0] mfrc_tx_kind,
 
     // mfrc RX interface (from card)
     output wire         mfrc_rx_valid,
@@ -88,6 +89,7 @@ module spi_top (
       .tx_len(mfrc_tx_len),
       .tx_data(mfrc_tx_data),
       .tx_last_bits(mfrc_tx_last_bits),
+      .tx_kind(mfrc_tx_kind),
 
       // RX interface
       .rx_valid(mfrc_rx_valid),

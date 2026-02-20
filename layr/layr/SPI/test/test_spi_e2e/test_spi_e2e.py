@@ -9,6 +9,7 @@ from mfrc522_helpers import (
     mfrc_reqa,
     mfrc_anticoll,
     mfrc_select,
+    mfrc_rats,
     mfrc_wupa,
     mfrc_wait_for_init,
     mfrc_wait_for_card,
@@ -192,9 +193,9 @@ async def test_mfrc_delayed_card_detection(dut):
     assert card_detected, "Card was not detected after becoming present"
 
     assert dut.mfrc_card_present.value == 1, "card_present should be 1"
-    assert (
-        int(dut.mfrc_atqa.value) == 0x0400
-    ), f"Expected ATQA=0x0400, got {int(dut.mfrc_atqa.value):#06x}"
+    assert int(dut.mfrc_atqa.value) == 0x0400, (
+        f"Expected ATQA=0x0400, got {int(dut.mfrc_atqa.value):#06x}"
+    )
 
     dut._log.info(
         f"card_present={dut.mfrc_card_present.value}, atqa={int(dut.mfrc_atqa.value):#06x}"
@@ -202,6 +203,23 @@ async def test_mfrc_delayed_card_detection(dut):
     dut._log.info("test_mfrc_delayed_card_detection PASSED ✓")
 
     dump_hex(mfrc, "1____test_mfrc_delayed_card_detection")
+
+
+@cocotb.test()
+async def test_mfrc_rats_transceive(dut):
+    """Verify dedicated RATS path returns ATS bytes."""
+    _, _ = await setup(dut)
+
+    init_ok = await mfrc_wait_for_init(dut, timeout_us=200000)
+    assert init_ok, "MFRC auto-init did not complete in time"
+
+    card_ok = await mfrc_wait_for_card(dut, timeout_us=300000)
+    assert card_ok, "Card was not detected in time"
+
+    ats = await mfrc_rats(dut)
+    assert ats is not None, "No ATS response received"
+    assert len(ats) >= 3, f"ATS too short: {len(ats)}"
+    assert ats[0] > 0, "Invalid ATS length byte"
 
 
 # =============================================================================

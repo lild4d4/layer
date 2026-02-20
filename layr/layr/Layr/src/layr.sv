@@ -10,6 +10,7 @@ module layr(
     output  wire [  4:0] mfrc_tx_len,
     output  wire [255:0] mfrc_tx_data,
     output  wire [  2:0] mfrc_tx_last_bits,
+    output  wire [  1:0] mfrc_tx_kind,
 
     // mfrc RX interface (from card)
     input wire         mfrc_rx_valid,
@@ -20,6 +21,7 @@ module layr(
     output logic status,                // 1 if the request has been successfully authorized.
     output logic status_valid,          // 1 if the status is valid.
     output logic busy,
+    input  logic soft_rst,              // synchronous reset: clears busy/state without disturbing async rst tree
 
     input logic eeprom_busy,
     input logic eeprom_done,
@@ -28,17 +30,23 @@ module layr(
     output logic eeprom_get_key
 );
 
-logic select_prog, auth_init, generate_challenge, auth, get_id, verify_id, authed;
-logic prog_selected, auth_initialized, challenge_generated, authenticated, id_retrieved, id_verified, id_valid;
+(* MARK_DEBUG = "TRUE" *) logic anti_coll, select_card, do_rats, select_prog, auth_init, generate_challenge, auth, get_id, verify_id, authed;
+(* MARK_DEBUG = "TRUE" *) logic anti_coll_done, card_selected, rats_done, prog_selected, auth_initialized, challenge_generated, id_retrieved;
 
-logic [127:0] id_cipher;
+(* MARK_DEBUG = "TRUE" *) logic id_verified, id_valid;
+
+(* MARK_DEBUG = "TRUE" *) logic [127:0] id_cipher;
 logic [127:0] card_cipher;
 logic [127:0] chip_cypher, chip_cypher_new;
+
+// DEBUG: last 2 bytes of id_cipher visible in ILA
+(* MARK_DEBUG = "TRUE" *) wire [15:0] dbg_id_tail = id_cipher[15:0];
+(* MARK_DEBUG = "TRUE" *) wire [15:0] dbg_eeprom_tail = eeprom_buffer[15:0];
 
 // Use a synchronous (clocked) idle clear to reset one-shot flags/state machines
 // while idle, without introducing a derived async reset.
 logic idle_clear;
-assign idle_clear = (~busy) & (~card_present_i);
+assign idle_clear = (~busy & ~card_present_i) | soft_rst;
 
 layr_controller controller(
     .clk(clk),
@@ -46,6 +54,9 @@ layr_controller controller(
     .idle_clear(idle_clear),
 
     .start(card_present_i),
+    .anti_coll_done(anti_coll_done),
+    .card_selected(card_selected),
+    .rats_done(rats_done),
     .select_prog(select_prog),
     .auth_initialized(auth_initialized),
     .challenge_generated(challenge_generated),
@@ -54,6 +65,9 @@ layr_controller controller(
     .id_verified(id_verified),
     .id_valid(id_valid),
 
+    .anti_coll(anti_coll),
+    .select_card(select_card),
+    .do_rats(do_rats),
     .prog_selected(prog_selected),
     .auth_init(auth_init),
     .generate_challenge(generate_challenge),
@@ -71,6 +85,9 @@ command_mux mux(
     .idle_clear(idle_clear),
 
     .select_prog(select_prog),
+    .anti_coll(anti_coll),
+    .select_card(select_card),
+    .do_rats(do_rats),
     .auth_init(auth_init),
     .auth(auth),
     .get_id(get_id),
@@ -82,12 +99,16 @@ command_mux mux(
     .mfrc_tx_len(mfrc_tx_len),
     .mfrc_tx_data(mfrc_tx_data),
     .mfrc_tx_last_bits(mfrc_tx_last_bits),
+    .mfrc_tx_kind(mfrc_tx_kind),
 
     .mfrc_rx_valid(mfrc_rx_valid),
     .mfrc_rx_len(mfrc_rx_len),
     .mfrc_rx_data(mfrc_rx_data),
     .mfrc_rx_last_bits(mfrc_rx_last_bits),
 
+    .anti_coll_done(anti_coll_done),
+    .card_selected(card_selected),
+    .rats_done(rats_done),
     .prog_selected(prog_selected),
     .auth_initialized(auth_initialized),
     .card_challenge(card_cipher),
@@ -97,6 +118,8 @@ command_mux mux(
     .id_retrieved(id_retrieved),
     .id_cipher(id_cipher)
 );
+
+logic auth_eeprom_start, auth_eeprom_get_key;
 
 layr_auth auth_i(
     .clk(clk),
@@ -118,9 +141,12 @@ layr_auth auth_i(
     .eeprom_busy(eeprom_busy),
     .eeprom_done(eeprom_done),
     .eeprom_buffer(eeprom_buffer),
-    .eeprom_start(eeprom_start),
-    .eeprom_get_key(eeprom_get_key)
+    .eeprom_start(auth_eeprom_start),
+    .eeprom_get_key(auth_eeprom_get_key)
 );
+
+assign eeprom_start   = auth_eeprom_start;
+assign eeprom_get_key = auth_eeprom_get_key;
 
 always_ff @(posedge clk) begin
     if (rst) begin

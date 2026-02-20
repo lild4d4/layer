@@ -23,17 +23,17 @@ module mfrc_reg_if (
     input wire rst,
 
     // -- request interface --
-    input  wire         req_valid,   // pulse to start a request
-    output reg          req_ready,   // high when idle
-    input  wire         req_write,   // 1 = write, 0 = read
-    input  wire [  5:0] req_addr,    // 6-bit register address
-    input  wire [  4:0] req_len,     // number of bytes - 1 (0 = 1 byte)
-    input  wire [255:0] req_wdata,   // write data (byte 0 = [255:248])
+    input  wire         req_valid,  // pulse to start a request
+    output reg          req_ready,  // high when idle
+    input  wire         req_write,  // 1 = write, 0 = read
+    input  wire [  5:0] req_addr,   // 6-bit register address
+    input  wire [  4:0] req_len,    // number of bytes - 1 (0 = 1 byte)
+    input  wire [255:0] req_wdata,  // write data (byte 0 = [255:248])
 
     // -- response interface --
-    output reg          resp_valid,  // pulses when transfer complete
-    output reg  [255:0] resp_rdata,  // read data (byte 0 = [255:248])
-    output reg          resp_ok,     // always 1 (no error detection yet)
+    output reg         resp_valid,  // pulses when transfer complete
+    output reg [255:0] resp_rdata,  // read data (byte 0 = [255:248])
+    output reg         resp_ok,     // always 1 (no error detection yet)
 
     // -- spi_ctrl / spi_arb interface --
     output reg          spi_go,
@@ -46,29 +46,31 @@ module mfrc_reg_if (
 );
 
   // -- state machine --
-  localparam [2:0] S_IDLE    = 3'd0,
-                   S_SUBMIT  = 3'd1,
-                   S_WAIT    = 3'd2,
-                   S_RD_NEXT = 3'd3,
-                   S_DONE    = 3'd4;
+  typedef enum logic [2:0] {
+    S_IDLE    = 3'd0,
+    S_SUBMIT  = 3'd1,
+    S_WAIT    = 3'd2,
+    S_RD_NEXT = 3'd3,
+    S_DONE    = 3'd4
+  } state_t;
 
-  (* MARK_DEBUG = "TRUE" *) reg [2:0] state;
+  (* MARK_DEBUG = "TRUE" *)state_t         state;
 
   // Latched request parameters
-  reg        lat_write;
-  reg [5:0]  lat_addr;
-  reg [4:0]  lat_len;     // total bytes - 1
-  reg [4:0]  byte_idx;    // current byte index for burst reads
-  reg [255:0] lat_wdata;  // latched write data
+  reg             lat_write;
+  reg     [  5:0] lat_addr;
+  reg     [  4:0] lat_len;  // total bytes - 1
+  reg     [  4:0] byte_idx;  // current byte index for burst reads
+  reg     [255:0] lat_wdata;  // latched write data
 
   // Total byte count
-  wire [5:0] byte_count = {1'b0, lat_len} + 6'd1;
+  wire    [  5:0] byte_count = {1'b0, lat_len} + 6'd1;
 
   // Helper: SPI address byte for MFRC522
-  wire [7:0] addr_byte_wr = {1'b0, lat_addr, 1'b0};
-  wire [7:0] addr_byte_rd = {1'b1, lat_addr, 1'b0};
+  wire    [  7:0] addr_byte_wr = {1'b0, lat_addr, 1'b0};
+  wire    [  7:0] addr_byte_rd = {1'b1, lat_addr, 1'b0};
 
-  integer i;
+  integer         i;
 
   always @(posedge clk or posedge rst) begin
     if (rst) begin
@@ -118,8 +120,7 @@ module mfrc_reg_if (
 
               spi_tx_data[255:248] <= addr_byte_wr;
               for (i = 0; i < 31; i = i + 1) begin
-                if (i[4:0] <= lat_len)
-                  spi_tx_data[247 - i*8 -: 8] <= lat_wdata[255 - i*8 -: 8];
+                if (i[4:0] <= lat_len) spi_tx_data[247-i*8-:8] <= lat_wdata[255-i*8-:8];
               end
 
             end else begin
@@ -145,7 +146,7 @@ module mfrc_reg_if (
               state      <= S_DONE;
             end else begin
               // Capture read byte into result at position [byte_idx]
-              resp_rdata[255 - byte_idx*8 -: 8] <= spi_rx_data[255:248];
+              resp_rdata[255-byte_idx*8-:8] <= spi_rx_data[255:248];
 
               if (byte_idx == lat_len) begin
                 // All bytes read
@@ -166,11 +167,11 @@ module mfrc_reg_if (
         S_RD_NEXT: begin
           if (!spi_busy) begin
             spi_tx_data <= 256'd0;
-            spi_w_len   <= 6'd1;
-            spi_r_len   <= 6'd1;
+            spi_w_len <= 6'd1;
+            spi_r_len <= 6'd1;
             spi_tx_data[255:248] <= addr_byte_rd;
             spi_go <= 1'b1;
-            state  <= S_WAIT;
+            state <= S_WAIT;
           end
         end
 

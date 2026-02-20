@@ -69,7 +69,11 @@ async def mfrc_wait_for_card(dut, timeout_us: int = 100000) -> bool:
 
 
 async def mfrc_transceive(
-    dut, tx_bytes: list[int], tx_last_bits: int = 0, timeout_cycles: int = 5000
+    dut,
+    tx_bytes: list[int],
+    tx_last_bits: int = 0,
+    timeout_cycles: int = 5000,
+    tx_kind: int = 0,
 ) -> dict:
     """
     Execute transceive command.
@@ -93,6 +97,7 @@ async def mfrc_transceive(
     dut.mfrc_tx_len.value = len(tx_bytes) - 1
     dut.mfrc_tx_data.value = _bytes_to_int(tx_bytes)
     dut.mfrc_tx_last_bits.value = tx_last_bits
+    dut.mfrc_tx_kind.value = tx_kind
     dut.mfrc_tx_valid.value = 1
 
     await RisingEdge(dut.clk)
@@ -230,11 +235,29 @@ async def mfrc_select(
     return sak
 
 
+async def mfrc_rats(dut) -> bytes | None:
+    """
+    Send RATS (0xE0 0x50) as a dedicated RATS transaction kind.
+
+    Returns ATS bytes on success, None on timeout/error.
+    """
+    result = await mfrc_transceive(dut, tx_bytes=[0xE0, 0x50], tx_kind=1)
+
+    if not result["ok"] or result["rx_len"] < 1:
+        return None
+
+    return bytes(result["rx_data"])
+
+
 async def mfrc_transceive_raw(
-    dut, tx_bytes: list[int], tx_last_bits: int = 0, timeout_cycles: int = 5000
+    dut,
+    tx_bytes: list[int],
+    tx_last_bits: int = 0,
+    timeout_cycles: int = 5000,
+    tx_kind: int = 0,
 ) -> dict:
     """
     Raw transceive - returns full result dict for debugging.
     Same as mfrc_transceive but explicitly named for clarity.
     """
-    return await mfrc_transceive(dut, tx_bytes, tx_last_bits, timeout_cycles)
+    return await mfrc_transceive(dut, tx_bytes, tx_last_bits, timeout_cycles, tx_kind)

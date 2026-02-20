@@ -11,15 +11,21 @@ from cocotb_tools.runner import get_runner
 
 os.environ["COCOTB_ANSI_OUTPUT"] = "1"
 
-SETUP_PROG = 0
-AUTH_INIT = 1
-AUTH = 2
-GET_ID = 3
+ANTI_COLL = 0
+SELECT_CARD = 1
+RATS = 2
+SETUP_PROG = 3
+AUTH_INIT = 4
+AUTH = 5
+GET_ID = 6
 
 
 async def reset(dut):
     """Apply reset pulse."""
     dut.select_prog.value = 0
+    dut.anti_coll.value = 0
+    dut.select_card.value = 0
+    dut.do_rats.value = 0
     dut.auth_init.value = 0
     dut.auth.value = 0
     dut.get_id.value = 0
@@ -49,9 +55,10 @@ async def await_tx_valid(dut, msg: str, *, max_cycles: int = 50):
 
 
 async def send_rx_response(dut, response_u128: int):
-    """Pulse RX valid with response in the upper 16 bytes."""
-    dut.mfrc_rx_data.value = (int(response_u128) & ((1 << 128) - 1)) << 128
-    dut.mfrc_rx_len.value = 15  # 16 bytes (0->1 byte encoding)
+    """Pulse RX valid with I-Block response (PCB + 16-byte payload)."""
+    frame = (0x02 << 128) | (int(response_u128) & ((1 << 128) - 1))
+    dut.mfrc_rx_data.value = frame << 120
+    dut.mfrc_rx_len.value = 16  # 17 bytes (PCB + 16-byte payload)
     dut.mfrc_rx_last_bits.value = 0
     dut.mfrc_rx_valid.value = 1
     await RisingEdge(dut.clk)
@@ -73,10 +80,12 @@ async def test_auth_init_transmission(dut):
     assert dut.active_transmission.value == AUTH_INIT, (
         "Expected active transmission to be of type auth_init"
     )
-    assert int(dut.mfrc_tx_len.value) == 20, "Expected 21-byte frame"
-    frame = int(dut.mfrc_tx_data.value) >> 88  # top 21 bytes
+    assert int(dut.mfrc_tx_len.value) == 21, "Expected 22-byte frame"
+    frame = int(dut.mfrc_tx_data.value) >> 80  # top 22 bytes
+    pcb = (frame >> 168) & 0xFF
     cla = (frame >> 160) & 0xFF
     ins = (frame >> 152) & 0xFF
+    assert pcb == 0x02
     assert cla == 0x80
     assert ins == 0x10
     assert int(dut.mfrc_tx_valid.value) == 1
@@ -100,7 +109,8 @@ async def test_transmission_mode_cannot_be_changed_when_running(dut):
     await reset(dut)
     challenge = secrets.token_bytes(16)
     expected = int.from_bytes(
-        0x08011000010.to_bytes(5, byteorder="big") + challenge, byteorder="big"
+        bytes([0x02]) + 0x08011000010.to_bytes(5, byteorder="big") + challenge,
+        byteorder="big",
     )
 
     dut.auth.value = 1
@@ -113,7 +123,7 @@ async def test_transmission_mode_cannot_be_changed_when_running(dut):
     assert dut.active_transmission.value == AUTH, (
         "Expected active transmission to be of type auth"
     )
-    frame = int(dut.mfrc_tx_data.value) >> 88
+    frame = int(dut.mfrc_tx_data.value) >> 80
     assert frame == expected, f"Expected the value to be {bin(expected)}"
 
     dut.auth_init.value = 1
@@ -123,7 +133,7 @@ async def test_transmission_mode_cannot_be_changed_when_running(dut):
     assert dut.active_transmission.value == AUTH, (
         "Expected active transmission to still be of type auth"
     )
-    frame2 = int(dut.mfrc_tx_data.value) >> 88
+    frame2 = int(dut.mfrc_tx_data.value) >> 80
     assert frame2 == expected
 
 
@@ -133,7 +143,8 @@ async def test_auth_transmission(dut):
     await reset(dut)
     challenge = secrets.token_bytes(16)
     expected = int.from_bytes(
-        0x08011000010.to_bytes(5, byteorder="big") + challenge, byteorder="big"
+        bytes([0x02]) + 0x08011000010.to_bytes(5, byteorder="big") + challenge,
+        byteorder="big",
     )
 
     dut.auth.value = 1
@@ -145,7 +156,7 @@ async def test_auth_transmission(dut):
     assert dut.active_transmission.value == AUTH, (
         "Expected active transmission to be of type auth"
     )
-    frame = int(dut.mfrc_tx_data.value) >> 88
+    frame = int(dut.mfrc_tx_data.value) >> 80
     assert frame == expected, f"Expected the value to be {bin(expected)}"
     assert int(dut.mfrc_tx_valid.value) == 1
     assert dut.authed.value == 0, "Expected authed to be low"
@@ -172,9 +183,11 @@ async def test_get_id_transmission(dut):
     assert dut.active_transmission.value == GET_ID, (
         "Expected active transmission to be of type get_id"
     )
-    frame = int(dut.mfrc_tx_data.value) >> 88
+    frame = int(dut.mfrc_tx_data.value) >> 80
+    pcb = (frame >> 168) & 0xFF
     cla = (frame >> 160) & 0xFF
     ins = (frame >> 152) & 0xFF
+    assert pcb == 0x02
     assert cla == 0x80
     assert ins == 0x12
     assert int(dut.mfrc_tx_valid.value) == 1

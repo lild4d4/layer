@@ -31,6 +31,7 @@ module test_fpga_mfrc_poll_top (
   (* MARK_DEBUG = "TRUE" *) wire [  4:0] mfrc_tx_len;
   wire [255:0] mfrc_tx_data;
   (* MARK_DEBUG = "TRUE" *) wire [  2:0] mfrc_tx_last_bits;
+  wire [  1:0] mfrc_tx_kind;
 
   // mfrc RX interface (from card)
   (* MARK_DEBUG = "TRUE" *) wire         mfrc_rx_valid;
@@ -62,6 +63,7 @@ module test_fpga_mfrc_poll_top (
     .mfrc_tx_len(mfrc_tx_len),
     .mfrc_tx_data(mfrc_tx_data),
     .mfrc_tx_last_bits(mfrc_tx_last_bits),
+    .mfrc_tx_kind(mfrc_tx_kind),
   
     // mfrc RX interface (from card)
     .mfrc_rx_valid(mfrc_rx_valid),

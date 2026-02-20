@@ -15,6 +15,9 @@ from cocotb_tools.runner import get_runner
 os.environ["COCOTB_ANSI_OUTPUT"] = "1"
 
 outputs = [
+    "anti_coll",
+    "select_card",
+    "do_rats",
     "select_prog",
     "auth_init",
     "generate_challenge",
@@ -25,6 +28,9 @@ outputs = [
 
 expected = {
     "READY": [],
+    "ANTI_COLL": ["anti_coll"],
+    "SELECT_CARD": ["select_card"],
+    "DO_RATS": ["do_rats"],
     "SELECT_PROG": ["select_prog"],
     "AUTH_INIT": ["auth_init"],
     "GENERATE_CHALLENGE": ["generate_challenge"],
@@ -57,6 +63,10 @@ class ControllerTester:
 async def reset(dut):
     """Apply reset pulse."""
     dut.start.value = 0
+    dut.anti_coll_done.value = 0
+    dut.card_selected.value = 0
+    dut.rats_done.value = 0
+    dut.prog_selected.value = 0
     dut.auth_initialized.value = 0
     dut.challenge_generated.value = 0
     dut.authed.value = 0
@@ -78,8 +88,23 @@ async def test_full(dut):
 
     dut.start.value = 1
     await RisingEdge(dut.clk)
-    await tester.check_outputs("SELECT_PROG")
+    await tester.check_outputs("ANTI_COLL")
     dut.start.value = 0
+
+    dut.anti_coll_done.value = 1
+    await RisingEdge(dut.clk)
+    await tester.check_outputs("SELECT_CARD")
+    dut.anti_coll_done.value = 0
+
+    dut.card_selected.value = 1
+    await RisingEdge(dut.clk)
+    await tester.check_outputs("DO_RATS")
+    dut.card_selected.value = 0
+
+    dut.rats_done.value = 1
+    await RisingEdge(dut.clk)
+    await tester.check_outputs("SELECT_PROG")
+    dut.rats_done.value = 0
 
     dut.prog_selected.value = 1
     await RisingEdge(dut.clk)

@@ -10,51 +10,47 @@ module chip(
     output wire cs_1,  // Pin13 - cs_1 (AT25010B)
 
     // Status output (Pin20-22)
-    output wire status_fault,
-    output wire status_unlock,
-    output wire status_busy
+    (* MARK_DEBUG = "TRUE" *) output wire status_fault,
+    (* MARK_DEBUG = "TRUE" *) output wire status_unlock,
+    (* MARK_DEBUG = "TRUE" *) output wire status_busy
 );
 
-  wire layr_status;
-  wire layr_status_valid;
+  (* MARK_DEBUG = "TRUE" *) wire layr_status;
+  (* MARK_DEBUG = "TRUE" *) wire layr_status_valid;
 
-  // Tie off EEPROM interface signals
-  wire         eeprom_start;
-  wire         eeprom_busy;
-  wire         eeprom_done;
-  wire         eeprom_get_key;
+  // EEPROM interface signals
+  (* MARK_DEBUG = "TRUE" *) wire         eeprom_busy;
+  (* MARK_DEBUG = "TRUE" *) wire         eeprom_done;
   wire [127:0] eeprom_rbuffer;
 
-  assign eeprom_start   = 1'b0;
-  assign eeprom_get_key = 1'b0;
-
   // Tie off MFRC interface signals
-  wire         mfrc_tx_valid;
-  wire         mfrc_tx_ready;
-  wire [  4:0] mfrc_tx_len;
+  (* MARK_DEBUG = "TRUE" *) wire         mfrc_tx_valid;
+  (* MARK_DEBUG = "TRUE" *) wire         mfrc_tx_ready;
+  (* MARK_DEBUG = "TRUE" *) wire [  4:0] mfrc_tx_len;
   wire [255:0] mfrc_tx_data;
   wire [  2:0] mfrc_tx_last_bits;
+  (* MARK_DEBUG = "TRUE" *) wire [  1:0] mfrc_tx_kind;
 
-  wire         mfrc_rx_valid;
-  wire [  4:0] mfrc_rx_len;
+  (* MARK_DEBUG = "TRUE" *) wire         mfrc_rx_valid;
+  (* MARK_DEBUG = "TRUE" *) wire [  4:0] mfrc_rx_len;
   wire [255:0] mfrc_rx_data;
   wire [  2:0] mfrc_rx_last_bits;
 
-  wire         mfrc_card_present;
+  (* MARK_DEBUG = "TRUE" *) wire         mfrc_card_present;
 
   // EEPROM interface (must be passed through unchanged)
   wire        auth_eeprom_busy   = eeprom_busy;
   wire        auth_eeprom_done   = eeprom_done;
   wire [127:0] auth_eeprom_buffer = eeprom_rbuffer;
-  wire        auth_eeprom_start;       // driven by auth
-  wire        auth_eeprom_get_key;     // driven by auth
+  (* MARK_DEBUG = "TRUE" *) wire        auth_eeprom_start;       // driven by auth
+  (* MARK_DEBUG = "TRUE" *) wire        auth_eeprom_get_key;     // driven by auth
 
-  wire        mfrc_ready,mfrc_init_done;
+  (* MARK_DEBUG = "TRUE" *) wire        mfrc_ready,mfrc_init_done;
   wire [15:0] mfrc_atqa;
 
   // results
-  reg        unlocked;
-  reg        forbidden;
+  (* MARK_DEBUG = "TRUE" *) reg        unlocked;
+  (* MARK_DEBUG = "TRUE" *) reg        forbidden;
 
   spi_top u_spi (
       .clk(clk),
@@ -66,11 +62,11 @@ module chip(
       .mfrc_atqa(mfrc_atqa),
 
 
-      // eeprom interface (tied off)
-      .eeprom_start(eeprom_start),
+      // eeprom interface
+      .eeprom_start(auth_eeprom_start),
       .eeprom_busy(eeprom_busy),
       .eeprom_done(eeprom_done),
-      .eeprom_get_key(eeprom_get_key),
+      .eeprom_get_key(auth_eeprom_get_key),
       .eeprom_rbuffer(eeprom_rbuffer),
 
       // mfrc interface (tied off)
@@ -79,6 +75,7 @@ module chip(
       .mfrc_tx_len(mfrc_tx_len),
       .mfrc_tx_data(mfrc_tx_data),
       .mfrc_tx_last_bits(mfrc_tx_last_bits),
+      .mfrc_tx_kind(mfrc_tx_kind),
 
       .mfrc_rx_valid(mfrc_rx_valid),
       .mfrc_rx_len(mfrc_rx_len),
@@ -96,6 +93,7 @@ module chip(
   layr layr(
       .clk               (clk),
       .rst               (rst),
+      .soft_rst          (layr_rst),
       .busy              (status_busy),
 
       .card_present_i(mfrc_card_present),
@@ -105,6 +103,7 @@ module chip(
       .mfrc_tx_len(mfrc_tx_len),
       .mfrc_tx_data(mfrc_tx_data),
       .mfrc_tx_last_bits(mfrc_tx_last_bits),
+      .mfrc_tx_kind(mfrc_tx_kind),
 
       .mfrc_rx_valid(mfrc_rx_valid),
       .mfrc_rx_len(mfrc_rx_len),
@@ -122,21 +121,38 @@ module chip(
       .status_valid(layr_status_valid)
   );
 
+  localparam DISPLAY_CYCLES = 500_000_000; // 5 s @ 100 MHz
+  reg [29:0] display_cnt;
+  reg        layr_rst;
+
   assign status_unlock = unlocked;
   assign status_fault  = forbidden;
-  
-  always_ff @(posedge clk)begin
-    if (rst)begin
-        unlocked <= 0;
-        forbidden <= 0;
+
+  always_ff @(posedge clk) begin
+    if (rst) begin
+      unlocked    <= 0;
+      forbidden   <= 0;
+      display_cnt <= 0;
+      layr_rst    <= 0;
     end else begin
-      if(layr_status_valid)begin
-        unlocked <= layr_status;
-        forbidden <= ~layr_status;
+      layr_rst <= 0; // default: de-assert every cycle
+      if (layr_status_valid) begin
+        // latch result and (re)start the 5-second display timer
+        unlocked    <= layr_status;
+        forbidden   <= ~layr_status;
+        display_cnt <= 0;
+      end else if (unlocked || forbidden) begin
+        if (display_cnt == DISPLAY_CYCLES - 1) begin
+          unlocked    <= 0;
+          forbidden   <= 0;
+          display_cnt <= 0;
+          layr_rst    <= 1;
+        end else begin
+          display_cnt <= display_cnt + 1;
+        end
       end
     end
   end
   
 
 endmodule
-

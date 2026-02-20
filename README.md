@@ -14,6 +14,7 @@ source ./.venv/bin/activate
 ```
 
 install pre-commit hooks:
+
 ```sh
 uv run pre-commit install
 ```
@@ -24,5 +25,13 @@ uv run pre-commit install
 uv run pytest
 ```
 
-
 openfpg loader for flashing
+
+## How to FPGA (Vivado)
+
+- synth
+- reload in synth design
+- set up debug -> disconnect all nets
+- set up debug -> connect all nets
+- generate bitstream
+- hardware manager -> program device

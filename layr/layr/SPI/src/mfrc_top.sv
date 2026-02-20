@@ -26,10 +26,10 @@ module mfrc_top (
     input wire rst,
 
     // -- status outputs --
-    output reg         ready,
-    output reg         init_done,
-    output reg         card_present,
-    output reg  [15:0] atqa,
+    output reg        ready,
+    output reg        init_done,
+    output reg        card_present,
+    output reg [15:0] atqa,
 
     // -- TX interface (to card) --
     input  wire         tx_valid,
@@ -37,12 +37,13 @@ module mfrc_top (
     input  wire [  4:0] tx_len,        // byte count - 1
     input  wire [255:0] tx_data,       // payload (byte 0 = [255:248])
     input  wire [  2:0] tx_last_bits,  // valid bits in last byte (0=all 8)
+    input  wire [  1:0] tx_kind,
 
     // -- RX interface (from card) --
-    output reg          rx_valid,
-    output reg  [  4:0] rx_len,        // byte count - 1
-    output reg  [255:0] rx_data,       // payload (byte 0 = [255:248])
-    output reg  [  2:0] rx_last_bits,
+    output reg         rx_valid,
+    output reg [  4:0] rx_len,       // byte count - 1
+    output reg [255:0] rx_data,      // payload (byte 0 = [255:248])
+    output reg [  2:0] rx_last_bits,
 
     // -- SPI arbiter interface (directly wired to spi_arb Client B) --
     output wire         spi_go,
@@ -68,22 +69,22 @@ module mfrc_top (
   wire         reg_resp_ok;
 
   mfrc_reg_if u_mfrc_reg_if (
-      .clk       (clk),
-      .rst       (rst),
-      .req_valid (reg_req_valid),
-      .req_ready (reg_req_ready),
-      .req_write (reg_req_write),
-      .req_addr  (reg_req_addr),
-      .req_len   (reg_req_len),
-      .req_wdata (reg_req_wdata),
-      .resp_valid(reg_resp_valid),
-      .resp_rdata(reg_resp_rdata),
-      .resp_ok   (reg_resp_ok),
-      .spi_go    (spi_go),
-      .spi_done  (spi_done),
-      .spi_busy  (spi_busy),
-      .spi_w_len (spi_w_len),
-      .spi_r_len (spi_r_len),
+      .clk        (clk),
+      .rst        (rst),
+      .req_valid  (reg_req_valid),
+      .req_ready  (reg_req_ready),
+      .req_write  (reg_req_write),
+      .req_addr   (reg_req_addr),
+      .req_len    (reg_req_len),
+      .req_wdata  (reg_req_wdata),
+      .resp_valid (reg_resp_valid),
+      .resp_rdata (reg_resp_rdata),
+      .resp_ok    (reg_resp_ok),
+      .spi_go     (spi_go),
+      .spi_done   (spi_done),
+      .spi_busy   (spi_busy),
+      .spi_w_len  (spi_w_len),
+      .spi_r_len  (spi_r_len),
       .spi_tx_data(spi_tx_data),
       .spi_rx_data(spi_rx_data)
   );
@@ -136,7 +137,8 @@ module mfrc_top (
   //   POLL_*   – auto-poll for card presence (REQA)
   //   TRX_*    – transceive passthrough for external commands
 
-  localparam [5:0]
+
+  typedef enum logic [5:0] {
     // Initialization sequence (matches Arduino setup())
     S_IDLE           = 6'd0,
     S_INIT_RESET     = 6'd1,   // Write CMD_SOFTRESET to CommandReg
@@ -152,64 +154,80 @@ module mfrc_top (
     S_INIT_DONE      = 6'd11,  // Done
 
     // Polling (matches PICC_IsNewCardPresent)
-    S_POLL_SETUP     = 6'd12,  // Write TxModeReg etc.
-    S_POLL_SETUP_W   = 6'd13,
-    S_POLL_TRX_PREP  = 6'd14,  // Prepare transceive for REQA
-    S_POLL_TRX_PREP_W= 6'd15,
-    S_POLL_WAIT      = 6'd16,  // Waiting for result from transceive engine
+    S_POLL_SETUP      = 6'd12,  // Write TxModeReg etc.
+    S_POLL_SETUP_W    = 6'd13,
+    S_POLL_TRX_PREP   = 6'd14,  // Prepare transceive for REQA
+    S_POLL_TRX_PREP_W = 6'd15,
+    S_POLL_WAIT       = 6'd16,  // Waiting for result from transceive engine
 
     // Transceive engine (shared by poll and external TX)
-    S_TRX_IDLE_CMD   = 6'd17,  // wrReg(CommandReg, CMD_IDLE)
-    S_TRX_IDLE_W     = 6'd18,
-    S_TRX_CLR_IRQ    = 6'd19,  // wrReg(ComIrqReg, 0x7F)
-    S_TRX_CLR_W      = 6'd20,
-    S_TRX_FLUSH      = 6'd21,  // wrReg(FIFOLevelReg, 0x80)
-    S_TRX_FLUSH_W    = 6'd22,
-    S_TRX_FIFO_LOAD  = 6'd23,  // wrReg(FIFODataReg, byte[i])
-    S_TRX_FIFO_W     = 6'd24,
-    S_TRX_BITFRAME   = 6'd25,  // wrReg(BitFramingReg, validBits)
-    S_TRX_BITFRAME_W = 6'd26,
-    S_TRX_START_CMD  = 6'd27,  // wrReg(CommandReg, CMD_TRANSCEIVE)
-    S_TRX_START_W    = 6'd28,
-    S_TRX_RD_BF      = 6'd29,  // rdReg(BitFramingReg)
-    S_TRX_RD_BF_W    = 6'd30,
-    S_TRX_SET_START  = 6'd31,  // wrReg(BitFramingReg, bf | 0x80)
-    S_TRX_SET_START_W = 6'd32,
-    S_TRX_POLL_IRQ   = 6'd33,  // rdReg(ComIrqReg)
-    S_TRX_POLL_IRQ_W = 6'd34,
-    S_TRX_CHK_ERR    = 6'd35,  // rdReg(ErrorReg)
-    S_TRX_CHK_ERR_W  = 6'd36,
-    S_TRX_RD_FIFO_LEN = 6'd37, // rdReg(FIFOLevelReg)
+    S_TRX_IDLE_CMD      = 6'd17,  // wrReg(CommandReg, CMD_IDLE)
+    S_TRX_IDLE_W        = 6'd18,
+    S_TRX_CLR_IRQ       = 6'd19,  // wrReg(ComIrqReg, 0x7F)
+    S_TRX_CLR_W         = 6'd20,
+    S_TRX_FLUSH         = 6'd21,  // wrReg(FIFOLevelReg, 0x80)
+    S_TRX_FLUSH_W       = 6'd22,
+    S_TRX_FIFO_LOAD     = 6'd23,  // wrReg(FIFODataReg, byte[i])
+    S_TRX_FIFO_W        = 6'd24,
+    S_TRX_BITFRAME      = 6'd25,  // wrReg(BitFramingReg, validBits)
+    S_TRX_BITFRAME_W    = 6'd26,
+    S_TRX_START_CMD     = 6'd27,  // wrReg(CommandReg, CMD_TRANSCEIVE)
+    S_TRX_START_W       = 6'd28,
+    S_TRX_RD_BF         = 6'd29,  // rdReg(BitFramingReg)
+    S_TRX_RD_BF_W       = 6'd30,
+    S_TRX_SET_START     = 6'd31,  // wrReg(BitFramingReg, bf | 0x80)
+    S_TRX_SET_START_W   = 6'd32,
+    S_TRX_POLL_IRQ      = 6'd33,  // rdReg(ComIrqReg)
+    S_TRX_POLL_IRQ_W    = 6'd34,
+    S_TRX_CHK_ERR       = 6'd35,  // rdReg(ErrorReg)
+    S_TRX_CHK_ERR_W     = 6'd36,
+    S_TRX_RD_FIFO_LEN   = 6'd37,  // rdReg(FIFOLevelReg)
     S_TRX_RD_FIFO_LEN_W = 6'd38,
-    S_TRX_RD_FIFO    = 6'd39,  // rdReg(FIFODataReg) × N
-    S_TRX_RD_FIFO_W  = 6'd40,
-    S_TRX_RD_CTRL    = 6'd41,  // rdReg(ControlReg) for RxLastBits
-    S_TRX_RD_CTRL_W  = 6'd42,
-    S_TRX_DONE       = 6'd43,  // Signal result
+    S_TRX_RD_FIFO       = 6'd39,  // rdReg(FIFODataReg) × N
+    S_TRX_RD_FIFO_W     = 6'd40,
+    S_TRX_RD_CTRL       = 6'd41,  // rdReg(ControlReg) for RxLastBits
+    S_TRX_RD_CTRL_W     = 6'd42,
+    S_TRX_DONE          = 6'd43,  // Signal result
 
     // External transceive (passthrough)
-    S_EXT_ACCEPT     = 6'd44,  // Accept external TX request
-    S_EXT_DONE       = 6'd45,  // Signal RX result
+    S_EXT_ACCEPT = 6'd44,  // Accept external TX request
+    S_EXT_DONE   = 6'd45,  // Signal RX result
 
     // Delay between polls
-    S_POLL_DELAY     = 6'd46;
+    S_POLL_DELAY = 6'd46,
 
-  (* MARK_DEBUG = "TRUE" *) reg [5:0] state;
+    // RATS-specific pre/post register sequence
+    S_PRE_RATS_TXMODE_WR       = 6'd47,
+    S_PRE_RATS_TXMODE_WR_WAIT  = 6'd48,
+    S_RATS_PREP                = 6'd49,
+    S_RATS_PREP_WAIT           = 6'd50,
+    S_POST_RATS_RXMODE_WR      = 6'd51,
+    S_POST_RATS_RXMODE_WR_WAIT = 6'd52,
+    S_POST_RATS_WR             = 6'd53,
+    S_POST_RATS_WR_WAIT        = 6'd54,
+    S_POST_RATS_TMODE_WR       = 6'd55,
+    S_POST_RATS_TMODE_WR_WAIT  = 6'd56,
+    S_POST_RATS_TPRES_WR       = 6'd57,
+    S_POST_RATS_TPRES_WR_WAIT  = 6'd58
+  } state_t;
+
+  (* MARK_DEBUG = "TRUE" *)state_t         state;
 
   // ===================================================================
   // Transceive working registers
   // ===================================================================
-  reg [255:0] trx_tx_data;     // data to send to card
-  reg [  4:0] trx_tx_len;      // bytes - 1
-  reg [  2:0] trx_tx_last_bits;// valid bits in last byte
-  reg [255:0] trx_rx_data;     // data received from card
-  reg [  4:0] trx_rx_len;      // bytes received - 1
-  reg [  2:0] trx_rx_last_bits;
-  reg         trx_ok;          // 1 = success
-  reg         trx_is_poll;     // 1 = internal poll, 0 = external
+  reg     [255:0] trx_tx_data;  // data to send to card
+  reg     [  4:0] trx_tx_len;  // bytes - 1
+  reg     [  2:0] trx_tx_last_bits;  // valid bits in last byte
+  reg     [  1:0] trx_kind;  // command kind (normal/rats)
+  reg     [255:0] trx_rx_data;  // data received from card
+  reg     [  4:0] trx_rx_len;  // bytes received - 1
+  reg     [  2:0] trx_rx_last_bits;
+  reg             trx_ok;  // 1 = success
+  reg             trx_is_poll;  // 1 = internal poll, 0 = external
 
-  reg [  4:0] fifo_idx;        // FIFO byte index for load/read
-  reg [  4:0] fifo_cnt;        // FIFO byte count from MFRC522
+  reg     [  4:0] fifo_idx;  // FIFO byte index for load/read
+  reg     [  4:0] fifo_cnt;  // FIFO byte count from MFRC522
 
   // ===================================================================
   // Init register table
@@ -222,16 +240,16 @@ module mfrc_top (
   localparam INIT_REG_COUNT = 9;
 
   // Pack as {addr[5:0], data[7:0]} = 14 bits
-  wire [13:0] init_table [0:INIT_REG_COUNT-1];
-  assign init_table[0] = {R_TX_MODE,     8'h00};
-  assign init_table[1] = {R_RX_MODE,     8'h00};
-  assign init_table[2] = {R_MOD_WIDTH,   8'h26};
-  assign init_table[3] = {R_T_MODE,      8'h80};
+  wire [13:0] init_table[0:INIT_REG_COUNT-1];
+  assign init_table[0] = {R_TX_MODE, 8'h00};
+  assign init_table[1] = {R_RX_MODE, 8'h00};
+  assign init_table[2] = {R_MOD_WIDTH, 8'h26};
+  assign init_table[3] = {R_T_MODE, 8'h80};
   assign init_table[4] = {R_T_PRESCALER, 8'hA9};
-  assign init_table[5] = {R_T_RELOAD_H,  8'h03};
-  assign init_table[6] = {R_T_RELOAD_L,  8'hE8};
-  assign init_table[7] = {R_TX_ASK,      8'h40};
-  assign init_table[8] = {R_MODE,        8'h3D};
+  assign init_table[5] = {R_T_RELOAD_H, 8'h03};
+  assign init_table[6] = {R_T_RELOAD_L, 8'hE8};
+  assign init_table[7] = {R_TX_ASK, 8'h40};
+  assign init_table[8] = {R_MODE, 8'h3D};
 
   reg [3:0] init_idx;
 
@@ -242,11 +260,11 @@ module mfrc_top (
   // (Matches PICC_IsNewCardPresent)
   localparam POLL_SETUP_COUNT = 4;
 
-  wire [13:0] poll_setup_table [0:POLL_SETUP_COUNT-1];
-  assign poll_setup_table[0] = {R_TX_MODE,   8'h00};
-  assign poll_setup_table[1] = {R_RX_MODE,   8'h00};
+  wire [13:0] poll_setup_table[0:POLL_SETUP_COUNT-1];
+  assign poll_setup_table[0] = {R_TX_MODE, 8'h00};
+  assign poll_setup_table[1] = {R_RX_MODE, 8'h00};
   assign poll_setup_table[2] = {R_MOD_WIDTH, 8'h26};
-  assign poll_setup_table[3] = {R_COLL,      8'h80};  // CollReg = 0x80
+  assign poll_setup_table[3] = {R_COLL, 8'h80};  // CollReg = 0x80
 
   reg [2:0] poll_setup_idx;
 
@@ -319,6 +337,7 @@ module mfrc_top (
       trx_tx_data      <= 256'd0;
       trx_tx_len       <= 5'd0;
       trx_tx_last_bits <= 3'd0;
+      trx_kind         <= 2'd0;
       trx_rx_data      <= 256'd0;
       trx_rx_len       <= 5'd0;
       trx_rx_last_bits <= 3'd0;
@@ -394,8 +413,7 @@ module mfrc_top (
         S_INIT_REG: begin
           if (reg_req_ready) begin
             if (init_idx < INIT_REG_COUNT) begin
-              issue_write(init_table[init_idx][13:8],
-                         init_table[init_idx][7:0]);
+              issue_write(init_table[init_idx][13:8], init_table[init_idx][7:0]);
               state <= S_INIT_REG_W;
             end else begin
               // All init registers written, check antenna
@@ -451,11 +469,11 @@ module mfrc_top (
         // INIT complete → start polling
         // ============================================================
         S_INIT_DONE: begin
-          init_done <= 1'b1;
-          ready     <= 1'b1;
-          tx_ready  <= 1'b1;
+          init_done      <= 1'b1;
+          ready          <= 1'b1;
+          tx_ready       <= 1'b1;
           poll_setup_idx <= 3'd0;
-          state     <= S_POLL_SETUP;
+          state          <= S_POLL_SETUP;
         end
 
         // ============================================================
@@ -470,7 +488,7 @@ module mfrc_top (
           end else if (reg_req_ready) begin
             if (poll_setup_idx < POLL_SETUP_COUNT) begin
               issue_write(poll_setup_table[poll_setup_idx][13:8],
-                         poll_setup_table[poll_setup_idx][7:0]);
+                          poll_setup_table[poll_setup_idx][7:0]);
               state <= S_POLL_SETUP_W;
             end else begin
               // Setup done, prepare REQA transceive
@@ -491,8 +509,9 @@ module mfrc_top (
         // ============================================================
         S_POLL_TRX_PREP: begin
           trx_tx_data      <= {8'h26, 248'd0};  // REQA command
-          trx_tx_len       <= 5'd0;              // 1 byte
-          trx_tx_last_bits <= 3'd7;              // 7-bit frame
+          trx_tx_len       <= 5'd0;  // 1 byte
+          trx_tx_last_bits <= 3'd7;  // 7-bit frame
+          trx_kind         <= 2'd0;
           trx_is_poll      <= 1'b1;
           trx_ok           <= 1'b0;
           fifo_idx         <= 5'd0;
@@ -513,8 +532,8 @@ module mfrc_top (
           end else begin
             card_present <= 1'b0;
           end
-          ready    <= 1'b1;
-          tx_ready <= 1'b1;
+          ready     <= 1'b1;
+          tx_ready  <= 1'b1;
           delay_ctr <= POLL_DELAY;
           state     <= S_POLL_DELAY;
         end
@@ -541,6 +560,7 @@ module mfrc_top (
           trx_tx_data      <= tx_data;
           trx_tx_len       <= tx_len;
           trx_tx_last_bits <= tx_last_bits;
+          trx_kind         <= tx_kind;
           trx_is_poll      <= 1'b0;
           trx_ok           <= 1'b0;
           fifo_idx         <= 5'd0;
@@ -549,7 +569,8 @@ module mfrc_top (
           trx_rx_last_bits <= 3'd0;
           ready            <= 1'b0;
           tx_ready         <= 1'b0;
-          state            <= S_TRX_IDLE_CMD;
+          if (tx_kind == 2'd1) state <= S_PRE_RATS_TXMODE_WR;
+          else state <= S_TRX_IDLE_CMD;
         end
 
         S_EXT_DONE: begin
@@ -562,6 +583,75 @@ module mfrc_top (
           tx_ready     <= 1'b1;
           delay_ctr    <= POLL_DELAY;
           state        <= S_POLL_DELAY;
+        end
+
+        // ============================================================
+        // RATS-specific register setup/restore (Arduino doRATS)
+        // ============================================================
+        S_PRE_RATS_TXMODE_WR: begin
+          if (reg_req_ready) begin
+            issue_write(R_TX_MODE, 8'h80);
+            state <= S_PRE_RATS_TXMODE_WR_WAIT;
+          end
+        end
+
+        S_PRE_RATS_TXMODE_WR_WAIT: begin
+          if (reg_resp_valid) state <= S_RATS_PREP;
+        end
+
+        S_RATS_PREP: begin
+          if (reg_req_ready) begin
+            issue_write(R_RX_MODE, 8'h00);
+            state <= S_RATS_PREP_WAIT;
+          end
+        end
+
+        S_RATS_PREP_WAIT: begin
+          if (reg_resp_valid) state <= S_TRX_IDLE_CMD;
+        end
+
+        S_POST_RATS_RXMODE_WR: begin
+          if (reg_req_ready) begin
+            issue_write(R_RX_MODE, 8'h80);
+            state <= S_POST_RATS_RXMODE_WR_WAIT;
+          end
+        end
+
+        S_POST_RATS_RXMODE_WR_WAIT: begin
+          if (reg_resp_valid) state <= S_POST_RATS_WR;
+        end
+
+        S_POST_RATS_WR: begin
+          if (reg_req_ready) begin
+            issue_write(R_BIT_FRAMING, 8'h00);
+            state <= S_POST_RATS_WR_WAIT;
+          end
+        end
+
+        S_POST_RATS_WR_WAIT: begin
+          if (reg_resp_valid) state <= S_POST_RATS_TMODE_WR;
+        end
+
+        S_POST_RATS_TMODE_WR: begin
+          if (reg_req_ready) begin
+            issue_write(R_T_MODE, 8'h8D);
+            state <= S_POST_RATS_TMODE_WR_WAIT;
+          end
+        end
+
+        S_POST_RATS_TMODE_WR_WAIT: begin
+          if (reg_resp_valid) state <= S_POST_RATS_TPRES_WR;
+        end
+
+        S_POST_RATS_TPRES_WR: begin
+          if (reg_req_ready) begin
+            issue_write(R_T_PRESCALER, 8'h3E);
+            state <= S_POST_RATS_TPRES_WR_WAIT;
+          end
+        end
+
+        S_POST_RATS_TPRES_WR_WAIT: begin
+          if (reg_resp_valid) state <= S_EXT_DONE;
         end
 
         // ============================================================
@@ -622,7 +712,7 @@ module mfrc_top (
         S_TRX_FIFO_LOAD: begin
           if (reg_req_ready) begin
             if (fifo_idx <= trx_tx_len) begin
-              issue_write(R_FIFO_DATA, trx_tx_data[255 - fifo_idx*8 -: 8]);
+              issue_write(R_FIFO_DATA, trx_tx_data[255-fifo_idx*8-:8]);
               state <= S_TRX_FIFO_W;
             end else begin
               // All bytes loaded
@@ -800,6 +890,8 @@ module mfrc_top (
         S_TRX_DONE: begin
           if (trx_is_poll) begin
             state <= S_POLL_WAIT;
+          end else if (trx_kind == 2'd1 && trx_ok) begin
+            state <= S_POST_RATS_RXMODE_WR;
           end else begin
             state <= S_EXT_DONE;
           end
