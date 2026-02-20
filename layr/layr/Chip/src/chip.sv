@@ -120,17 +120,32 @@ module chip(
       .status_valid(layr_status_valid)
   );
 
+  localparam DISPLAY_CYCLES = 500_000_000; // 5 s @ 100 MHz
+  reg [29:0] display_cnt;
+
   assign status_unlock = unlocked;
   assign status_fault  = forbidden;
-  
-  always_ff @(posedge clk)begin
-    if (rst)begin
-        unlocked <= 0;
-        forbidden <= 0;
+
+  always_ff @(posedge clk) begin
+    if (rst) begin
+      unlocked    <= 0;
+      forbidden   <= 0;
+      display_cnt <= 0;
     end else begin
-      if(layr_status_valid)begin
-        unlocked <= layr_status;
-        forbidden <= ~layr_status;
+      if (layr_status_valid) begin
+        // latch result and (re)start the 5-second display timer
+        unlocked    <= layr_status;
+        forbidden   <= ~layr_status;
+        display_cnt <= 0;
+      end else if (unlocked || forbidden) begin
+        if (display_cnt == DISPLAY_CYCLES - 1) begin
+          // 5 seconds elapsed -> clear outputs
+          unlocked    <= 0;
+          forbidden   <= 0;
+          display_cnt <= 0;
+        end else begin
+          display_cnt <= display_cnt + 1;
+        end
       end
     end
   end
