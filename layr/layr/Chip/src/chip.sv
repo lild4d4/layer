@@ -121,34 +121,52 @@ module chip(
       .status_valid(layr_status_valid)
   );
 
-  localparam DISPLAY_CYCLES = 500_000_000; // 5 s @ 100 MHz
-  reg [29:0] display_cnt;
+  localparam BUSY_TIMEOUT_CYCLES   = 100_000_000; // 1 s @ 100 MHz  (no result)
+  localparam DISPLAY_CYCLES        = 500_000_000; // 5 s @ 100 MHz  (success/fault)
+  reg [28:0] timer_cnt;
   reg        layr_rst;
+  reg        timer_running;
+  reg        got_result;      // 1 = success/fault latched, use 5 s; 0 = busy-only, use 1 s
 
   assign status_unlock = unlocked;
   assign status_fault  = forbidden;
 
   always_ff @(posedge clk) begin
     if (rst) begin
-      unlocked    <= 0;
-      forbidden   <= 0;
-      display_cnt <= 0;
-      layr_rst    <= 0;
+      unlocked      <= 0;
+      forbidden     <= 0;
+      timer_cnt     <= 0;
+      layr_rst      <= 0;
+      timer_running <= 0;
+      got_result    <= 0;
     end else begin
       layr_rst <= 0; // default: de-assert every cycle
+
       if (layr_status_valid) begin
         // latch result and (re)start the 5-second display timer
-        unlocked    <= layr_status;
-        forbidden   <= ~layr_status;
-        display_cnt <= 0;
-      end else if (unlocked || forbidden) begin
-        if (display_cnt == DISPLAY_CYCLES - 1) begin
-          unlocked    <= 0;
-          forbidden   <= 0;
-          display_cnt <= 0;
-          layr_rst    <= 1;
-        end else begin
-          display_cnt <= display_cnt + 1;
+        unlocked      <= layr_status;
+        forbidden     <= ~layr_status;
+        timer_cnt     <= 0;
+        timer_running <= 1;
+        got_result    <= 1;
+      end else begin
+        // only run the timer / start logic when status_valid is NOT active
+        if (!timer_running && status_busy) begin
+          // start 1-second timeout as soon as busy goes high
+          timer_cnt     <= 0;
+          timer_running <= 1;
+          got_result    <= 0;
+        end else if (timer_running) begin
+          if (timer_cnt == (got_result ? DISPLAY_CYCLES - 1 : BUSY_TIMEOUT_CYCLES - 1)) begin
+            unlocked      <= 0;
+            forbidden     <= 0;
+            timer_cnt     <= 0;
+            layr_rst      <= 1;
+            timer_running <= 0;
+            got_result    <= 0;
+          end else begin
+            timer_cnt <= timer_cnt + 1;
+          end
         end
       end
     end
