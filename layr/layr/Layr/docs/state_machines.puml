@@ -1,0 +1,75 @@
+@startuml layr_state_machines
+skinparam state {
+    BackgroundColor LightGreen
+    BorderColor DarkGreen
+    FontSize 12
+}
+
+' ────────────────────────────────────────────────
+' layr_controller – top-level protocol sequencer
+' ────────────────────────────────────────────────
+[*] --> ctrl_READY
+
+state ctrl_READY         as "READY"
+state ctrl_ANTI_COLL     as "ANTI_COLL"
+state ctrl_SELECT_CARD   as "SELECT_CARD"
+state ctrl_DO_RATS       as "DO_RATS"
+state ctrl_SELECT_PROG   as "SELECT_PROG"
+state ctrl_AUTH_INIT     as "AUTH_INIT"
+state ctrl_GEN_CHALLENGE as "GENERATE_CHALLENGE"
+state ctrl_AUTH          as "AUTH"
+state ctrl_GET_ID        as "GET_ID"
+state ctrl_VERIFY_ID     as "VERIFY_ID"
+state ctrl_VALIDATED     as "REQUEST_VALIDATED" #LightGreen
+state ctrl_DENIED        as "REQUEST_DENIED"    #LightCoral
+
+ctrl_READY         --> ctrl_ANTI_COLL     : start
+ctrl_ANTI_COLL     --> ctrl_SELECT_CARD   : anti_coll_done
+ctrl_SELECT_CARD   --> ctrl_DO_RATS       : card_selected
+ctrl_DO_RATS       --> ctrl_SELECT_PROG   : rats_done
+ctrl_SELECT_PROG   --> ctrl_AUTH_INIT     : prog_selected
+ctrl_AUTH_INIT     --> ctrl_GEN_CHALLENGE : auth_initialized
+ctrl_GEN_CHALLENGE --> ctrl_AUTH          : challenge_generated
+ctrl_AUTH          --> ctrl_GET_ID        : authed
+ctrl_GET_ID        --> ctrl_VERIFY_ID     : id_retrieved
+ctrl_VERIFY_ID     --> ctrl_VALIDATED     : id_verified && id_valid
+ctrl_VERIFY_ID     --> ctrl_DENIED        : id_verified && !id_valid
+
+ctrl_VALIDATED --> ctrl_READY : rst / idle_clear\n(status_valid pulse)
+ctrl_DENIED    --> ctrl_READY : rst / idle_clear\n(status_valid pulse)
+
+' ────────────────────────────────────────────────
+' command_mux – NFC frame send/receive
+' ────────────────────────────────────────────────
+[*] --> mux_READY
+
+state mux_READY   as "READY"
+state mux_SEND    as "SEND"
+state mux_WAIT_RX as "WAIT_RX"
+
+mux_READY   --> mux_SEND    : any command pulse\n(anti_coll / select_card /\ndo_rats / select_prog /\nauth_init / auth / get_id)
+mux_SEND    --> mux_WAIT_RX : mfrc_tx_valid && mfrc_tx_ready
+mux_WAIT_RX --> mux_READY   : mfrc_rx_valid\n(raises done flag for\nactive_transmission)
+
+note right of mux_READY
+  active_transmission tracks
+  which NFC command is in-flight:
+  ANTI_COLL | SELECT_CARD | RATS
+  SELECT_PROG | AUTH_INIT
+  AUTH | GET_ID
+end note
+
+' ────────────────────────────────────────────────
+' layr_auth – AES auth engine wrapper
+' ────────────────────────────────────────────────
+[*] --> lauth_READY
+
+state lauth_READY   as "READY"
+state lauth_RUNNING as "RUNNING"
+state lauth_DONE    as "DONE"
+
+lauth_READY   --> lauth_RUNNING : generate_challenge\nor verify_id\n(latches data_in, start pulse)
+lauth_RUNNING --> lauth_DONE    : auth_valid
+lauth_DONE    --> lauth_READY   : operation==CHALLENGE && !generate_challenge\nor operation==VERIFY && !verify_id\n
+
+@enduml

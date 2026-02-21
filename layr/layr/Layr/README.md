@@ -14,19 +14,23 @@ stateDiagram
 # Sequence
 ```mermaid
 sequenceDiagram
-    Layr->>Card: Auth Init CLA: 0x80 Ins: 0x10 Payload: {}
-    Card->>Layr: cyphertext containing 8-byte random challenge
+    participant T as Terminal
+    participant C as Card
 
-    Layr->>Auth: generate challenge based on based on cyphertext
-    Auth->>Layr: Ciphertext containing challenge
+    %% AUTH_INIT
+    T->>C: AUTH_INIT (CLA 0x80, INS 0x10)
+    C->>C: Pick random 8-byte rc
+    C->>T: AES_psk(rc || 00..00)
 
-    Layr->>Card: Auth CLA: 0x80 Ins: 0x11 Payload: AES_psk 16 byte
-    Card->>Layr: cipherOut: 16 byte
-    Layr->>Card: GetId CLA: 0x80 Ins: 0x12 Payload: {}
-    Layr->>Card: encrypted id 16 byte
+    %% AUTH
+    T->>T: Decrypt to recover rc
+    T->>T: Pick random 8-byte rt
+    T->>C: AUTH (CLA 0x80, INS 0x11) AES_psk(rt || rc)
 
-    Layr->>Auth: Verify Id based on encrypted id
-    Auth->>Layr: Valid or not
+    %% GET_ID
+    C->>C: Derive k_eph = rc || rt
+    T->>C: GET_ID (CLA 0x80, INS 0x12)
+    C->>T: Enc(card_id 16B, k_eph)
 ```
 
 
