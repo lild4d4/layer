@@ -171,8 +171,6 @@ module auth (
       session_key <= 128'h0;
       valid <= 1'b0;
       output_data <= 128'h0;
-      input_key <= 128'h0;
-      session_key <= 128'h0;
       state <= GET_KEY;
     end else begin
       state <= next_state;
