@@ -12,3 +12,7 @@ librelane:
 .PHONY: view-results
 view-results:
 	PDK_ROOT=$(PDK_ROOT) PDK=$(PDK) librelane --manual-pdk --last-run --flow OpenInOpenROAD config.yaml
+
+.PHONY: magic
+magic:
+	magic -T /Users/janschaible/git/layer/layr/pdk/ihp-sg13g2/libs.tech/magic/ihp-sg13g2.tech runs/top-run/final/gds/top.gds
