@@ -56,7 +56,7 @@ module command_mux (
     GET_ID
   } active_transmission_t;
 
-  (* MARK_DEBUG = "TRUE" *) active_transmission_t active_transmission, next_active_transmission;
+  active_transmission_t active_transmission, next_active_transmission;
 
   typedef enum logic [5:0] {
     READY,

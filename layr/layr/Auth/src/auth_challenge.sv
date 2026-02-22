@@ -23,7 +23,7 @@ module auth_challenge (
     ENCRYPT_CHALLENGE
   } state_t;
 
- (* MARK_DEBUG = "TRUE" *) state_t state, next_state;
+ state_t state, next_state;
 
   wire random_valid;
   wire random_ready;

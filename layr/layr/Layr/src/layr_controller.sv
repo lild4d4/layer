@@ -49,7 +49,7 @@ module layr_controller (
     REQUEST_DENIED
   } state_t;
 
-  (* MARK_DEBUG = "TRUE" *) state_t state, next_state;
+  state_t state, next_state;
 
   // Driving the state
   always_comb begin

@@ -30,18 +30,14 @@ module layr(
     output logic eeprom_get_key
 );
 
-(* MARK_DEBUG = "TRUE" *) logic anti_coll, select_card, do_rats, select_prog, auth_init, generate_challenge, auth, get_id, verify_id, authed;
-(* MARK_DEBUG = "TRUE" *) logic anti_coll_done, card_selected, rats_done, prog_selected, auth_initialized, challenge_generated, id_retrieved;
+logic anti_coll, select_card, do_rats, select_prog, auth_init, generate_challenge, auth, get_id, verify_id, authed;
+logic anti_coll_done, card_selected, rats_done, prog_selected, auth_initialized, challenge_generated, id_retrieved;
 
-(* MARK_DEBUG = "TRUE" *) logic id_verified, id_valid;
+logic id_verified, id_valid;
 
-(* MARK_DEBUG = "TRUE" *) logic [127:0] id_cipher;
+logic [127:0] id_cipher;
 logic [127:0] card_cipher;
 logic [127:0] chip_cypher, chip_cypher_new;
-
-// DEBUG: last 2 bytes of id_cipher visible in ILA
-(* MARK_DEBUG = "TRUE" *) wire [15:0] dbg_id_tail = id_cipher[15:0];
-(* MARK_DEBUG = "TRUE" *) wire [15:0] dbg_eeprom_tail = eeprom_buffer[15:0];
 
 // Use a synchronous (clocked) idle clear to reset one-shot flags/state machines
 // while idle, without introducing a derived async reset.

@@ -10,47 +10,47 @@ module chip(
     output wire cs_1,  // Pin13 - cs_1 (AT25010B)
 
     // Status output (Pin20-22)
-    (* MARK_DEBUG = "TRUE" *) output wire status_fault,
-    (* MARK_DEBUG = "TRUE" *) output wire status_unlock,
-    (* MARK_DEBUG = "TRUE" *) output wire status_busy
+    output wire status_fault,
+    output wire status_unlock,
+    output wire status_busy
 );
 
-  (* MARK_DEBUG = "TRUE" *) wire layr_status;
-  (* MARK_DEBUG = "TRUE" *) wire layr_status_valid;
+  wire layr_status;
+  wire layr_status_valid;
 
   // EEPROM interface signals
-  (* MARK_DEBUG = "TRUE" *) wire         eeprom_busy;
-  (* MARK_DEBUG = "TRUE" *) wire         eeprom_done;
+  wire         eeprom_busy;
+  wire         eeprom_done;
   wire [127:0] eeprom_rbuffer;
 
   // Tie off MFRC interface signals
-  (* MARK_DEBUG = "TRUE" *) wire         mfrc_tx_valid;
-  (* MARK_DEBUG = "TRUE" *) wire         mfrc_tx_ready;
-  (* MARK_DEBUG = "TRUE" *) wire [  4:0] mfrc_tx_len;
+  wire         mfrc_tx_valid;
+  wire         mfrc_tx_ready;
+  wire [  4:0] mfrc_tx_len;
   wire [255:0] mfrc_tx_data;
   wire [  2:0] mfrc_tx_last_bits;
-  (* MARK_DEBUG = "TRUE" *) wire [  1:0] mfrc_tx_kind;
+  wire [  1:0] mfrc_tx_kind;
 
-  (* MARK_DEBUG = "TRUE" *) wire         mfrc_rx_valid;
-  (* MARK_DEBUG = "TRUE" *) wire [  4:0] mfrc_rx_len;
+  wire         mfrc_rx_valid;
+  wire [  4:0] mfrc_rx_len;
   wire [255:0] mfrc_rx_data;
   wire [  2:0] mfrc_rx_last_bits;
 
-  (* MARK_DEBUG = "TRUE" *) wire         mfrc_card_present;
+  wire         mfrc_card_present;
 
   // EEPROM interface (must be passed through unchanged)
   wire        auth_eeprom_busy   = eeprom_busy;
   wire        auth_eeprom_done   = eeprom_done;
   wire [127:0] auth_eeprom_buffer = eeprom_rbuffer;
-  (* MARK_DEBUG = "TRUE" *) wire        auth_eeprom_start;       // driven by auth
-  (* MARK_DEBUG = "TRUE" *) wire        auth_eeprom_get_key;     // driven by auth
+  wire        auth_eeprom_start;       // driven by auth
+  wire        auth_eeprom_get_key;     // driven by auth
 
-  (* MARK_DEBUG = "TRUE" *) wire        mfrc_ready,mfrc_init_done;
+  wire        mfrc_ready,mfrc_init_done;
   wire [15:0] mfrc_atqa;
 
   // results
-  (* MARK_DEBUG = "TRUE" *) reg        unlocked;
-  (* MARK_DEBUG = "TRUE" *) reg        forbidden;
+  reg        unlocked;
+  reg        forbidden;
 
   localparam BUSY_TIMEOUT_CYCLES   = 50_000_000; // 0.5 s @ 100 MHz  (no result)
   localparam DISPLAY_CYCLES        = 500_000_000; // 5 s @ 100 MHz  (success/fault)
