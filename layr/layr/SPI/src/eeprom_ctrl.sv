@@ -65,7 +65,7 @@ module eeprom_ctrl (
   localparam logic [6:0] AddrIdC = 7'h60;
   localparam logic [6:0] AddrIdD = 7'h70;
 
-  always @(posedge clk or posedge rst) begin
+  always @(posedge clk) begin
     if (rst) begin
       state <= S_IDLE;
       done <= 1'b0;

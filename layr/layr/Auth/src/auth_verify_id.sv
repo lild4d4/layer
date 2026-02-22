@@ -55,12 +55,11 @@ module auth_verify_id (
       .aes_core_next(aes_core_next)
   );
 
-  always_ff @(posedge clk or posedge rst) begin
+  always_ff @(posedge clk) begin
     if (rst) begin
       id <= 128'h0;
       expected_id <= 128'h0;
       block <= 128'h0;
-      expected_id <= 128'h0;
       state <= IDLE;
     end else begin
       state <= next_state;

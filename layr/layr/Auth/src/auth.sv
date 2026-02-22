@@ -165,7 +165,7 @@ module auth (
   assign eeprom_start = (state == VERIFY_ID) ? verify_eeprom_start : auth_eeprom_start;
   assign eeprom_get_key = (state == VERIFY_ID) ? verify_eeprom_get_key : auth_eeprom_get_key;
 
-  always_ff @(posedge clk or posedge rst) begin
+  always_ff @(posedge clk) begin
     if (rst) begin
       input_key <= 128'h0;
       session_key <= 128'h0;

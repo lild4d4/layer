@@ -36,7 +36,7 @@ module eeprom_spi (
   localparam logic [7:0] OPREAD = 8'h03;
 
 
-  always @(posedge clk or posedge rst) begin
+  always @(posedge clk) begin
     if (rst) begin
       state        <= S_IDLE;
       lat_addr     <= 7'h0;

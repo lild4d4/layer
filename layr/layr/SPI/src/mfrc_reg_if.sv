@@ -72,7 +72,7 @@ module mfrc_reg_if (
 
   integer         i;
 
-  always @(posedge clk or posedge rst) begin
+  always @(posedge clk) begin
     if (rst) begin
       state       <= S_IDLE;
       req_ready   <= 1'b1;

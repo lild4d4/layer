@@ -112,7 +112,7 @@ module spi_arb (
   assign b_rx_data = ctrl_rx_data;
 
   // --- State update ---
-  always @(posedge clk or posedge rst) begin
+  always @(posedge clk) begin
     if (rst) begin
       busy              <= 1'b0;
       grant_hold        <= 1'b0;

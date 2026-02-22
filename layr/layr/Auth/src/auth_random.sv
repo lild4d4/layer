@@ -31,7 +31,7 @@ function automatic logic [63:0] multi_shift(input logic [63:0] s);
     };
 endfunction
 
-always_ff @(posedge clk or posedge rst) begin
+always_ff @(posedge clk) begin
     if (rst) begin
         state <= 64'h1;
         valid <= 1'b0;

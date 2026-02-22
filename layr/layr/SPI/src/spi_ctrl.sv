@@ -77,7 +77,7 @@ module spi_ctrl (
   );
 
   // Detect rising edge of spi_clk in the clk domain
-  always_ff @(posedge clk or posedge rst) begin
+  always_ff @(posedge clk) begin
       if (rst)
           spi_clk_d <= 0;
       else
@@ -116,7 +116,7 @@ module spi_ctrl (
   // Helper: extract byte N from the 256-bit register (byte 0 = MSB)
   `define TX_BYTE(n) tx_data[255 - (n)*8 -: 8]
 
-  always @(posedge clk or posedge rst) begin
+  always @(posedge clk) begin
     if (rst) begin
       state        <= S_IDLE;
       spi_data_in  <= 8'd0;

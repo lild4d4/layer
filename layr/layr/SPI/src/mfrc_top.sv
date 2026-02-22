@@ -315,7 +315,7 @@ module mfrc_top (
   // ===================================================================
   // Main FSM
   // ===================================================================
-  always @(posedge clk or posedge rst) begin
+  always @(posedge clk) begin
     if (rst) begin
       state            <= S_IDLE;
       ready            <= 1'b0;
