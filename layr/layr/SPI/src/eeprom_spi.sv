@@ -14,7 +14,9 @@ module eeprom_spi (
     input  reg spi_done,
     input  reg spi_busy,
 
+    /* verilator lint_off UNUSEDSIGNAL */
     input  reg [255:0] spi_rx_data,  // Data received
+    /* verilator lint_on UNUSEDSIGNAL */
     output reg [255:0] spi_tx_data,  // Data to Send
     output reg [  5:0] spi_w_len,
     output reg [  5:0] spi_r_len

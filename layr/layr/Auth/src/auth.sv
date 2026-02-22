@@ -74,7 +74,6 @@ module auth (
   wire verify_aes_core_next;
   wire result_valid;
   wire auth_challenge_valid;
-  wire auth_challenge_encdec;
   wire auth_verify_id_valid;
   wire verify_eeprom_start;
   wire verify_eeprom_get_key;
@@ -97,7 +96,9 @@ module auth (
 
   aes_core u_aes_core (
       .clk(clk),
+      /* verilator lint_off SYNCASYNCNET */
       .reset_n(!rst),
+      /* verilator lint_on SYNCASYNCNET */
       .encdec(encdec),
       .init(aes_core_init),
       .next(aes_core_next),

@@ -27,8 +27,10 @@ module command_mux (
     // mfrc RX interface (from card)
     input logic         mfrc_rx_valid,
     input logic [  4:0] mfrc_rx_len,
+    /* verilator lint_off UNUSEDSIGNAL */
     input logic [255:0] mfrc_rx_data,
     input logic [  2:0] mfrc_rx_last_bits,
+    /* verilator lint_on UNUSEDSIGNAL */
 
     output logic anti_coll_done,
     output logic card_selected,

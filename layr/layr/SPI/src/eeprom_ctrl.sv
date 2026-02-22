@@ -22,7 +22,6 @@ module eeprom_ctrl (
   reg eeprom_start;
   reg [6:0] eeprom_addr;  // read / write address in eeprom
   reg [127:0] eeprom_rdata;  // data read from an address
-  reg eeprom_busy;
   reg eeprom_done;
 
   eeprom_spi u_eeprom_spi (
@@ -32,7 +31,9 @@ module eeprom_ctrl (
       .eeprom_start(eeprom_start),
       .eeprom_addr (eeprom_addr),
       .eeprom_rdata(eeprom_rdata),
-      .eeprom_busy (eeprom_busy),
+      /* verilator lint_off PINCONNECTEMPTY */
+      .eeprom_busy (),
+      /* verilator lint_on PINCONNECTEMPTY */
       .eeprom_done (eeprom_done),
 
       .spi_start(spi_start),
@@ -55,6 +56,7 @@ module eeprom_ctrl (
 
   assign busy = (state != S_IDLE);
 
+  /* verilator lint_off UNUSEDPARAM */
   localparam logic [6:0] AddrKeyA = 7'h00;
   localparam logic [6:0] AddrKeyB = 7'h10;
   localparam logic [6:0] AddrKeyC = 7'h20;
@@ -64,6 +66,7 @@ module eeprom_ctrl (
   localparam logic [6:0] AddrIdB = 7'h50;
   localparam logic [6:0] AddrIdC = 7'h60;
   localparam logic [6:0] AddrIdD = 7'h70;
+  /* verilator lint_on UNUSEDPARAM */
 
   always @(posedge clk) begin
     if (rst) begin

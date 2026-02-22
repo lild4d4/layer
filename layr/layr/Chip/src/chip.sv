@@ -45,8 +45,10 @@ module chip(
   wire        auth_eeprom_start;       // driven by auth
   wire        auth_eeprom_get_key;     // driven by auth
 
+  /* verilator lint_off UNUSEDSIGNAL */
   wire        mfrc_ready,mfrc_init_done;
   wire [15:0] mfrc_atqa;
+  /* verilator lint_on UNUSEDSIGNAL */
 
   // results
   reg        unlocked;

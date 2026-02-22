@@ -65,8 +65,10 @@ module mfrc_top (
   reg  [  4:0] reg_req_len;
   reg  [255:0] reg_req_wdata;
   wire         reg_resp_valid;
+  /* verilator lint_off UNUSEDSIGNAL */
   wire [255:0] reg_resp_rdata;
   wire         reg_resp_ok;
+  /* verilator lint_on UNUSEDSIGNAL */
 
   mfrc_reg_if u_mfrc_reg_if (
       .clk        (clk),
@@ -258,7 +260,7 @@ module mfrc_top (
   assign poll_setup_table[2] = {R_MOD_WIDTH, 8'h26};
   assign poll_setup_table[3] = {R_COLL, 8'h80};  // CollReg = 0x80
 
-  reg [2:0] poll_setup_idx;
+  reg [1:0] poll_setup_idx;
 
   // ===================================================================
   // Poll delay counter
@@ -339,7 +341,7 @@ module mfrc_top (
       fifo_idx         <= 5'd0;
       fifo_cnt         <= 5'd0;
       init_idx         <= 4'd0;
-      poll_setup_idx   <= 3'd0;
+      poll_setup_idx   <= 2'd0;
       delay_ctr        <= 20'd0;
       irq_timeout_ctr  <= 20'd0;
       reset_wait_ctr   <= 16'd0;
@@ -464,7 +466,7 @@ module mfrc_top (
           init_done      <= 1'b1;
           ready          <= 1'b1;
           tx_ready       <= 1'b1;
-          poll_setup_idx <= 3'd0;
+          poll_setup_idx <= 2'd0;
           state          <= S_POLL_SETUP;
         end
 
@@ -478,21 +480,21 @@ module mfrc_top (
           if (tx_valid && tx_ready) begin
             state <= S_EXT_ACCEPT;
           end else if (reg_req_ready) begin
-            if (poll_setup_idx < 3'd4) begin
-              issue_write(poll_setup_table[poll_setup_idx][13:8],
-                          poll_setup_table[poll_setup_idx][7:0]);
-              state <= S_POLL_SETUP_W;
-            end else begin
-              // Setup done, prepare REQA transceive
-              state <= S_POLL_TRX_PREP;
-            end
+            issue_write(poll_setup_table[poll_setup_idx][13:8],
+                        poll_setup_table[poll_setup_idx][7:0]);
+            state <= S_POLL_SETUP_W;
           end
         end
 
         S_POLL_SETUP_W: begin
           if (reg_resp_valid) begin
-            poll_setup_idx <= poll_setup_idx + 3'd1;
-            state          <= S_POLL_SETUP;
+            if (poll_setup_idx == 2'd3) begin
+              // Setup done, prepare REQA transceive
+              state <= S_POLL_TRX_PREP;
+            end else begin
+              poll_setup_idx <= poll_setup_idx + 2'd1;
+              state          <= S_POLL_SETUP;
+            end
           end
         end
 
@@ -538,7 +540,7 @@ module mfrc_top (
           if (tx_valid && tx_ready) begin
             state <= S_EXT_ACCEPT;
           end else if (delay_ctr == 0) begin
-            poll_setup_idx <= 3'd0;
+            poll_setup_idx <= 2'd0;
             state          <= S_POLL_SETUP;
           end else begin
             delay_ctr <= delay_ctr - 20'd1;

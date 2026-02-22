@@ -42,7 +42,9 @@ module mfrc_reg_if (
     output reg  [  5:0] spi_w_len,
     output reg  [  5:0] spi_r_len,
     output reg  [255:0] spi_tx_data,
+    /* verilator lint_off UNUSEDSIGNAL */
     input  wire [255:0] spi_rx_data
+    /* verilator lint_on UNUSEDSIGNAL */
 );
 
   // -- state machine --
