@@ -9,7 +9,6 @@ from cocotb_tools.runner import get_runner
 from cocotbext.spi import SpiBus
 from Crypto.Cipher import AES
 
-
 os.environ["COCOTB_ANSI_OUTPUT"] = "1"
 
 
@@ -19,7 +18,6 @@ sys.path.insert(0, str(SPI_TEST_ROOT))
 
 from test_at25010b.at25010b_mock import AT25010B_EEPROM  # noqa: E402
 from test_mfrc522.mock_mfrc522 import Mfrc522SpiSlave  # noqa: E402
-
 
 KEY_A = bytes.fromhex("39558d1f193656ab8b4b65e25ac48474")
 CARD_ID = bytes.fromhex("bbe8278a67f960605adafd6f63cf7ba7")
@@ -164,7 +162,11 @@ def test_chip_controller_runner():
 
     sources = []
     for folder in [chip, auth, aes, layr, spi]:
-        sources += [p for p in folder.rglob("*") if p.is_file()]
+        sources += [
+            p
+            for p in folder.rglob("*")
+            if p.is_file() and p.suffix in (".v", ".sv", ".vh", ".svh")
+        ]
 
     runner = get_runner(sim)
     runner.build(
