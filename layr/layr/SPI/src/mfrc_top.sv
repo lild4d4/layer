@@ -94,7 +94,6 @@ module mfrc_top (
   // ===================================================================
   localparam [5:0] R_COMMAND      = 6'h01,
                    R_COM_IRQ      = 6'h04,
-                   R_DIV_IRQ      = 6'h05,
                    R_ERROR        = 6'h06,
                    R_FIFO_DATA    = 6'h09,
                    R_FIFO_LEVEL   = 6'h0A,
@@ -106,27 +105,21 @@ module mfrc_top (
                    R_RX_MODE      = 6'h13,
                    R_TX_CONTROL   = 6'h14,
                    R_TX_ASK       = 6'h15,
-                   R_CRC_RESULT_H = 6'h21,
-                   R_CRC_RESULT_L = 6'h22,
                    R_MOD_WIDTH    = 6'h24,
                    R_T_MODE       = 6'h2A,
                    R_T_PRESCALER  = 6'h2B,
                    R_T_RELOAD_H   = 6'h2C,
-                   R_T_RELOAD_L   = 6'h2D,
-                   R_VERSION      = 6'h37;
+                   R_T_RELOAD_L   = 6'h2D;
 
   // MFRC522 commands
   localparam [7:0] CMD_IDLE       = 8'h00,
-                   CMD_CALCCRC    = 8'h03,
                    CMD_TRANSCEIVE = 8'h0C,
                    CMD_SOFTRESET  = 8'h0F;
 
   // ComIrqReg bit masks
   localparam [7:0] IRQ_TIMER = 8'h01,
-                   IRQ_ERR   = 8'h02,
                    IRQ_IDLE  = 8'h10,
-                   IRQ_RX    = 8'h20,
-                   IRQ_TX    = 8'h40;
+                   IRQ_RX    = 8'h20;
 
   // ===================================================================
   // Main state machine
