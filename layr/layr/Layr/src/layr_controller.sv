@@ -89,6 +89,9 @@ module layr_controller (
           else next_state = REQUEST_DENIED;
         end
       end
+      default: begin
+        next_state = READY;
+      end
     endcase
   end
 
@@ -130,6 +133,8 @@ module layr_controller (
         REQUEST_DENIED: begin
           status <= 0;
           status_valid <= (state != REQUEST_DENIED);
+        end
+        default: begin
         end
       endcase
     end

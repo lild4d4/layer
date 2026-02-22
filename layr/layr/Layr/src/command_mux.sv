@@ -122,6 +122,9 @@ module command_mux (
       WAIT_RX: begin
         if (mfrc_rx_valid) next_state = READY;
       end
+      default: begin
+        next_state = READY;
+      end
     endcase
   end
 

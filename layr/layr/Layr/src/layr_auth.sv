@@ -52,6 +52,9 @@ module layr_auth (
         if ((operation == 0 && ~generate_challenge) | (operation == 1 && ~verify_id))
           next_state = READY;
       end
+      default: begin
+        next_state = READY;
+      end
     endcase
   end
 
