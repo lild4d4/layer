@@ -21,7 +21,7 @@ module spi_master (
   localparam S_CAPTURE = 2'd2;
   localparam S_FINISH  = 2'd3;
 
-  always @(posedge clk or posedge reset) begin
+  always @(posedge clk) begin
     if (reset) begin
       sclk      <= 1'b0;
       mosi      <= 1'b0;

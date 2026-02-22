@@ -65,8 +65,10 @@ module mfrc_top (
   reg  [  4:0] reg_req_len;
   reg  [255:0] reg_req_wdata;
   wire         reg_resp_valid;
+  /* verilator lint_off UNUSEDSIGNAL */
   wire [255:0] reg_resp_rdata;
   wire         reg_resp_ok;
+  /* verilator lint_on UNUSEDSIGNAL */
 
   mfrc_reg_if u_mfrc_reg_if (
       .clk        (clk),
@@ -94,7 +96,6 @@ module mfrc_top (
   // ===================================================================
   localparam [5:0] R_COMMAND      = 6'h01,
                    R_COM_IRQ      = 6'h04,
-                   R_DIV_IRQ      = 6'h05,
                    R_ERROR        = 6'h06,
                    R_FIFO_DATA    = 6'h09,
                    R_FIFO_LEVEL   = 6'h0A,
@@ -106,27 +107,21 @@ module mfrc_top (
                    R_RX_MODE      = 6'h13,
                    R_TX_CONTROL   = 6'h14,
                    R_TX_ASK       = 6'h15,
-                   R_CRC_RESULT_H = 6'h21,
-                   R_CRC_RESULT_L = 6'h22,
                    R_MOD_WIDTH    = 6'h24,
                    R_T_MODE       = 6'h2A,
                    R_T_PRESCALER  = 6'h2B,
                    R_T_RELOAD_H   = 6'h2C,
-                   R_T_RELOAD_L   = 6'h2D,
-                   R_VERSION      = 6'h37;
+                   R_T_RELOAD_L   = 6'h2D;
 
   // MFRC522 commands
   localparam [7:0] CMD_IDLE       = 8'h00,
-                   CMD_CALCCRC    = 8'h03,
                    CMD_TRANSCEIVE = 8'h0C,
                    CMD_SOFTRESET  = 8'h0F;
 
   // ComIrqReg bit masks
   localparam [7:0] IRQ_TIMER = 8'h01,
-                   IRQ_ERR   = 8'h02,
                    IRQ_IDLE  = 8'h10,
-                   IRQ_RX    = 8'h20,
-                   IRQ_TX    = 8'h40;
+                   IRQ_RX    = 8'h20;
 
   // ===================================================================
   // Main state machine
@@ -258,15 +253,14 @@ module mfrc_top (
   // ===================================================================
   // Before REQA: TxModeReg=0x00, RxModeReg=0x00, ModWidthReg=0x26
   // (Matches PICC_IsNewCardPresent)
-  localparam POLL_SETUP_COUNT = 4;
 
-  wire [13:0] poll_setup_table[0:POLL_SETUP_COUNT-1];
+  wire [13:0] poll_setup_table[0:3];
   assign poll_setup_table[0] = {R_TX_MODE, 8'h00};
   assign poll_setup_table[1] = {R_RX_MODE, 8'h00};
   assign poll_setup_table[2] = {R_MOD_WIDTH, 8'h26};
   assign poll_setup_table[3] = {R_COLL, 8'h80};  // CollReg = 0x80
 
-  reg [2:0] poll_setup_idx;
+  reg [1:0] poll_setup_idx;
 
   // ===================================================================
   // Poll delay counter
@@ -315,7 +309,7 @@ module mfrc_top (
   // ===================================================================
   // Main FSM
   // ===================================================================
-  always @(posedge clk or posedge rst) begin
+  always @(posedge clk) begin
     if (rst) begin
       state            <= S_IDLE;
       ready            <= 1'b0;
@@ -347,7 +341,7 @@ module mfrc_top (
       fifo_idx         <= 5'd0;
       fifo_cnt         <= 5'd0;
       init_idx         <= 4'd0;
-      poll_setup_idx   <= 3'd0;
+      poll_setup_idx   <= 2'd0;
       delay_ctr        <= 20'd0;
       irq_timeout_ctr  <= 20'd0;
       reset_wait_ctr   <= 16'd0;
@@ -472,7 +466,7 @@ module mfrc_top (
           init_done      <= 1'b1;
           ready          <= 1'b1;
           tx_ready       <= 1'b1;
-          poll_setup_idx <= 3'd0;
+          poll_setup_idx <= 2'd0;
           state          <= S_POLL_SETUP;
         end
 
@@ -486,21 +480,21 @@ module mfrc_top (
           if (tx_valid && tx_ready) begin
             state <= S_EXT_ACCEPT;
           end else if (reg_req_ready) begin
-            if (poll_setup_idx < POLL_SETUP_COUNT) begin
-              issue_write(poll_setup_table[poll_setup_idx][13:8],
-                          poll_setup_table[poll_setup_idx][7:0]);
-              state <= S_POLL_SETUP_W;
-            end else begin
-              // Setup done, prepare REQA transceive
-              state <= S_POLL_TRX_PREP;
-            end
+            issue_write(poll_setup_table[poll_setup_idx][13:8],
+                        poll_setup_table[poll_setup_idx][7:0]);
+            state <= S_POLL_SETUP_W;
           end
         end
 
         S_POLL_SETUP_W: begin
           if (reg_resp_valid) begin
-            poll_setup_idx <= poll_setup_idx + 3'd1;
-            state          <= S_POLL_SETUP;
+            if (poll_setup_idx == 2'd3) begin
+              // Setup done, prepare REQA transceive
+              state <= S_POLL_TRX_PREP;
+            end else begin
+              poll_setup_idx <= poll_setup_idx + 2'd1;
+              state          <= S_POLL_SETUP;
+            end
           end
         end
 
@@ -546,7 +540,7 @@ module mfrc_top (
           if (tx_valid && tx_ready) begin
             state <= S_EXT_ACCEPT;
           end else if (delay_ctr == 0) begin
-            poll_setup_idx <= 3'd0;
+            poll_setup_idx <= 2'd0;
             state          <= S_POLL_SETUP;
           end else begin
             delay_ctr <= delay_ctr - 20'd1;
@@ -793,10 +787,10 @@ module mfrc_top (
         S_TRX_POLL_IRQ_W: begin
           if (reg_resp_valid) begin
             // Check IRQ bits (Arduino: if (n & 0x30) break)
-            if (resp_byte & (IRQ_RX | IRQ_IDLE)) begin
+            if ((resp_byte & (IRQ_RX | IRQ_IDLE)) != 8'd0) begin
               // RxIRq or IdleIRq set → transceive complete
               state <= S_TRX_CHK_ERR;
-            end else if (resp_byte & IRQ_TIMER) begin
+            end else if ((resp_byte & IRQ_TIMER) != 8'd0) begin
               // TimerIRq → timeout, no card response
               trx_ok <= 1'b0;
               state  <= S_TRX_DONE;
@@ -817,7 +811,7 @@ module mfrc_top (
         S_TRX_CHK_ERR_W: begin
           if (reg_resp_valid) begin
             // Arduino: if (rdReg(ErrorReg) & 0x13) return 0
-            if (resp_byte & 8'h13) begin
+            if ((resp_byte & 8'h13) != 8'd0) begin
               trx_ok <= 1'b0;
               state  <= S_TRX_DONE;
             end else begin

@@ -1,6 +1,6 @@
 module clock_divider #(
     parameter WIDTH = 11,
-    parameter [WIDTH-1:0] div_num = 50
+    parameter [WIDTH-1:0] div_num = 35
 )(
     input clk,
     input rst,
@@ -16,7 +16,7 @@ always @(posedge clk)begin
     else pos_count<= pos_count +1;
 end
 
-always @(negedge clk or posedge rst)begin
+always @(negedge clk)begin
     if (rst)
         neg_count <=0;
     else if (neg_count == div_num-1)

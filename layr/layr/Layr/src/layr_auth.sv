@@ -37,7 +37,7 @@ module layr_auth (
     DONE
   } state_t;
 
-  (* MARK_DEBUG = "TRUE" *) state_t state, next_state;
+  state_t state, next_state;
 
   always_comb begin
     next_state = state;
@@ -51,6 +51,9 @@ module layr_auth (
       DONE: begin
         if ((operation == 0 && ~generate_challenge) | (operation == 1 && ~verify_id))
           next_state = READY;
+      end
+      default: begin
+        next_state = READY;
       end
     endcase
   end

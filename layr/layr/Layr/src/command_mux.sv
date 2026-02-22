@@ -27,8 +27,10 @@ module command_mux (
     // mfrc RX interface (from card)
     input logic         mfrc_rx_valid,
     input logic [  4:0] mfrc_rx_len,
+    /* verilator lint_off UNUSEDSIGNAL */
     input logic [255:0] mfrc_rx_data,
     input logic [  2:0] mfrc_rx_last_bits,
+    /* verilator lint_on UNUSEDSIGNAL */
 
     output logic anti_coll_done,
     output logic card_selected,
@@ -56,7 +58,7 @@ module command_mux (
     GET_ID
   } active_transmission_t;
 
-  (* MARK_DEBUG = "TRUE" *) active_transmission_t active_transmission, next_active_transmission;
+  active_transmission_t active_transmission, next_active_transmission;
 
   typedef enum logic [5:0] {
     READY,
@@ -86,7 +88,7 @@ module command_mux (
       crc = 16'h6363;
       for (i = 0; i < 7; i = i + 1) begin
         byte_v = data_bytes[55-i*8-:8];
-        crc = crc ^ byte_v;
+        crc = crc ^ {8'd0, byte_v};
         for (j = 0; j < 8; j = j + 1) begin
           if (crc[0]) crc = (crc >> 1) ^ 16'h8408;
           else crc = crc >> 1;
@@ -121,6 +123,9 @@ module command_mux (
       end
       WAIT_RX: begin
         if (mfrc_rx_valid) next_state = READY;
+      end
+      default: begin
+        next_state = READY;
       end
     endcase
   end

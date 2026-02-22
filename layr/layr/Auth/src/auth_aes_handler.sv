@@ -23,7 +23,7 @@ module auth_aes_handler (
 
   assign valid_o = valid;
 
-  always_ff @(posedge clk or posedge rst) begin
+  always_ff @(posedge clk) begin
     if (rst) begin
       state <= IDLE;
     end else begin

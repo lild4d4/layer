@@ -60,7 +60,7 @@ module auth (
     VERIFY_ID
   } state_t;
 
-  (* MARK_DEBUG = "TRUE" *) state_t state, next_state;
+  state_t state, next_state;
 
   wire encdec;
   wire verify_encdec;
@@ -74,7 +74,6 @@ module auth (
   wire verify_aes_core_next;
   wire result_valid;
   wire auth_challenge_valid;
-  wire auth_challenge_encdec;
   wire auth_verify_id_valid;
   wire verify_eeprom_start;
   wire verify_eeprom_get_key;
@@ -97,7 +96,9 @@ module auth (
 
   aes_core u_aes_core (
       .clk(clk),
+      /* verilator lint_off SYNCASYNCNET */
       .reset_n(!rst),
+      /* verilator lint_on SYNCASYNCNET */
       .encdec(encdec),
       .init(aes_core_init),
       .next(aes_core_next),
@@ -165,14 +166,12 @@ module auth (
   assign eeprom_start = (state == VERIFY_ID) ? verify_eeprom_start : auth_eeprom_start;
   assign eeprom_get_key = (state == VERIFY_ID) ? verify_eeprom_get_key : auth_eeprom_get_key;
 
-  always_ff @(posedge clk or posedge rst) begin
+  always_ff @(posedge clk) begin
     if (rst) begin
       input_key <= 128'h0;
       session_key <= 128'h0;
       valid <= 1'b0;
       output_data <= 128'h0;
-      input_key <= 128'h0;
-      session_key <= 128'h0;
       state <= GET_KEY;
     end else begin
       state <= next_state;

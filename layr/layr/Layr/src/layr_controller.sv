@@ -49,7 +49,7 @@ module layr_controller (
     REQUEST_DENIED
   } state_t;
 
-  (* MARK_DEBUG = "TRUE" *) state_t state, next_state;
+  state_t state, next_state;
 
   // Driving the state
   always_comb begin
@@ -88,6 +88,15 @@ module layr_controller (
           if (id_valid) next_state = REQUEST_VALIDATED;
           else next_state = REQUEST_DENIED;
         end
+      end
+      REQUEST_VALIDATED: begin
+        // stay until idle_clear
+      end
+      REQUEST_DENIED: begin
+        // stay until idle_clear
+      end
+      default: begin
+        // unreachable
       end
     endcase
   end
@@ -130,6 +139,8 @@ module layr_controller (
         REQUEST_DENIED: begin
           status <= 0;
           status_valid <= (state != REQUEST_DENIED);
+        end
+        default: begin
         end
       endcase
     end

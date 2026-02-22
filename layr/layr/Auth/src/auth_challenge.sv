@@ -23,7 +23,7 @@ module auth_challenge (
     ENCRYPT_CHALLENGE
   } state_t;
 
- (* MARK_DEBUG = "TRUE" *) state_t state, next_state;
+ state_t state, next_state;
 
   wire random_valid;
   wire random_ready;
@@ -68,7 +68,7 @@ module auth_challenge (
       .ready(random_ready)
   );
 
-  always_ff @(posedge clk or posedge rst) begin
+  always_ff @(posedge clk) begin
     if (rst) begin
       rc <= 64'd0;
       rt <= 64'd0;
