@@ -89,8 +89,14 @@ module layr_controller (
           else next_state = REQUEST_DENIED;
         end
       end
+      REQUEST_VALIDATED: begin
+        // stay until idle_clear
+      end
+      REQUEST_DENIED: begin
+        // stay until idle_clear
+      end
       default: begin
-        next_state = READY;
+        // unreachable
       end
     endcase
   end
