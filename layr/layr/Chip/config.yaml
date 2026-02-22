@@ -14,18 +14,18 @@ meta:
     Checker.KLayoutDensity: null
 
     # you can uncomment this for the flow to be faster. Comment it again in the final run.
-    KLayout.DRC: null
-    Checker.KLayoutDRC: null
+    # KLayout.DRC: null
+    # Checker.KLayoutDRC: null
 
     # you can uncomment this for the flow to be faster. Comment it again in the final run.
-    KLayout.Antenna: null
-    Checker.KLayoutAntenna: null
+    # KLayout.Antenna: null
+    # Checker.KLayoutAntenna: null
 
     # you can uncomment this for the flow to be faster. Comment it again in the final run.
-    OpenROAD.IRDropReport: null
-    KLayout.XOR: null
-    Netgen.LVS: null
-    Checker.LVS: null
+    # OpenROAD.IRDropReport: null
+    # KLayout.XOR: null
+    # Netgen.LVS: null
+    # Checker.LVS: null
 
 DESIGN_NAME: top
 VERILOG_FILES:
@@ -38,9 +38,7 @@ VERILOG_FILES:
   - ../SPI/src/eeprom_ctrl.sv
   - ../SPI/src/eeprom_spi.sv
   - ../SPI/src/mfrc_top.sv
-  - ../SPI/src/mfrc_core.sv
   - ../SPI/src/mfrc_reg_if.sv
-  - ../SPI/src/mfrc_reg_arb.sv
   - ../Layr/src/layr.sv
   - ../Layr/src/layr_controller.sv
   - ../Layr/src/command_mux.sv

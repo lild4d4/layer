@@ -582,6 +582,7 @@ module mfrc_top (
           ready        <= 1'b1;
           tx_ready     <= 1'b1;
           delay_ctr    <= POLL_DELAY;
+          if (!trx_ok) card_present <= 1'b0;
           state        <= S_POLL_DELAY;
         end
 
