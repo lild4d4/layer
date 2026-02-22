@@ -258,9 +258,8 @@ module mfrc_top (
   // ===================================================================
   // Before REQA: TxModeReg=0x00, RxModeReg=0x00, ModWidthReg=0x26
   // (Matches PICC_IsNewCardPresent)
-  localparam POLL_SETUP_COUNT = 4;
 
-  wire [13:0] poll_setup_table[0:POLL_SETUP_COUNT-1];
+  wire [13:0] poll_setup_table[0:3];
   assign poll_setup_table[0] = {R_TX_MODE, 8'h00};
   assign poll_setup_table[1] = {R_RX_MODE, 8'h00};
   assign poll_setup_table[2] = {R_MOD_WIDTH, 8'h26};
@@ -486,7 +485,7 @@ module mfrc_top (
           if (tx_valid && tx_ready) begin
             state <= S_EXT_ACCEPT;
           end else if (reg_req_ready) begin
-            if (poll_setup_idx < POLL_SETUP_COUNT) begin
+            if (poll_setup_idx < 3'd4) begin
               issue_write(poll_setup_table[poll_setup_idx][13:8],
                           poll_setup_table[poll_setup_idx][7:0]);
               state <= S_POLL_SETUP_W;
@@ -793,10 +792,10 @@ module mfrc_top (
         S_TRX_POLL_IRQ_W: begin
           if (reg_resp_valid) begin
             // Check IRQ bits (Arduino: if (n & 0x30) break)
-            if (resp_byte & (IRQ_RX | IRQ_IDLE)) begin
+            if ((resp_byte & (IRQ_RX | IRQ_IDLE)) != 8'd0) begin
               // RxIRq or IdleIRq set → transceive complete
               state <= S_TRX_CHK_ERR;
-            end else if (resp_byte & IRQ_TIMER) begin
+            end else if ((resp_byte & IRQ_TIMER) != 8'd0) begin
               // TimerIRq → timeout, no card response
               trx_ok <= 1'b0;
               state  <= S_TRX_DONE;
@@ -817,7 +816,7 @@ module mfrc_top (
         S_TRX_CHK_ERR_W: begin
           if (reg_resp_valid) begin
             // Arduino: if (rdReg(ErrorReg) & 0x13) return 0
-            if (resp_byte & 8'h13) begin
+            if ((resp_byte & 8'h13) != 8'd0) begin
               trx_ok <= 1'b0;
               state  <= S_TRX_DONE;
             end else begin

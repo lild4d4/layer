@@ -41,11 +41,11 @@ module eeprom_spi (
       state        <= S_IDLE;
       lat_addr     <= 7'h0;
       eeprom_done  <= 1'b0;
-      eeprom_rdata <= 8'h0;
+      eeprom_rdata <= 128'h0;
       spi_start    <= 1'b0;
       spi_tx_data  <= 256'h0;
-      spi_w_len    <= 5'd0;
-      spi_r_len    <= 5'd0;
+      spi_w_len    <= 6'd0;
+      spi_r_len    <= 6'd0;
     end else begin
       // auto-clear states
       eeprom_done <= 1'b0;
@@ -73,10 +73,10 @@ module eeprom_spi (
         // pull cs_1, send read command
         S_READ_0: begin
           if (!spi_busy) begin
-            spi_w_len <= 5'd2;
-            spi_r_len <= 5'd16;  // byte
+            spi_w_len <= 6'd2;
+            spi_r_len <= 6'd16;  // byte
             spi_tx_data[255:248] <= OPREAD;  // byte 0: opcode
-            spi_tx_data[247:240] <= lat_addr;  // byte 1: address
+            spi_tx_data[247:240] <= {1'b0, lat_addr};  // byte 1: address
 
             spi_start <= 1'b1;
 

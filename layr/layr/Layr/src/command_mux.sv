@@ -86,7 +86,7 @@ module command_mux (
       crc = 16'h6363;
       for (i = 0; i < 7; i = i + 1) begin
         byte_v = data_bytes[55-i*8-:8];
-        crc = crc ^ byte_v;
+        crc = crc ^ {8'd0, byte_v};
         for (j = 0; j < 8; j = j + 1) begin
           if (crc[0]) crc = (crc >> 1) ^ 16'h8408;
           else crc = crc >> 1;

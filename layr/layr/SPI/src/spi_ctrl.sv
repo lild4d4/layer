@@ -113,9 +113,6 @@ module spi_ctrl (
 
   reg [2:0] state;
 
-  // Helper: extract byte N from the 256-bit register (byte 0 = MSB)
-  `define TX_BYTE(n) tx_data[255 - (n)*8 -: 8]
-
   always @(posedge clk) begin
     if (rst) begin
       state        <= S_IDLE;
@@ -170,7 +167,7 @@ module spi_ctrl (
             if (cs_sel_r == 1'b0) cs0 <= 1'b0;  // select MFRC522
             else cs1 <= 1'b0;  // select EEPROM
 
-            if (w_cnt != 0) spi_data_in <= `TX_BYTE(0);
+            if (w_cnt != 0) spi_data_in <= tx_data[255 -: 8];
             else spi_data_in <= 8'h00;
             state <= S_START;
           end
@@ -198,7 +195,7 @@ module spi_ctrl (
                   end
                 end else begin
                   byte_idx    <= byte_idx + 1;
-                  spi_data_in <= `TX_BYTE(byte_idx + 1);
+                  spi_data_in <= tx_data[255 - ({3'd0, byte_idx} + 1)*8 -: 8];
                   state       <= S_START;
                 end
               end else begin
