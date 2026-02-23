@@ -1,6 +1,6 @@
 module clock_divider #(
     parameter WIDTH = 11,
-    parameter [WIDTH-1:0] div_num = 35
+    parameter [WIDTH-1:0] div_num = 25
 )(
     input clk,
     input rst,
