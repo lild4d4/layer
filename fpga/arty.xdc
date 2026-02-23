@@ -67,5 +67,5 @@ set_property -dict {PACKAGE_PIN A8 IOSTANDARD LVCMOS33} [get_ports rst]
 # set_property IOSTANDARD LVCMOS33 [get_ports {led[3]}]
 
 # Clock constraints
-create_clock -period 13.000 [get_ports clk]
+create_clock -period 20.000 [get_ports clk]
 
