@@ -16,11 +16,31 @@ module top (
     inout spi_miso_PAD,
     inout status_fault_PAD,
     inout status_unlock_PAD,
-    inout status_busy_PAD
+    inout status_busy_PAD,
+
+    inout uart_clk_PAD,
+    inout uart_rx_PAD,
+    inout uart_tx_PAD,
+
+    inout user_io_0_PAD,
+    inout user_io_1_PAD,
+    inout user_io_2_PAD,
+    inout user_io_3_PAD,
+    inout user_io_4_PAD
 );
 
   logic clk;
   logic rst;
+
+  logic user_io_0_dummy_in;
+  logic user_io_1_dummy_in;
+  logic user_io_2_dummy_in;
+  logic user_io_3_dummy_in;
+  logic user_io_4_dummy_in;
+
+  logic uart_clk_dummy_in;
+  logic uart_rx_dummy_in;
+  logic uart_tx_dummy_in;
 
   // Power/ground pad instances
   generate
@@ -46,7 +66,7 @@ module top (
 `endif
       );
     end
-    for (genvar i = 0; i < 1; i++) begin : vdd_pads
+    for (genvar i = 0; i < 2; i++) begin : vdd_pads
       (* keep *)
       sg13g2_IOPadVdd vdd_pad (
 `ifdef USE_POWER_PINS
@@ -57,7 +77,7 @@ module top (
 `endif
       );
     end
-    for (genvar i = 0; i < 1; i++) begin : vss_pads
+    for (genvar i = 0; i < 2; i++) begin : vss_pads
       (* keep *)
       sg13g2_IOPadVss vss_pad (
 `ifdef USE_POWER_PINS
@@ -126,6 +146,71 @@ module top (
 `endif
       .c2p  (cs_0),
       .pad  (cs_0_PAD)
+  );
+
+  sg13g2_IOPadInOut4mA user_io_0_pad (
+`ifdef USE_POWER_PINS
+      .iovdd(IOVDD),
+      .iovss(IOVSS),
+      .vdd  (VDD),
+      .vss  (VSS),
+`endif
+        .pad    (user_io_0_PAD),
+        .c2p    (1'b0),
+        .c2p_en (1'b0),
+        .p2c    (user_io_0_dummy_in)
+  );
+  
+  sg13g2_IOPadInOut4mA user_io_1_pad (
+`ifdef USE_POWER_PINS
+      .iovdd(IOVDD),
+      .iovss(IOVSS),
+      .vdd  (VDD),
+      .vss  (VSS),
+`endif
+        .pad    (user_io_1_PAD),
+        .c2p    (1'b0),
+        .c2p_en (1'b0),
+        .p2c    (user_io_1_dummy_in)
+  );
+  
+  sg13g2_IOPadInOut4mA user_io_2_pad (
+`ifdef USE_POWER_PINS
+      .iovdd(IOVDD),
+      .iovss(IOVSS),
+      .vdd  (VDD),
+      .vss  (VSS),
+`endif
+        .pad    (user_io_2_PAD),
+        .c2p    (1'b0),
+        .c2p_en (1'b0),
+        .p2c    (user_io_2_dummy_in)
+  );
+  
+  sg13g2_IOPadInOut4mA user_io_3_pad (
+`ifdef USE_POWER_PINS
+      .iovdd(IOVDD),
+      .iovss(IOVSS),
+      .vdd  (VDD),
+      .vss  (VSS),
+`endif
+        .pad    (user_io_3_PAD),
+        .c2p    (1'b0),
+        .c2p_en (1'b0),
+        .p2c    (user_io_3_dummy_in)
+  );
+  
+  sg13g2_IOPadInOut4mA user_io_4_pad (
+`ifdef USE_POWER_PINS
+      .iovdd(IOVDD),
+      .iovss(IOVSS),
+      .vdd  (VDD),
+      .vss  (VSS),
+`endif
+        .pad    (user_io_4_PAD),
+        .c2p    (1'b0),
+        .c2p_en (1'b0),
+        .p2c    (user_io_4_dummy_in)
   );
 
   // spi_mosi PAD (Pin16)
@@ -198,6 +283,45 @@ module top (
 `endif
       .p2c  (spi_miso),
       .pad  (spi_miso_PAD)
+  );
+
+  sg13g2_IOPadInOut4mA uart_clk_pad (
+`ifdef USE_POWER_PINS
+      .iovdd(IOVDD),
+      .iovss(IOVSS),
+      .vdd  (VDD),
+      .vss  (VSS),
+`endif
+        .pad    (uart_clk_PAD),
+        .c2p    (1'b0),
+        .c2p_en (1'b0),
+        .p2c    (uart_clk_dummy_in)
+  );
+  
+  sg13g2_IOPadInOut4mA uart_rx_pad (
+`ifdef USE_POWER_PINS
+      .iovdd(IOVDD),
+      .iovss(IOVSS),
+      .vdd  (VDD),
+      .vss  (VSS),
+`endif
+        .pad    (uart_rx_PAD),
+        .c2p    (1'b0),
+        .c2p_en (1'b0),
+        .p2c    (uart_rx_dummy_in)
+  );
+  
+  sg13g2_IOPadInOut4mA uart_tx_pad (
+`ifdef USE_POWER_PINS
+      .iovdd(IOVDD),
+      .iovss(IOVSS),
+      .vdd  (VDD),
+      .vss  (VSS),
+`endif
+        .pad    (uart_tx_PAD),
+        .c2p    (1'b0),
+        .c2p_en (1'b0),
+        .p2c    (uart_tx_dummy_in)
   );
 
   chip u_chip (

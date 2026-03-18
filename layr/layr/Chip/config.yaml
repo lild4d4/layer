@@ -104,35 +104,41 @@ PDK_ROOT: "../../pdk"
 # Pin17: spi_sclk (output from chip)
 # Pin22: status_busy (output)
 
+PDN_OBSTRUCTIONS:
+  - [TopMetal2, 450, 450, 750, 600]
+
+ROUTING_OBSTRUCTIONS:
+  - [TopMetal2, 450, 450, 750, 600]
+
 PAD_NORTH:
   - "iovdd_pads\\[0\\].iovdd_pad"
   - "iovss_pads\\[0\\].iovss_pad"
   - status_busy_pad
-#  - "vdd_pads\\[0\\].vdd_pad"
-
-PAD_EAST:
-  #  - "vss_pads\\[0\\].vss_pad"
-  - spi_sclk_pad
-  - spi_mosi_pad
-  - spi_miso_pad
-  - cs_0_pad
-  - cs_1_pad
-
-PAD_SOUTH:
-  # - user_io_0
-  # - user_io_1
-  # - user_io_2
-  # - user_io_3
   - status_fault_pad
   - status_unlock_pad
   - "vdd_pads\\[0\\].vdd_pad"
+
+PAD_EAST:
+  - cs_1_pad
+  - cs_0_pad
+  - spi_miso_pad
+  - spi_mosi_pad
+  - spi_sclk_pad
   - "vss_pads\\[0\\].vss_pad"
 
+PAD_SOUTH:
+  - user_io_1_pad
+  - user_io_2_pad
+  - user_io_3_pad
+  - user_io_4_pad
+  - "vdd_pads\\[1\\].vdd_pad"
+  - "vss_pads\\[1\\].vss_pad"
+
 PAD_WEST:
-  - rst_pad
+  - uart_tx_pad
+  - uart_rx_pad
+  - user_io_0_pad
+  - uart_clk_pad
   - clk_pad
-# - uart_clk
-# - uart_io_0
-# - uart_rx
-# - uart_tx
+  - rst_pad
 
