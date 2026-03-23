@@ -5,27 +5,28 @@ meta:
     # Magic reports some overlaps which can be ignored
     Checker.IllegalOverlap: null
     # Not working correctly
-    KLayout.SealRing: null
+    #KLayout.SealRing: null
     # Disable magic DRC
     Magic.DRC: null
     Checker.MagicDRC: null
     # Disable KLayout density check
-    KLayout.Density: null
-    Checker.KLayoutDensity: null
+    #KLayout.Density: null
+    #Checker.KLayoutDensity: null
 
     # you can uncomment this for the flow to be faster. Comment it again in the final run.
     # KLayout.DRC: null
     # Checker.KLayoutDRC: null
 
     # you can uncomment this for the flow to be faster. Comment it again in the final run.
-    KLayout.Antenna: null
-    Checker.KLayoutAntenna: null
+    #KLayout.Antenna: null
+    #Checker.KLayoutAntenna: null
 
     # you can uncomment this for the flow to be faster. Comment it again in the final run.
     #OpenROAD.IRDropReport: null
     #KLayout.XOR: null
     #Netgen.LVS: null
     #Checker.LVS: null
+    KLayout.Filler: Magic.Filler
 
 DESIGN_NAME: top
 VERILOG_FILES:
@@ -80,6 +81,9 @@ PDN_HWIDTH: 3.5
 PAD_SITE_NAME: sg13g2_ioSite
 PAD_CORNER_SITE_NAME: sg13g2_ioSite
 
+MAGIC_FILLER_SCRIPT: dir::generate_fill.py
+MAGIC_FILLER_OPTIONS: ["-keep"]
+
 VDD_NETS: ["VDD"]
 GND_NETS: ["VSS"]
 
@@ -90,9 +94,6 @@ EXTRA_GDS:
   - dir::bondpad/bondpad_70x70.gds
 EXTRA_LEFS:
   - dir::bondpad/bondpad_70x70.lef
-
-PDK: ihp-sg13g2
-PDK_ROOT: "../../pdk"
 
 # Pinout based on user requirements:
 # Pin1: rst (input)
