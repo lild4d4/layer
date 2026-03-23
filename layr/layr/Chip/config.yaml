@@ -3,12 +3,12 @@ meta:
   flow: Chip
   substituting_steps:
     # Magic reports some overlaps which can be ignored
-    #Checker.IllegalOverlap: null
+    Checker.IllegalOverlap: null
     # Not working correctly
     #KLayout.SealRing: null
     # Disable magic DRC
-    #Magic.DRC: null
-    #Checker.MagicDRC: null
+    Magic.DRC: null
+    Checker.MagicDRC: null
     # Disable KLayout density check
     #KLayout.Density: null
     #Checker.KLayoutDensity: null
