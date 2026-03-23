@@ -106,10 +106,10 @@ EXTRA_LEFS:
 # Pin22: status_busy (output)
 
 PDN_OBSTRUCTIONS:
-  - [TopMetal2, 450, 450, 750, 600]
+  - [TopMetal2, 450, 450, 720, 720]
 
 ROUTING_OBSTRUCTIONS:
-  - [TopMetal2, 450, 450, 750, 600]
+  - [TopMetal2, 450, 450, 720, 720]
 
 PAD_NORTH:
   - "iovdd_pads\\[0\\].iovdd_pad"
